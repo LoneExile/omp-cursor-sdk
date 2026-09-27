@@ -70,4 +70,55 @@ describe("Cursor pi tool bridge HTTP server lifecycle", () => {
 		await registry.unregisterRun("/b", runB);
 		expect(registry.getHttpServerAddress()).toBeUndefined();
 	});
+
+	it("keeps the server when a registration follows a queued close in the same tick", async () => {
+		const registry = createRegistry();
+		const runA = fakeRun("A");
+		const runB = fakeRun("B");
+		await registry.registerRun("/a", runA);
+		const port = registry.getHttpServerAddress()?.port;
+		// Close is queued first; by the time it runs, /b holds a route and close must back off.
+		const pA = registry.unregisterRun("/a", runA);
+		const pB = registry.registerRun("/b", runB);
+		await pA;
+		const endpointB = await pB;
+		expect(registry.getHttpServerAddress()?.port).toBe(port);
+		expect(await get(endpointB)).toBe("B");
+		await registry.unregisterRun("/b", runB);
+		expect(registry.getHttpServerAddress()).toBeUndefined();
+	});
+
+	it("starts a new server for a registration that arrives while a close is in flight", async () => {
+		const registry = createRegistry();
+		const runA = fakeRun("A");
+		const runB = fakeRun("B");
+		await registry.registerRun("/a", runA);
+		const originalClose = Server.prototype.close;
+		let closing!: () => void;
+		const closeStarted = new Promise<void>((resolve) => { closing = resolve; });
+		let finishClose: (() => void) | undefined;
+		// The socket closes at once; the close callback (what the registry waits on) is held back.
+		Server.prototype.close = function (this: Server, callback?: (error?: Error) => void) {
+			closing();
+			return originalClose.call(this, (error?: Error) => {
+				finishClose = () => callback?.(error);
+			});
+		} as typeof Server.prototype.close;
+		try {
+			const pA = registry.unregisterRun("/a", runA);
+			await closeStarted;
+			expect(registry.getHttpServerAddress()).toBeUndefined();
+			const pB = registry.registerRun("/b", runB);
+			while (!finishClose) await new Promise((resolve) => setTimeout(resolve, 5));
+			finishClose();
+			await pA;
+			const endpointB = await pB;
+			expect(registry.getHttpServerAddress()).toBeDefined();
+			expect(await get(endpointB)).toBe("B");
+		} finally {
+			Server.prototype.close = originalClose;
+		}
+		await registry.unregisterRun("/b", runB);
+		expect(registry.getHttpServerAddress()).toBeUndefined();
+	});
 });
