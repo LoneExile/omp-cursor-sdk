@@ -93,10 +93,6 @@ export function suppressCursorSessionAgentResumeHandlePersist(): void {
 	state.pendingHandle = undefined;
 }
 
-export function allowCursorSessionAgentResumeHandlePersist(): void {
-	resumeHandlePersistSuppressed = false;
-}
-
 function hashParts(parts: readonly string[]): string {
 	const hash = createHash("sha256");
 	for (const part of parts) {
