@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Cursor models whose effort control is the `reasoning_effort` parameter (Grok 4.7, Gemini 3.8 Flash) now register as reasoning models and map pi thinking levels onto `reasoning_effort`; previously every such request kept Cursor's catalog default effort.
+
 ## 0.3.3 - 2026-08-14
 
 ### Changed

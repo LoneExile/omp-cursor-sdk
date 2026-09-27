@@ -9,7 +9,7 @@ Implemented design target. This file describes the intended Cursor model UX and 
 Current implementation notes:
 
 - Cursor context variants use `base@context` pi model IDs.
-- Cursor `reasoning`, `effort`, and boolean `thinking` parameters are driven by pi native thinking when the Cursor SDK exposes those controls.
+- Cursor `reasoning`, `effort`, `reasoning_effort`, and boolean `thinking` parameters are driven by pi native thinking when the Cursor SDK exposes those controls.
 - Cursor `fast` is extension state by default; models that expose `fast` also get selection-only `:fast` / `:slow` virtual aliases for per-agent overrides.
 - Cursor SDK `mode` (`agent` or `plan`) is extension session state, not model identity, pi thinking, Cursor `fast`, or pi's separate plan-mode extension.
 - Cursor status uses one coordinated `ctx.ui.setStatus("cursor", ...)` value for fast, non-default plan mode, and the local-only `http1` transport marker; the default pi footer remains intact.
@@ -148,6 +148,7 @@ Use native pi abstractions wherever possible:
 | Cursor `context` | pi-visible model variant because it changes `contextWindow` |
 | Cursor `reasoning` | pi native thinking via `thinkingLevelMap` |
 | Cursor `effort` | pi native thinking via `thinkingLevelMap` |
+| Cursor `reasoning_effort` | pi native thinking via `thinkingLevelMap` |
 | Cursor `thinking=false` | pi native `off` |
 | Cursor `fast` | extension state plus `:fast` / `:slow` virtual aliases for per-agent overrides |
 | Cursor SDK `mode` | extension session state; `agent` by default, `plan` via SDK-native mode |
@@ -214,7 +215,7 @@ Each registered model must set:
 
 - `id`: context-qualified pi model ID when needed. For SDK aliases, this uses the alias as the pi-visible ID and the alias is sent back to Cursor as `ModelSelection.id`.
 - `name`: human-readable Cursor display name plus context when useful.
-- `reasoning`: `true` only if a Cursor `reasoning`, `effort`, or `thinking` parameter can map to pi thinking. This controls pi's thinking UI and `pi --list-models` `thinking` column; it must not be used to claim whether the Cursor model can think internally. Cursor SDK models are thinking-capable even when this is `false`.
+- `reasoning`: `true` only if a Cursor `reasoning`, `effort`, `reasoning_effort`, or `thinking` parameter can map to pi thinking. This controls pi's thinking UI and `pi --list-models` `thinking` column; it must not be used to claim whether the Cursor model can think internally. Cursor SDK models are thinking-capable even when this is `false`.
 - `thinkingLevelMap`: model-specific pi-to-Cursor mapping for pi UI, clamping, persistence, and footer display.
 - `contextWindow`: parsed from context variant, else conservative fallback.
 - `maxTokens`: conservative explicit value until Cursor SDK exposes output limits.
@@ -234,6 +235,7 @@ Infer behavior from discovered params:
 | `context` with values | register pi-visible context variants |
 | `reasoning` | populate `thinkingLevelMap` |
 | `effort` | populate `thinkingLevelMap` |
+| `reasoning_effort` | populate `thinkingLevelMap` |
 | `thinking` with `true/false` | map `false` to pi `off`; map `true` to the enabled pi level chosen for boolean-only thinking |
 | `fast` with `true/false` | enable fast extension setting |
 
@@ -273,7 +275,7 @@ Do not add a context-cycle shortcut in the first pass. Context is a pi model var
 Important distinction:
 
 - **Cursor thinking support** applies to all Cursor SDK models. The extension should assume Cursor models can think and may emit thinking deltas.
-- **Pi-controllable thinking** means Cursor exposes a `reasoning`, `effort`, or `thinking` parameter that the extension can set from pi's native thinking level. These models register `reasoning: true` and show `thinking=yes` in `pi --list-models`.
+- **Pi-controllable thinking** means Cursor exposes a `reasoning`, `effort`, `reasoning_effort`, or `thinking` parameter that the extension can set from pi's native thinking level. These models register `reasoning: true` and show `thinking=yes` in `pi --list-models`.
 - **Cursor SDK thinking-control gap** means the model can still think, but the SDK does not expose a user-controllable thinking parameter for that model. These models register `reasoning: false` and show `thinking=no` in `pi --list-models` because pi cannot control a level for them. The extension still surfaces Cursor `thinking-delta` and summary events through pi's native thinking rendering when they are emitted.
 
 Do not mark a model `reasoning: true` only because it can think. That would make pi show controls such as `--thinking`, `:medium`, and shift+tab even though the extension cannot translate them into Cursor SDK params.

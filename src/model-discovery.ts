@@ -69,6 +69,7 @@ export interface CursorModelMetadata {
 		context: boolean;
 		reasoning: boolean;
 		effort: boolean;
+		reasoningEffort: boolean;
 		thinking: boolean;
 		fast: boolean;
 	};
@@ -118,8 +119,10 @@ function mapComparableLevel(
 function getThinkingLevelMap(item: ModelListItem): ThinkingLevelMap | undefined {
 	const reasoningParameter = getParameter(item, "reasoning");
 	const effortParameter = getParameter(item, "effort");
+	// grok-4.7 and gemini-3.8-flash expose their effort control as `reasoning_effort`.
+	const reasoningEffortParameter = getParameter(item, "reasoning_effort");
 	const thinkingParameter = getParameter(item, "thinking");
-	const valueParameter = effortParameter ?? reasoningParameter ?? thinkingParameter;
+	const valueParameter = effortParameter ?? reasoningEffortParameter ?? reasoningParameter ?? thinkingParameter;
 	if (!valueParameter) return undefined;
 
 	if (valueParameter.id === "thinking" && hasBooleanValues(valueParameter)) {
@@ -239,6 +242,7 @@ function toMetadata(
 			context: getParameter(item, "context") !== undefined,
 			reasoning: getParameter(item, "reasoning") !== undefined,
 			effort: getParameter(item, "effort") !== undefined,
+			reasoningEffort: getParameter(item, "reasoning_effort") !== undefined,
 			thinking: getParameter(item, "thinking") !== undefined,
 			fast: getParameter(item, "fast") !== undefined,
 		},
@@ -331,6 +335,11 @@ function applyThinkingLevel(
 	if (metadata.parameterIds.effort) {
 		if (metadata.parameterIds.thinking) setParam(params, "thinking", "true");
 		setParam(params, "effort", mapped);
+		return;
+	}
+
+	if (metadata.parameterIds.reasoningEffort) {
+		setParam(params, "reasoning_effort", mapped);
 		return;
 	}
 

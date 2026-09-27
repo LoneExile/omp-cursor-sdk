@@ -81,6 +81,7 @@ describe("discoverModels model-list cache", () => {
 			context: false,
 			reasoning: false,
 			effort: true,
+			reasoningEffort: false,
 			thinking: true,
 			fast: false,
 		});

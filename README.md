@@ -242,10 +242,11 @@ Cursor `context` becomes a pi-visible model variant because it changes pi's nati
 
 All Cursor SDK models should be treated as thinking-capable Cursor models. The `thinking` column in `pi --list-models` is narrower: it only means pi can control a Cursor SDK thinking parameter for that model.
 
-For models where Cursor exposes `reasoning`, `effort`, or boolean `thinking` parameters, pi's native thinking controls map to Cursor SDK params:
+For models where Cursor exposes `reasoning`, `effort`, `reasoning_effort`, or boolean `thinking` parameters, pi's native thinking controls map to Cursor SDK params:
 
 - `reasoning=none|low|medium|high|extra-high`
 - `effort=low|medium|high|xhigh|max`
+- `reasoning_effort=low|medium|high|xhigh` (for example Grok 4.7; it has no off value, so pi `off` keeps Cursor's default effort)
 - `thinking=false|true` for boolean thinking models
 
 Pi `xhigh` maps to Cursor `xhigh` or `extra-high`; Pi `max` maps only to a distinct Cursor `max` value.
@@ -256,7 +257,7 @@ For Claude models with both `thinking` and `effort`, pi thinking `off` sends `th
 
 In `pi --list-models`, `thinking=no` means pi cannot control the model's thinking level with `--thinking`, a final `:medium` model suffix, or shift+tab. It does not mean the Cursor model cannot think.
 
-Some Cursor SDK models do not expose a `reasoning`, `effort`, or `thinking` parameter for the extension to set. Cursor thinking is still enabled/supported by the model, and Cursor may still emit thinking deltas. The extension surfaces those deltas through pi's native thinking rendering when the SDK emits them.
+Some Cursor SDK models do not expose a `reasoning`, `effort`, `reasoning_effort`, or `thinking` parameter for the extension to set. Cursor thinking is still enabled/supported by the model, and Cursor may still emit thinking deltas. The extension surfaces those deltas through pi's native thinking rendering when the SDK emits them.
 
 ## Fast mode
 
