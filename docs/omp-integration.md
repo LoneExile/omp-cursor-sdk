@@ -261,7 +261,9 @@ The extension wires into OMP's session events:
   `tool_call`/`tool_result` handlers attach on the first Cursor run that
   exposes pi tools, because any such handler turns off OMP's speculative
   local-read tool execution (`speculation/host.ts` `hasLifecycleHandlers`) and
-  OMP has no unsubscribe.
+  OMP has no unsubscribe. Once attached they stay for the rest of the omp
+  process, so speculative local reads stay off for every later session in it,
+  on any model.
 - **native tool display:** the port registers only the self-contained
   `cursor_replay_activity` tool. Pi shadowed the builtin
   read/bash/edit/write/grep/find/ls tools to render Cursor-native activity;
