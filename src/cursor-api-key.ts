@@ -1,11 +1,15 @@
 export const CURSOR_API_KEY_ENV_VAR = "CURSOR_API_KEY";
 
+// Where this plugin reads its key. omp's built-in `/login` Cursor OAuth credential belongs
+// to the built-in `cursor` provider and is never read here (see resolveCursorRuntimeApiKey).
+export const CURSOR_API_KEY_SETUP_HINT =
+	"Set CURSOR_API_KEY (Cursor Dashboard -> API Keys) in ~/.omp/.env or the environment, then run /cursor-refresh-models. omp's built-in /login Cursor OAuth is not used by this plugin.";
+
 import { resolveApiKeyOnce, type ApiKey } from "@oh-my-pi/pi-ai";
 
-// Non-secret literal sentinel for pi's provider registry. Pi 0.77 treats `$ENV_VAR`
-// values as unconfigured when the env var is absent, which hides fallback models
-// before `/login`. Keep the provider available and resolve the real key in the
-// Cursor provider turn path from pi auth or CURSOR_API_KEY.
+// Non-secret literal sentinel for the provider registry: a registered apiKey makes OMP
+// list the provider as available before any key exists, so fallback models stay
+// selectable. The real key resolves in the Cursor provider turn path from CURSOR_API_KEY.
 export const CURSOR_API_KEY_CONFIG_VALUE = "omp-cursor-sdk-cursor-api-key-placeholder";
 
 const CURSOR_API_KEY_PLACEHOLDERS = new Set([

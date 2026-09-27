@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext, SessionEntry } from "@oh-my-pi/pi-coding-agent";
-import { resolveCursorApiKey } from "./cursor-api-key.js";
+import { CURSOR_API_KEY_SETUP_HINT, resolveCursorApiKey } from "./cursor-api-key.js";
 import { CURSOR_PROVIDER } from "./cursor-model.js";
 import {
 	MAX_CLOUD_REPORT_BRANCHES,
@@ -610,7 +610,7 @@ function formatCloudLifecycleError(error: unknown, apiKey: string | undefined): 
 async function resolveCloudLifecycleMutationApiKey(ctx: CloudLifecycleCommandContext): Promise<string | undefined> {
 	const apiKey = resolveCursorApiKey(await (runtimeApiKeyResolverForTests?.() ?? ctx.modelRegistry.getApiKeyForProvider(CURSOR_PROVIDER)));
 	if (apiKey) return apiKey;
-	ctx.ui.notify("Cursor cloud lifecycle mutations require a Cursor API key; run /login or set CURSOR_API_KEY, then retry.", "error");
+	ctx.ui.notify(`Cursor cloud lifecycle mutations require a Cursor API key. ${CURSOR_API_KEY_SETUP_HINT}`, "error");
 	return undefined;
 }
 

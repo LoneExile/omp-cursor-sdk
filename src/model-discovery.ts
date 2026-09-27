@@ -9,7 +9,7 @@ import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
 import { encodePiModelId, getCursorModelSelectionIdentities } from "../shared/cursor-model-selection-identities.mjs";
 import { loadContextWindowCache } from "./context-window-cache.js";
 import { loadCursorSdk } from "./cursor-sdk-runtime.js";
-import { resolveCursorApiKey, resolveCursorRuntimeApiKey } from "./cursor-api-key.js";
+import { CURSOR_API_KEY_SETUP_HINT, resolveCursorApiKey, resolveCursorRuntimeApiKey } from "./cursor-api-key.js";
 import { scrubSensitiveText } from "./cursor-sensitive-text.js";
 import {
 	fingerprintApiKey,
@@ -32,9 +32,8 @@ const FALLBACK_CONTEXT_WINDOW = 128000;
 const FALLBACK_MAX_TOKENS = 16384;
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 const TEXT_AND_IMAGE_INPUT: ProviderModelConfig["input"] = ["text", "image"];
-const AUTH_SETUP_HINT = "/login (Use an API key -> Cursor) or CURSOR_API_KEY; startup discovery does not parse Pi CLI arguments, and Cursor Agent CLI/Desktop login is not reused";
-const CATALOG_REFRESH_HINT =
-	"After adding auth to an already-started pi session, run /cursor-refresh-models to refresh the full live Cursor model catalog without restarting pi.";
+// Startup discovery reads only CURSOR_API_KEY (resolveCursorRuntimeApiKey), never omp's --api-key flag.
+const AUTH_SETUP_HINT = `Cursor Agent CLI/Desktop login is not reused. ${CURSOR_API_KEY_SETUP_HINT}`;
 
 export type CursorModelFallbackReason = "missing-api-key" | "discovery-failed" | "empty-model-list" | "cached-after-error";
 
@@ -415,7 +414,7 @@ export async function discoverModels(options: DiscoverModelsOptions = {}): Promi
 	if (!apiKey) {
 		return useFallbackModels(options, {
 			reason: "missing-api-key",
-			message: `Cursor model discovery needs an API key from ${AUTH_SETUP_HINT}. Using fallback Cursor models so /login and model selection still work; fallback models can run once auth exists. ${CATALOG_REFRESH_HINT}`,
+			message: `Cursor model discovery needs a Cursor SDK API key. Using fallback Cursor models so model selection still works; they can run once the key is set. ${AUTH_SETUP_HINT}`,
 		});
 	}
 
@@ -447,7 +446,7 @@ export async function discoverModels(options: DiscoverModelsOptions = {}): Promi
 		}
 		return useFallbackModels(options, {
 			reason: "empty-model-list",
-			message: `Cursor model discovery returned no models. Using fallback Cursor models; verify ${AUTH_SETUP_HINT}. ${CATALOG_REFRESH_HINT}`,
+			message: `Cursor model discovery returned no models. Using fallback Cursor models. ${AUTH_SETUP_HINT}`,
 		});
 	} catch (error) {
 		const errorMessage = sanitizeDiscoveryError(error, apiKey);
@@ -465,7 +464,7 @@ export async function discoverModels(options: DiscoverModelsOptions = {}): Promi
 		}
 		return useFallbackModels(options, {
 			reason: "discovery-failed",
-			message: `Cursor model discovery failed${errorMessage ? `: ${errorMessage}` : ""}. Using fallback Cursor models; verify ${AUTH_SETUP_HINT}. ${CATALOG_REFRESH_HINT}`,
+			message: `Cursor model discovery failed${errorMessage ? `: ${errorMessage}` : ""}. Using fallback Cursor models. ${AUTH_SETUP_HINT}`,
 			...(errorMessage ? { errorMessage } : {}),
 		});
 	}
