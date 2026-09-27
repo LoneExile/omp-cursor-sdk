@@ -21,7 +21,7 @@ import {
 import { type CursorPiBridgeToolRequest } from "./cursor-pi-tool-bridge.js";
 import { resetSessionCursorAgent } from "./cursor-session-agent.js";
 import { applyCursorUsage } from "./cursor-usage-accounting.js";
-import { CursorPartialContentEmitter } from "./cursor-partial-content-emitter.js";
+import { CURSOR_TEXT_MESSAGE_SEPARATOR, CursorPartialContentEmitter } from "./cursor-partial-content-emitter.js";
 import { emitDisplayOnlyTraceBlock } from "./cursor-display-only-trace.js";
 import { trimCurrentTurnAlreadyEmittedCursorText } from "./cursor-run-final-text.js";
 import { formatCursorSdkAbortMessage, resolveCursorSdkAbortCause } from "./cursor-provider-errors.js";
@@ -88,11 +88,9 @@ function splitTextIntoReplayDeltas(text: string): string[] {
 }
 
 async function emitTextDeltas(
-	stream: AssistantMessageEventStream,
-	partial: AssistantMessage,
+	emitter: CursorPartialContentEmitter,
 	deltas: string[],
 ): Promise<string> {
-	const emitter = new CursorPartialContentEmitter(stream, partial, -1, true);
 	for (const delta of deltas) {
 		emitter.appendTextDelta(delta);
 		await Promise.resolve();
@@ -121,11 +119,11 @@ export function flushPendingCursorLiveRunTraceEventsToStream(
 	stream: AssistantMessageEventStream,
 	partial: AssistantMessage,
 	run: CursorLiveRun,
-	options?: { includeTracesBehindQueuedTools?: boolean },
+	options?: { includeTracesBehindQueuedTools?: boolean; emitter?: CursorPartialContentEmitter },
 ): void {
 	if (run.disposed) return;
 	const turn: CursorLiveTurnState = {
-		emitter: new CursorPartialContentEmitter(stream, partial, -1, true),
+		emitter: options?.emitter ?? new CursorPartialContentEmitter(stream, partial, -1, true),
 		emittedText: "",
 	};
 	while (true) {
@@ -157,6 +155,12 @@ function emitCursorLiveQueuedEvent(
 		turn.emitter.appendThinkingDelta(event.text);
 	} else if (event.type === "thinking-completed") {
 		turn.emitter.closeThinking();
+	} else if (event.type === "text-completed") {
+		turn.emitter.completeTextMessage();
+		// Logical separators also keep suffix/prefix dedup aware of SDK messages,
+		// including boundaries queued across Pi tool-use turns.
+		if (turn.emittedText) turn.emittedText += CURSOR_TEXT_MESSAGE_SEPARATOR;
+		if (run?.emittedText) run.emittedText += CURSOR_TEXT_MESSAGE_SEPARATOR;
 	} else if (event.type === "text-delta") {
 		turn.emittedText += event.text;
 		if (run) run.emittedText += event.text;
@@ -296,7 +300,7 @@ export async function drainCursorLiveRunTurn(
 	context: Context,
 	run: CursorLiveRun,
 	toolResultInputTokens: number,
-	options: { mode: CursorLiveRunDrainMode; signal?: AbortSignal; debugRecorder?: CursorSdkEventDebugRecorder },
+	options: { mode: CursorLiveRunDrainMode; signal?: AbortSignal; debugRecorder?: CursorSdkEventDebugRecorder; emitter?: CursorPartialContentEmitter },
 ): Promise<CursorLiveRunDrainOutcome> {
 	const debugRecorder = options.debugRecorder ?? run.debugRecorder;
 	debugRecorder?.recordDrainEvent("turn_start", {
@@ -308,7 +312,7 @@ export async function drainCursorLiveRunTurn(
 	let outcome: CursorLiveRunDrainOutcome | undefined;
 	let outcomeDetails: Record<string, unknown> = {};
 	const turn: CursorLiveTurnState = {
-		emitter: new CursorPartialContentEmitter(stream, partial, -1, true),
+		emitter: options.emitter ?? new CursorPartialContentEmitter(stream, partial, -1, true),
 		emittedText: "",
 	};
 
@@ -378,7 +382,7 @@ export async function drainCursorLiveRunTurn(
 				turn.emitter.closeAll();
 				const finalText = trimCurrentTurnAlreadyEmittedCursorText(run.finalText ?? run.textDeltas.join(""), turn.emittedText, run.emittedText);
 				if (finalText) {
-					await emitTextDeltas(stream, partial, splitTextIntoReplayDeltas(finalText));
+					await emitTextDeltas(turn.emitter, splitTextIntoReplayDeltas(finalText));
 				}
 				applyCursorUsage(partial, model, context, cursorLiveRuns.takeTurnInputTokens(run, toolResultInputTokens), {
 					runtime: "local",

@@ -27,6 +27,7 @@ export type CursorLiveQueuedEvent =
 	| { type: "thinking-delta"; text: string }
 	| { type: "thinking-completed" }
 	| { type: "text-delta"; text: string }
+	| { type: "text-completed" }
 	| { type: "tool"; tool: CursorNativeToolDisplayItem }
 	| { type: "bridge-tool"; request: CursorPiBridgeToolRequest };
 
