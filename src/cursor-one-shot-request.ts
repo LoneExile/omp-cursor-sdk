@@ -168,6 +168,8 @@ export function classifyCursorRequestRoute(
 }
 
 export const __testUtils = {
+	/** The current session's main conversation. */
+	mainConversation: () => ({ id: conversationTracker.mainId, providerState: conversationTracker.mainProviderState }),
 	reset(): void {
 		conversationTracker.mainId = undefined;
 		conversationTracker.mainProviderState = undefined;

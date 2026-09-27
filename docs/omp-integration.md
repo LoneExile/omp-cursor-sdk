@@ -252,10 +252,22 @@ The extension wires into OMP's session events:
   request no pending clone matches runs one-shot and never reaches the root.
   A request that reaches the root only by that fallback while a clone is
   pending runs one-shot too, so it never takes the root's armed main
-  conversation. There is no
-  registration-time cleanup: in one module instance a later factory call is
-  always another live session, a reload is a new module instance, and a
-  replaced session cleans up in its own `session_shutdown`.
+  conversation. Isolated subagents (`task.isolation.enabled`) and ACP
+  sessions load a new module instance instead of re-binding
+  (`loader.ts` `importExtensionModule`; `loadLegacyPiModule` tags the whole
+  relative import graph with a fresh `?mtime`), and each instance registers
+  the process-global `cursor-sdk` api, so the newest instance's provider
+  receives every session's calls. Bindings are therefore registered
+  process-wide (a `globalThis` registry under
+  `Symbol.for("omp-cursor-sdk.session-bindings.v1")`), each carries its
+  instance's provider entry, and every call is resolved across instances and
+  run by the instance that owns its session. A call whose store belongs to a
+  session that has shut down, or a fallback with no live top-level session,
+  runs one-shot outside every session; a closed session is never reused.
+  There is no registration-time cleanup: in one module instance a later
+  factory call is always another live session, a reload is a new module
+  instance, and a replaced session cleans up in its own
+  `session_shutdown`.
 - **session scope:** cwd/session-file tracking via `session_start`
   (OMP's event carries no project-trust or session-info payload — Pi's
   `project_trust` and `session_info_changed` events do not exist in OMP).

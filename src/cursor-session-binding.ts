@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { Context, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
+import type { Api, AssistantMessageEventStream, Context, Model, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 
 /**
  * One registration of this extension: the omp session its factory call serves.
@@ -18,10 +18,22 @@ import type { Context, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
  * task/persisted-revive.ts); `/tan` clones never do (modes/controllers/
  * tan-command-controller.ts creates the clone and prompts it). A binding without
  * session_start starts from its first prompt instead (bindCursorExtensionApi).
+ *
+ * Isolated subagents (task.isolation.enabled) and ACP sessions load a new module instance
+ * instead (loader.ts importExtensionModule; loadLegacyPiModule tags the whole relative
+ * graph with a fresh `?mtime`), and every instance registers the process-global
+ * `cursor-sdk` api (pi-ai api-registry.ts registerCustomApi keeps the newest), so the
+ * newest instance's provider receives every session's calls. Bindings are therefore
+ * registered process-wide (processRegistry), and each call runs in the instance that owns
+ * its session (`stream`).
  */
 export interface CursorSessionBinding {
 	readonly id: number;
 	readonly slots: Map<symbol, unknown>;
+	/** The owning module instance's provider entry for a request of this session. */
+	readonly stream?: CursorSessionStream;
+	/** First registration of its module instance: that instance's top-level session. */
+	readonly root: boolean;
 	/** sessionManager session id from this binding's latest session_start. */
 	sessionId?: string;
 	/** `ctx.agent.kind` from session_start: "sub" for subagents, `/tan` clones and workers. */
@@ -51,27 +63,58 @@ export type CursorRequestResolution =
 	| { via: "fallback"; binding: CursorSessionBinding; contested: boolean }
 	| { via: "unknown"; binding?: undefined };
 
-const storage = new AsyncLocalStorage<CursorSessionBinding>();
-let nextBindingId = 0;
+export type CursorSessionStream = (
+	resolution: CursorRequestResolution,
+	model: Model<Api>,
+	context: Context,
+	options?: SimpleStreamOptions,
+) => AssistantMessageEventStream;
 
-function makeBinding(): CursorSessionBinding {
-	return { id: nextBindingId++, slots: new Map(), sawSessionStart: false, pendingClaim: false, learnedStore: false, closed: false };
+interface CursorProcessSessionRegistry {
+	/** Live bindings of every module instance in the process, in creation order. */
+	readonly live: Set<CursorSessionBinding>;
+	/**
+	 * omp hands every provider call of one AgentSession its `providerSessionState` Map
+	 * (agent-session.ts `#providerSessionState`, one per session; advisors share it), so the
+	 * Map identifies the session of a request once one of its calls was matched.
+	 */
+	byProviderState: WeakMap<object, CursorSessionBinding>;
+	nextBindingId: number;
+}
+
+// Shared by every module instance of this plugin in the process; bump the key when its
+// shape changes.
+const PROCESS_REGISTRY_KEY = Symbol.for("omp-cursor-sdk.session-bindings.v1");
+const processRegistry = ((globalThis as Record<symbol, unknown>)[PROCESS_REGISTRY_KEY] ??= {
+	live: new Set(),
+	byProviderState: new WeakMap(),
+	nextBindingId: 0,
+} satisfies CursorProcessSessionRegistry) as CursorProcessSessionRegistry;
+const liveBindings = processRegistry.live;
+
+const storage = new AsyncLocalStorage<CursorSessionBinding>();
+
+function makeBinding(options: { stream?: CursorSessionStream; root?: boolean } = {}): CursorSessionBinding {
+	return {
+		id: processRegistry.nextBindingId++,
+		slots: new Map(),
+		stream: options.stream,
+		root: options.root === true,
+		sawSessionStart: false,
+		pendingClaim: false,
+		learnedStore: false,
+		closed: false,
+	};
 }
 
 /** State outside any registration: tests and module load. */
 let defaultBinding = makeBinding();
 /** First registration in this module instance: the root session (the others re-bind it). */
 let rootBinding: CursorSessionBinding | undefined;
-const liveBindings = new Set<CursorSessionBinding>();
-/**
- * omp hands every provider call of one AgentSession its `providerSessionState` Map
- * (agent-session.ts `#providerSessionState`, one per session; advisors share it), so the
- * Map identifies the session of a request once one of its calls was matched.
- */
-const bindingsByProviderState = new WeakMap<object, CursorSessionBinding>();
 
-export function createCursorSessionBinding(): CursorSessionBinding {
-	const binding = makeBinding();
+/** A registration's binding; `stream` runs a request of its session in this module instance. */
+export function createCursorSessionBinding(stream?: CursorSessionStream): CursorSessionBinding {
+	const binding = makeBinding({ stream, root: rootBinding === undefined });
 	liveBindings.add(binding);
 	rootBinding ??= binding;
 	return binding;
@@ -142,16 +185,18 @@ function resolvePendingClaim(context: Pick<Context, "messages"> | undefined): Cu
 }
 
 /**
- * The session a provider call belongs to. The host's shared model registry serves every
- * session through whichever registration registered the provider last (a subagent's
- * createAgentSession clears and re-registers the extension's sources, sdk.ts
- * clearSourceRegistrations; pi-ai api-registry.ts registerCustomApi keeps one entry per
- * api), so the call itself must say which session sent it: its provider state store,
- * else its provider session id (a loop turn's `options.sessionId` is its session's id,
- * AgentSession.sessionId). A `/tan` clone's request carries neither of a known session
- * and goes to the clone whose prompt is pending, or runs one-shot when that is ambiguous.
- * Everything else falls back to the root session (requests without either, such as the
- * session title or the auto-learn capture of the root session).
+ * The session a provider call belongs to, among the live sessions of every module
+ * instance. The host's shared model registry serves every session through whichever
+ * registration registered the provider last (a subagent's createAgentSession clears and
+ * re-registers the extension's sources, sdk.ts clearSourceRegistrations; pi-ai
+ * api-registry.ts registerCustomApi keeps one entry per api), so the call itself must say
+ * which session sent it: its provider state store, else its provider session id (a loop
+ * turn's `options.sessionId` is its session's id, AgentSession.sessionId). A `/tan`
+ * clone's request carries neither of a known session and goes to the clone whose prompt
+ * is pending, or runs one-shot when that is ambiguous. Everything else falls back to the
+ * top-level session (requests without either, such as the session title or the auto-learn
+ * capture of the root session), and runs one-shot when that session or the one its store
+ * belongs to has shut down.
  */
 export function resolveCursorRequestBinding(
 	options?: Pick<SimpleStreamOptions, "sessionId" | "providerSessionState">,
@@ -159,8 +204,9 @@ export function resolveCursorRequestBinding(
 ): CursorRequestResolution {
 	const providerState = options?.providerSessionState;
 	if (providerState) {
-		const known = bindingsByProviderState.get(providerState);
-		if (known && !known.closed) return { via: "store", binding: known };
+		const known = processRegistry.byProviderState.get(providerState);
+		// A closed session's store (a late call after its shutdown) is never reused.
+		if (known) return known.closed ? { via: "unknown" } : { via: "store", binding: known };
 	}
 	const sessionId = options?.sessionId;
 	if (sessionId) {
@@ -175,7 +221,11 @@ export function resolveCursorRequestBinding(
 			return clone ? { via: "pending", binding: clone } : { via: "unknown" };
 		}
 	}
-	const root = rootBinding && !rootBinding.closed ? rootBinding : currentCursorSessionBinding();
+	// The top-level session: of the live instance roots, a main session before an isolated
+	// subagent's. None left: the call belongs to no live session.
+	const roots = [...liveBindings].filter((binding) => binding.root);
+	const root = roots.find((binding) => binding.agentKind !== "sub") ?? roots[0];
+	if (!root) return { via: "unknown" };
 	const contested = [...liveBindings].some((binding) => binding !== root && binding.pendingClaim);
 	return { via: "fallback", binding: root, contested };
 }
@@ -183,7 +233,7 @@ export function resolveCursorRequestBinding(
 /** Record the provider state store of a request the binding claimed as its own conversation. */
 export function learnCursorProviderSessionState(binding: CursorSessionBinding, providerState: object | undefined): void {
 	if (!providerState) return;
-	bindingsByProviderState.set(providerState, binding);
+	processRegistry.byProviderState.set(providerState, binding);
 	binding.learnedStore = true;
 	binding.pendingClaim = false;
 	binding.pendingPrompt = undefined;
@@ -310,10 +360,13 @@ export function bindCursorExtensionApi<T extends object>(pi: T, binding: CursorS
 }
 
 export const __testUtils = {
+	/** Resets the process-wide registry and this module instance's own bindings. */
 	reset(): void {
+		liveBindings.clear();
+		processRegistry.byProviderState = new WeakMap();
+		processRegistry.nextBindingId = 0;
 		defaultBinding = makeBinding();
 		rootBinding = undefined;
-		liveBindings.clear();
 	},
 	liveBindingCount: () => liveBindings.size,
 };

@@ -10,6 +10,7 @@ import { registerCursorSessionAgentLifecycle } from "./cursor-session-agent-life
 import { registerCursorSessionAgentLineage } from "./cursor-session-agent-lineage.js";
 import { registerCursorSessionAgentResume } from "./cursor-session-agent-resume.js";
 import { streamCursorLazy } from "./cursor-provider-lazy.js";
+import { streamCursorInBinding } from "./cursor-provider.js";
 import { CURSOR_API_KEY_CONFIG_VALUE, resolveCursorApiKey } from "./cursor-api-key.js";
 import { CURSOR_PROVIDER, CURSOR_SDK_API } from "./cursor-model.js";
 import { registerCursorFallbackIssueWarning } from "./cursor-fallback-warning.js";
@@ -62,8 +63,9 @@ function registerCursorProvider(pi: Pick<ExtensionAPI, "registerProvider">, mode
 export default async function (hostPi: CursorExtensionApi) {
 	// One binding per registration: the root session's, or a subagent's re-bind of the
 	// same module (see cursor-session-binding.ts). Everything below, and every callback
-	// the host invokes later, runs inside it.
-	const binding = createCursorSessionBinding();
+	// the host invokes later, runs inside it, and so does every provider call of its
+	// session, whichever module instance's provider receives it.
+	const binding = createCursorSessionBinding(streamCursorInBinding);
 	const pi = bindCursorExtensionApi(hostPi, binding);
 	await runInCursorSessionBinding(binding, () => registerCursorExtension(pi, binding));
 }

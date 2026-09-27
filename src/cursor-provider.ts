@@ -31,6 +31,7 @@ import {
 	resolveCursorRequestBinding,
 	runInCursorSessionBinding,
 	type CursorRequestResolution,
+	type CursorSessionStream,
 } from "./cursor-session-binding.js";
 import { runExclusiveCursorSessionTurn, __testUtils as cursorSessionTurnQueueTestUtils } from "./cursor-session-turn-queue.js";
 
@@ -59,13 +60,21 @@ export function streamCursor(
 	context: Context,
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream {
-	// The whole turn, including its fire-and-forget run completion, runs in the session
-	// that sent the request (see resolveCursorRequestBinding); a request no session can be
-	// told for runs one-shot outside every session.
 	const resolution = resolveCursorRequestBinding(options, context);
+	// The module instance that owns the session runs the request; this instance may only
+	// have registered the api last (see cursor-session-binding.ts).
+	return (resolution.binding?.stream ?? streamCursorInBinding)(resolution, model, context, options);
+}
+
+/**
+ * This module instance's entry for a request of one of its sessions (a binding's
+ * `stream`). The whole turn, including its fire-and-forget run completion, runs in that
+ * session; a request no session can be told for runs one-shot outside every session.
+ */
+export const streamCursorInBinding: CursorSessionStream = (resolution, model, context, options) => {
 	const binding = resolution.binding ?? createDetachedCursorSessionBinding();
 	return runInCursorSessionBinding(binding, () => streamCursorInSession(model, context, options, resolution));
-}
+};
 
 function streamCursorInSession(
 	model: Model<Api>,
