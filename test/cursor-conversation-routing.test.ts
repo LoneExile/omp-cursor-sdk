@@ -230,6 +230,18 @@ describe("session agent pool under concurrent utility requests", () => {
 
 describe("main conversation tracking", () => {
 	const turn: Context = { systemPrompt: ["omp system prompt"], messages: [{ role: "user", content: "Refactor the parser", timestamp: 1 }] };
+	// session-advisors.ts: advisor loops run `[adviseTool, ...tools]` over the session's own
+	// store, under a provider session id of their own.
+	const advisorTurn: Context = {
+		systemPrompt: ["advisor prompt"],
+		messages: [{ role: "user", content: "Review the diff", timestamp: 1 }],
+		tools: [
+			{ name: "advise", description: "Send advice", parameters: {} as never },
+			{ name: "read", description: "Read a file", parameters: {} as never },
+		],
+	};
+	const FRESH_SESSION_ID = "01a0e2a0-0000-7000-8000-00000000f7e5";
+	const FRESH_ADVISOR_SESSION_ID = "01a0e2a0-0000-7000-8000-00000000f7ad";
 
 	function startSession(sessionId: string) {
 		const handlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -249,8 +261,7 @@ describe("main conversation tracking", () => {
 			conversationId: MAIN_SESSION_ID,
 			mainConversation: true,
 		});
-		// session-advisors.ts: the session's own store under the advisor's provider session id.
-		expect(classifyCursorRequestRoute(turn, { sessionId: ADVISOR_SESSION_ID, providerSessionState: store })).toEqual({
+		expect(classifyCursorRequestRoute(advisorTurn, { sessionId: ADVISOR_SESSION_ID, providerSessionState: store })).toEqual({
 			oneShot: false,
 			conversationId: ADVISOR_SESSION_ID,
 			mainConversation: false,
@@ -262,18 +273,36 @@ describe("main conversation tracking", () => {
 		});
 	});
 
-	it("follows the main conversation to a new provider session id after /fresh, but not to an advisor", () => {
+	it("never lets an advisor take the main conversation while the main loop runs on another provider", () => {
+		const session = startSession(MAIN_SESSION_ID);
+		const store = new Map();
+		// Every prompt arms the tracker; no pooled main-loop request ever disarms it.
+		session.beforeAgentStart();
+		expect(classifyCursorRequestRoute(advisorTurn, { sessionId: ADVISOR_SESSION_ID, providerSessionState: store }).mainConversation).toBe(false);
+		session.beforeAgentStart();
+		expect(classifyCursorRequestRoute(advisorTurn, { sessionId: ADVISOR_SESSION_ID, providerSessionState: store }).mainConversation).toBe(false);
+		// The user switches the main loop to a Cursor model.
+		expect(classifyCursorRequestRoute(turn, { sessionId: MAIN_SESSION_ID, providerSessionState: store }).mainConversation).toBe(true);
+	});
+
+	it("follows the main conversation to its /fresh id when the advisors' new ids arrive first", () => {
 		const session = startSession(MAIN_SESSION_ID);
 		const store = new Map();
 		session.beforeAgentStart();
 		classifyCursorRequestRoute(turn, { sessionId: MAIN_SESSION_ID, providerSessionState: store });
-		classifyCursorRequestRoute(turn, { sessionId: ADVISOR_SESSION_ID, providerSessionState: store });
+		classifyCursorRequestRoute(advisorTurn, { sessionId: ADVISOR_SESSION_ID, providerSessionState: store });
 
-		// agent-session.ts freshSession: a new provider session id, the same store.
+		// agent-session.ts freshSession: a new provider session id and the same store; the
+		// advisors get new ids too (session-advisors.ts refreshProviderIdentity) and can be
+		// first in the window before the main loop's first provider call.
 		session.beforeAgentStart();
-		expect(classifyCursorRequestRoute(turn, { sessionId: ADVISOR_SESSION_ID, providerSessionState: store }).mainConversation).toBe(false);
-		expect(classifyCursorRequestRoute(turn, { sessionId: "01a0e2a0-0000-7000-8000-00000000f7e5", providerSessionState: store }).mainConversation).toBe(true);
+		expect(classifyCursorRequestRoute(advisorTurn, { sessionId: FRESH_ADVISOR_SESSION_ID, providerSessionState: store }).mainConversation).toBe(false);
+		expect(classifyCursorRequestRoute(turn, { sessionId: FRESH_SESSION_ID, providerSessionState: store }).mainConversation).toBe(true);
 		expect(classifyCursorRequestRoute(turn, { sessionId: MAIN_SESSION_ID, providerSessionState: store }).mainConversation).toBe(false);
+
+		session.beforeAgentStart();
+		expect(classifyCursorRequestRoute(advisorTurn, { sessionId: FRESH_ADVISOR_SESSION_ID, providerSessionState: store }).mainConversation).toBe(false);
+		expect(classifyCursorRequestRoute(turn, { sessionId: FRESH_SESSION_ID, providerSessionState: store }).mainConversation).toBe(true);
 	});
 });
 

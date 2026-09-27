@@ -300,9 +300,14 @@ The extension wires into OMP's session events:
   native replay, local resume or lineage (omp tools run only in the main
   loop); auto-learn capture brings a store of its own (`sdk.ts`
   `createAutoLearnCaptureRunner`) and runs one-shot. Neither emits extension
-  events, so the main conversation is the one whose id is the session id, or,
-  after `/fresh` or with `--provider-session-id`, the first pooled request
-  after `before_agent_start`. Only the main conversation persists local-resume
+  events. Advisor requests are recognized by their `advise` tool (every
+  advisor loop runs `[adviseTool, ...tools]`, `session-advisors.ts`;
+  `advisor/advise-tool.ts`) and never take the main conversation, also when
+  the main loop runs on another provider or an advisor's new id after
+  `/fresh` arrives first. Of the other requests, the main conversation is
+  the one whose id is the session id, or, after `/fresh` or with
+  `--provider-session-id`, the first pooled request after
+  `before_agent_start`. Only the main conversation persists local-resume
   handles and lineage entries. Within one conversation, a request whose pool
   key differs from an entry that is still being created or running a turn gets
   a one-shot agent instead of tearing that entry down; a `ready` entry with a

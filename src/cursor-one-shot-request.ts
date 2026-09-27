@@ -89,12 +89,25 @@ interface CursorConversationTrackingExtensionApi {
 }
 
 /**
+ * omp's advisor loops always carry the `advise` tool (session/session-advisors.ts
+ * `advisorLoopTools = [adviseTool, ...tools]`, advisor/advise-tool.ts `name = "advise"`);
+ * the session's own loop never has it.
+ */
+const ADVISOR_TOOL_NAME = "advise";
+
+/** True for a request of one of omp's advisor loops. */
+export function isCursorAdvisorRequest(context: Pick<Context, "tools">): boolean {
+	return context.tools?.some((tool) => tool.name === ADVISOR_TOOL_NAME) === true;
+}
+
+/**
  * Track which conversation of the session is its own. omp runs other agent loops beside
  * the main one that also carry a provider state store: advisors share the session's store
  * under their own provider session id (pi-coding-agent session/session-advisors.ts), and
  * auto-learn capture uses a store of its own (sdk.ts createAutoLearnCaptureRunner). Neither
- * emits extension events, so the main conversation is the one whose id is the session
- * id (AgentSession.sessionId falls back to sessionManager.getSessionId(),
+ * emits extension events. Advisor requests are recognized by their `advise` tool and never
+ * take the main conversation; of the rest, the main conversation is the one whose id is
+ * the session id (AgentSession.sessionId falls back to sessionManager.getSessionId(),
  * agent-session.ts #activeProviderSessionId), or, after `/fresh` or with
  * `--provider-session-id`, the first pooled request after before_agent_start.
  */
@@ -111,7 +124,7 @@ export function registerCursorConversationTracking(pi: CursorConversationTrackin
 }
 
 export function classifyCursorRequestRoute(
-	context: Pick<Context, "systemPrompt">,
+	context: Pick<Context, "systemPrompt" | "tools">,
 	options?: CursorRequestRoutingOptions,
 ): CursorRequestRoute {
 	const conversationId = getCursorConversationId(options);
@@ -121,6 +134,13 @@ export function classifyCursorRequestRoute(
 	// Another agent session's loop (auto-learn capture keeps its own store).
 	if (tracker.mainProviderState && providerState !== tracker.mainProviderState) {
 		return { oneShot: true, conversationId, mainConversation: false };
+	}
+	// An advisor loop: pooled, but never the session's own conversation, even when the
+	// main loop runs on another provider (the tracker then stays armed) or an advisor's
+	// new id after `/fresh` arrives before the main loop's.
+	if (isCursorAdvisorRequest(context)) {
+		tracker.otherIds.add(conversationId);
+		return { oneShot: false, conversationId, mainConversation: false };
 	}
 	const claimsMain =
 		tracker.mainId === undefined ||
