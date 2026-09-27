@@ -218,6 +218,46 @@ describe("cursor-provider-errors", () => {
 		expect(detail).toBe("ConnectError: read ETIMEDOUT");
 	});
 
+	// wait-result.json shape captured from `--model cursor-sdk/grok-4.7@500k` (SDK 1.0.23, 2026-09-27).
+	const refusedContextResult = {
+		id: "run-5ebe5fc9-5657-4441-b6e0-e47e0c384c1d",
+		requestId: "85948808-776c-490b-b99c-e3d9d947d5a6",
+		status: "error" as const,
+		error: { message: 'AI Model Not Found Invalid parameters for registry model: "grok-4.7"' },
+		model: {
+			id: "grok-4.7",
+			params: [
+				{ id: "context", value: "500k" },
+				{ id: "reasoning_effort", value: "high" },
+				{ id: "fast", value: "true" },
+			],
+		},
+		durationMs: 5914,
+	};
+
+	it("keeps Cursor's refusal and appends a Max-mode hint for context selections", () => {
+		const detail = formatCursorSdkRunFailureDetail(refusedContextResult);
+		expect(detail).toBe(
+			'AI Model Not Found Invalid parameters for registry model: "grok-4.7"\n' +
+				"Hint: larger context variants can require Cursor Max mode, which the Cursor SDK cannot request; use the model's smaller @<context> variant instead of @500k.",
+		);
+		// The provider error path must surface it verbatim, not as auth/network/generic guidance.
+		expect(sanitizeCursorProviderError(detail, "test-key")).toBe(detail);
+	});
+
+	it("adds no Max-mode hint without a context parameter or for other failures", () => {
+		const withoutContext = {
+			...refusedContextResult,
+			model: { id: "grok-4.7", params: [{ id: "reasoning_effort", value: "high" }] },
+		};
+		expect(formatCursorSdkRunFailureDetail(withoutContext)).toBe(
+			'AI Model Not Found Invalid parameters for registry model: "grok-4.7"',
+		);
+		expect(
+			formatCursorSdkRunFailureDetail({ ...refusedContextResult, error: { message: "Backend rejected the run" } }),
+		).toBe("Backend rejected the run");
+	});
+
 	it("scrubs secrets and maps generic startup errors to actionable auth guidance", () => {
 		expect(sanitizeCursorProviderError(new Error("Error"), "test-key")).toContain("Cursor SDK request failed");
 		expect(sanitizeCursorProviderError(new Error("Unauthorized Bearer secret-key"), "secret-key")).toContain(

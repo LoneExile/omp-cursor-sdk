@@ -1,4 +1,4 @@
-import type { RunError, RunResult } from "@cursor/sdk";
+import type { ModelSelection, RunError, RunResult } from "@cursor/sdk";
 import type { CursorRuntime } from "./cursor-config.js";
 import { asRecord } from "./cursor-record-utils.js";
 import { scrubSensitiveText } from "./cursor-sensitive-text.js";
@@ -292,7 +292,27 @@ function withRunErrorCode(message: string, code: string | undefined): string {
 	return code ? `${message} (code: ${code})` : message;
 }
 
+// Cursor's catalog lists some larger context variants that its backend refuses for SDK
+// selections (observed: grok-4.7 context=500k on @cursor/sdk 1.0.23 and 1.0.32, every
+// effort/fast combination). The official Cursor CLI sends `maxMode: true` for those;
+// the SDK ModelSelection `{ id, params }` has no max-mode field.
+const REFUSED_MODEL_PARAMETERS_PATTERN = /invalid parameters for registry model/i;
+
+function withRefusedContextVariantHint(detail: string, model: ModelSelection | undefined): string {
+	const context = model?.params?.find((param) => param.id === "context")?.value;
+	if (!context || !REFUSED_MODEL_PARAMETERS_PATTERN.test(detail)) return detail;
+	return `${detail}\nHint: larger context variants can require Cursor Max mode, which the Cursor SDK cannot request; use the model's smaller @<context> variant instead of @${context}.`;
+}
+
 export function formatCursorSdkRunFailureDetail(
+	result: CursorSdkRunFailureSource,
+	runResult?: string,
+	runError?: RunError,
+): string {
+	return withRefusedContextVariantHint(formatRunFailureMessage(result, runResult, runError), result.model);
+}
+
+function formatRunFailureMessage(
 	result: CursorSdkRunFailureSource,
 	runResult?: string,
 	runError?: RunError,
