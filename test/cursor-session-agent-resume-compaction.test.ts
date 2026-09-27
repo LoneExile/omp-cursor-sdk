@@ -80,4 +80,22 @@ describe("Cursor session resume during compaction", () => {
 		expect(appended).toHaveLength(1);
 		expect(__testUtils.isResumeHandlePersistSuppressed()).toBe(false);
 	});
+
+	// omp 18.3.4 runs the summarizer through the session side-stream (session-maintenance
+	// compact() completeImpl -> sideStreamFn), outside the agent loop: no turn_start/turn_end.
+	// A failed or cancelled compaction emits no session_compact, so the next event is the
+	// next normal turn's turn_start.
+	it("persists the next normal turn after a failed compaction", () => {
+		const appended: unknown[] = [];
+		const handlers = registerHandlers(appended);
+
+		suppressCursorSessionAgentResumeHandlePersist();
+		persistCursorSessionAgentResumeHandle(createHandle("agent-summary") as any);
+		handlers.get("turn_start")?.({}, { sessionManager: createSessionManager() });
+		persistCursorSessionAgentResumeHandle(createHandle("agent-next-turn") as any);
+		handlers.get("turn_end")?.({}, { sessionManager: createSessionManager() });
+
+		expect(appended).toHaveLength(1);
+		expect(appended[0]).toEqual([expect.any(String), expect.objectContaining({ agentId: "agent-next-turn" })]);
+	});
 });

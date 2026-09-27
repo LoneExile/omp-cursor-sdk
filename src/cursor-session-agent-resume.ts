@@ -82,7 +82,10 @@ const state: CursorSessionResumeState = {
 };
 
 // Compaction summarizer sends commit a one-message resume handle. Drop it so the
-// next normal turn_end cannot persist that lineage (#223).
+// next normal turn_end cannot persist that lineage (#223). Cleared by
+// session_compact, or by the next turn_start when compaction failed or was
+// cancelled: OMP runs the summarizer on the session side-stream outside the
+// agent loop, so no turn events fire between suppression and the next turn.
 let resumeHandlePersistSuppressed = false;
 
 export function suppressCursorSessionAgentResumeHandlePersist(): void {
@@ -451,6 +454,9 @@ export function registerCursorSessionAgentResume(pi: CursorSessionAgentResumeExt
 	});
 	pi.on("before_agent_start", (_event, ctx) => {
 		restoreFromSessionManager(ctx.sessionManager);
+	});
+	pi.on("turn_start", () => {
+		resumeHandlePersistSuppressed = false;
 	});
 	pi.on("turn_end", (_event, ctx) => {
 		flushPendingCursorSessionAgentResumeHandle(ctx.sessionManager.getBranch());
