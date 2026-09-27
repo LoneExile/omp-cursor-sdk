@@ -469,6 +469,13 @@ controls reasoning depth on both variants.
   `thinking` column of `omp models cursor-sdk`), or `off` where Cursor has an
   off value; mapped to the SDK effort/reasoning_effort/reasoning/thinking param
 
+`--cursor-*` flags apply to the session omp starts, not to its subagents,
+`/tan` clones or revived workers: omp binds their extensions with a fresh
+flag set (`loader.ts` `bindPreparedExtensions` creates a new
+`ExtensionRuntime`; only `main.ts` sets flag values). Children still see the
+`PI_CURSOR_*` environment variables; fast and mode follow their own session
+entries and `~/.omp/agent/cursor-sdk.json` defaults.
+
 ### Environment
 
 - `CURSOR_API_KEY` — API key (`~/.omp/.env` is loaded once at omp startup)
