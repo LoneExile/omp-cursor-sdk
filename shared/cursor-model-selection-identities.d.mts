@@ -10,6 +10,9 @@ export interface CursorModelSelectionIdentity {
 	baseContextWindowKey: string;
 }
 
+/** Canonical pi model id: `<id>[@<context>][@fast|@slow]`. */
+export declare function encodePiModelId(modelId: string, context?: string, fastOverride?: boolean): string;
+
 export declare function getCursorModelSelectionIdentities(
 	models: readonly ModelListItem[],
 ): CursorModelSelectionIdentity[];

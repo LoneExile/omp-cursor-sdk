@@ -6,7 +6,7 @@ import type {
 } from "@cursor/sdk";
 import type { Effort } from "@oh-my-pi/pi-ai";
 import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
-import { getCursorModelSelectionIdentities } from "../shared/cursor-model-selection-identities.mjs";
+import { encodePiModelId, getCursorModelSelectionIdentities } from "../shared/cursor-model-selection-identities.mjs";
 import { loadContextWindowCache } from "./context-window-cache.js";
 import { loadCursorSdk } from "./cursor-sdk-runtime.js";
 import { resolveCursorApiKey, resolveCursorRuntimeApiKey } from "./cursor-api-key.js";
@@ -295,7 +295,16 @@ function registerModelItems(items: ModelListItem[]): ProviderModelConfig[] {
 			params,
 			context,
 			contextWindowCache,
-			[piModelId, contextWindowKey, baseContextWindowKey],
+			// The fast/slow lane does not change the window (measured: grok-4.6 and
+			// grok-4.6@fast are both 256000), so a lane without its own measurement
+			// uses the same model + context before falling back to the context label.
+			[
+				piModelId,
+				contextWindowKey,
+				baseContextWindowKey,
+				encodePiModelId(selectionModelId, context),
+				encodePiModelId(item.id, context),
+			],
 			fastOverride,
 		);
 		metadataByPiModelId.set(piModelId, metadata);

@@ -310,3 +310,34 @@ describe("OMP thinking metadata", () => {
 		expect(config).not.toHaveProperty("thinking");
 	});
 });
+
+describe("context windows of fast/slow lanes", () => {
+	// Bundled measurement (src/bundled-context-windows.ts): claude-opus-4-8@1m = 300000. The fast
+	// lane does not change the window (live: grok-4.6 and grok-4.6@fast both measure 256000).
+	const OPUS_4_8: ModelListItem = {
+		id: "claude-opus-4-8",
+		displayName: "Opus 4.8",
+		parameters: [
+			{ id: "context", displayName: "Context", values: [{ value: "300k" }, { value: "1m" }] },
+			{ id: "fast", displayName: "Fast", values: [{ value: "false" }, { value: "true" }] },
+		],
+		variants: [
+			{
+				params: [
+					{ id: "context", value: "1m" },
+					{ id: "fast", value: "false" },
+				],
+				displayName: "Opus 4.8",
+				isDefault: true,
+			},
+		],
+	};
+
+	it("uses the measured window of the same model and context for non-default lanes", () => {
+		const windows = Object.fromEntries(register([OPUS_4_8]).map((model) => [model.id, model.contextWindow]));
+		expect(windows["claude-opus-4-8@1m"]).toBe(300000);
+		expect(windows["claude-opus-4-8@1m@slow"]).toBe(300000);
+		expect(windows["claude-opus-4-8@1m@fast"]).toBe(300000);
+		expect(windows["claude-opus-4-8@300k@fast"]).toBe(300000);
+	});
+});
