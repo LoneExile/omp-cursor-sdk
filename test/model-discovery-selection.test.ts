@@ -1,4 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import type { Effort } from "@oh-my-pi/pi-ai";
+import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
+// OMP's own clamp (pi-tui resolveThinkingLevelForModel -> clampThinkingLevelForModel)
+// runs on --thinking / /thinking before the provider's streamSimple sees `reasoning`.
+import { clampThinkingLevelForModel } from "@oh-my-pi/pi-catalog/model-thinking";
 import {
 	buildCursorModelSelection,
 	getCursorModelMetadata,
@@ -189,5 +194,119 @@ describe("reasoning_effort models", () => {
 		};
 		expect(buildCursorModelSelection("grok-4.7@256k", "off")).toEqual(expected);
 		expect(buildCursorModelSelection("grok-4.7@256k", "max")).toEqual(expected);
+	});
+});
+
+function hostClamp(config: ProviderModelConfig | undefined, level: string): string | undefined {
+	const model = { ...config, provider: "cursor-sdk", api: "cursor-sdk", baseUrl: "" };
+	return clampThinkingLevelForModel(model as never, level as Effort);
+}
+
+describe("OMP thinking metadata", () => {
+	it("advertises grok-4.7's reasoning_effort ladder without off and keeps xhigh", () => {
+		const config = register([GROK_4_7]).find((model) => model.id === "grok-4.7@256k");
+		expect(config?.thinking).toEqual({ mode: "effort", efforts: ["low", "medium", "high", "xhigh"], requiresEffort: true });
+		expect(config).not.toHaveProperty("thinkingLevelMap");
+		expect(hostClamp(config, "xhigh")).toBe("xhigh");
+		expect(hostClamp(config, "max")).toBe("xhigh");
+		expect(hostClamp(config, "minimal")).toBe("low");
+		expect(buildCursorModelSelection("grok-4.7@256k", hostClamp(config, "xhigh") as Effort)).toEqual({
+			id: "grok-4.7",
+			params: [
+				{ id: "context", value: "256k" },
+				{ id: "reasoning_effort", value: "xhigh" },
+				{ id: "fast", value: "true" },
+			],
+		});
+	});
+
+	it("advertises a Claude thinking+effort model as off..max", () => {
+		const [config] = register([
+			{
+				id: "claude-opus-5",
+				displayName: "Opus 5",
+				parameters: [
+					{ id: "thinking", displayName: "Thinking", values: [{ value: "false" }, { value: "true" }] },
+					{
+						id: "effort",
+						displayName: "Effort",
+						values: [{ value: "low" }, { value: "medium" }, { value: "high" }, { value: "xhigh" }, { value: "max" }],
+					},
+				],
+				variants: [
+					{
+						params: [
+							{ id: "thinking", value: "true" },
+							{ id: "effort", value: "high" },
+						],
+						displayName: "Opus 5",
+						isDefault: true,
+					},
+				],
+			},
+		]);
+		expect(config?.reasoning).toBe(true);
+		expect(config?.thinking).toEqual({
+			mode: "effort",
+			efforts: ["low", "medium", "high", "xhigh", "max"],
+			requiresEffort: false,
+		});
+		expect(hostClamp(config, "max")).toBe("max");
+		expect(buildCursorModelSelection("claude-opus-5", "max")).toEqual({
+			id: "claude-opus-5",
+			params: [
+				{ id: "thinking", value: "true" },
+				{ id: "effort", value: "max" },
+			],
+		});
+		expect(buildCursorModelSelection("claude-opus-5", "off")).toEqual({
+			id: "claude-opus-5",
+			params: [{ id: "thinking", value: "false" }],
+		});
+	});
+
+	it("advertises a reasoning model with `none` as off-capable and maps off to none", () => {
+		const [config] = register([
+			{
+				id: "gpt-5.6-sol",
+				displayName: "GPT-5.6 Sol",
+				parameters: [
+					{
+						id: "reasoning",
+						displayName: "Reasoning",
+						values: [
+							{ value: "none" },
+							{ value: "low" },
+							{ value: "medium" },
+							{ value: "high" },
+							{ value: "xhigh" },
+							{ value: "max" },
+						],
+					},
+				],
+				variants: [{ params: [{ id: "reasoning", value: "medium" }], displayName: "GPT-5.6 Sol", isDefault: true }],
+			},
+		]);
+		expect(config?.thinking).toEqual({
+			mode: "effort",
+			efforts: ["low", "medium", "high", "xhigh", "max"],
+			requiresEffort: false,
+		});
+		expect(buildCursorModelSelection("gpt-5.6-sol", "off")).toEqual({
+			id: "gpt-5.6-sol",
+			params: [{ id: "reasoning", value: "none" }],
+		});
+		expect(buildCursorModelSelection("gpt-5.6-sol", hostClamp(config, "xhigh") as Effort)).toEqual({
+			id: "gpt-5.6-sol",
+			params: [{ id: "reasoning", value: "xhigh" }],
+		});
+	});
+
+	it("advertises no thinking for models without a Cursor thinking control", () => {
+		const [config] = register([
+			{ id: "composer-2.5", displayName: "Composer 2.5", variants: [{ params: [], displayName: "Composer 2.5", isDefault: true }] },
+		]);
+		expect(config?.reasoning).toBe(false);
+		expect(config).not.toHaveProperty("thinking");
 	});
 });

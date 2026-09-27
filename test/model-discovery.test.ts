@@ -638,7 +638,7 @@ describe("discoverModels", () => {
 		]);
 		const models = await discoverModels();
 		expect(models[0].reasoning).toBe(false);
-		expect(models[0].thinkingLevelMap).toBeUndefined();
+		expect(models[0]).not.toHaveProperty("thinking");
 	});
 
 	it("maps Cursor reasoning values to pi thinking levels", async () => {
@@ -671,7 +671,7 @@ describe("discoverModels", () => {
 			},
 		]);
 		const models = await discoverModels();
-		expect(models[0].thinkingLevelMap).toEqual({
+		expect(getCursorModelMetadata(models[0].id)?.thinkingLevelMap).toEqual({
 			off: "none",
 			minimal: "minimal",
 			low: "low",
@@ -705,7 +705,7 @@ describe("discoverModels", () => {
 			},
 		]);
 		const models = await discoverModels();
-		expect(models[0].thinkingLevelMap).toEqual({
+		expect(getCursorModelMetadata(models[0].id)?.thinkingLevelMap).toEqual({
 			off: "false",
 			minimal: null,
 			low: null,
@@ -755,7 +755,7 @@ describe("discoverModels", () => {
 		expect(models.map((model) => model.id)).toEqual(["claude-opus-4-7@300k", "claude-opus-4-7@1m"]);
 		expect(models[0].contextWindow).toBe(300000);
 		expect(models[1].contextWindow).toBe(1000000);
-		expect(models[0].thinkingLevelMap).toEqual({
+		expect(getCursorModelMetadata(models[0].id)?.thinkingLevelMap).toEqual({
 			off: "false",
 			minimal: null,
 			low: "low",
@@ -800,7 +800,7 @@ describe("discoverModels", () => {
 
 		const models = await discoverModels();
 
-		expect(models[0].thinkingLevelMap).toEqual({
+		expect(getCursorModelMetadata(models[0].id)?.thinkingLevelMap).toEqual({
 			off: null,
 			minimal: null,
 			low: "low",
@@ -840,7 +840,7 @@ describe("discoverModels", () => {
 
 		const models = await discoverModels();
 
-		expect(models[0].thinkingLevelMap).toEqual({
+		expect(getCursorModelMetadata(models[0].id)?.thinkingLevelMap).toEqual({
 			off: "false",
 			minimal: null,
 			low: "low",

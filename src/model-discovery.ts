@@ -4,6 +4,7 @@ import type {
 	ModelParameterValue,
 	ModelSelection,
 } from "@cursor/sdk";
+import type { Effort } from "@oh-my-pi/pi-ai";
 import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
 import { getCursorModelSelectionIdentities } from "../shared/cursor-model-selection-identities.mjs";
 import { loadContextWindowCache } from "./context-window-cache.js";
@@ -17,11 +18,15 @@ import {
 	saveModelListCache,
 } from "./model-list-cache.js";
 
-// Vendored from Pi 0.84's pi-ai: OMP has no generic model thinking-level types
-// (pi-catalog is not importable from plugins). OMP's SimpleStreamOptions
-// `reasoning` is `Effort` (minimal..max); "off" is the extension's own level.
+// Vendored from Pi 0.84's pi-ai: the plugin's internal level → Cursor value map.
+// OMP's SimpleStreamOptions `reasoning` is `Effort` (minimal..max); "off" is the
+// extension's own level for "OMP sent no effort".
 type ModelThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 type ThinkingLevelMap = Partial<Record<ModelThinkingLevel, string | null>>;
+
+// OMP's canonical effort order (pi-catalog THINKING_EFFORTS). pi-catalog's `Effort`
+// is a const enum whose members are these literal strings.
+const EFFORT_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 const FALLBACK_CONTEXT_WINDOW = 128000;
 const FALLBACK_MAX_TOKENS = 16384;
@@ -63,7 +68,6 @@ export interface CursorModelMetadata {
 	supportsFast: boolean;
 	defaultFast: boolean;
 	fastOverride?: boolean;
-	supportsReasoning: boolean;
 	thinkingLevelMap?: ThinkingLevelMap;
 	parameterIds: {
 		context: boolean;
@@ -236,7 +240,6 @@ function toMetadata(
 		supportsFast: getParameter(item, "fast") !== undefined,
 		defaultFast: fastValue === "true",
 		...(fastOverride !== undefined ? { fastOverride } : {}),
-		supportsReasoning: thinkingLevelMap !== undefined,
 		...(thinkingLevelMap ? { thinkingLevelMap } : {}),
 		parameterIds: {
 			context: getParameter(item, "context") !== undefined,
@@ -249,12 +252,28 @@ function toMetadata(
 	};
 }
 
+/**
+ * OMP-native thinking metadata (ProviderModelConfig.thinking). OMP ignores Pi's
+ * `thinkingLevelMap`, invents `minimal..high` for every reasoning model, and clamps
+ * `--thinking` against `thinking.efforts` before calling streamSimple. Advertising
+ * exactly the efforts Cursor offers keeps the selected level unchanged on its way
+ * to buildCursorModelSelection. `requiresEffort` marks models without a Cursor off
+ * value; it is explicit either way so OMP does not infer it from the model family.
+ */
+function toThinkingConfig(thinkingLevelMap: ThinkingLevelMap | undefined): ProviderModelConfig["thinking"] {
+	if (!thinkingLevelMap) return undefined;
+	const efforts = EFFORT_LEVELS.filter((level) => thinkingLevelMap[level] != null) as readonly Effort[];
+	if (efforts.length === 0) return undefined;
+	return { mode: "effort", efforts, requiresEffort: thinkingLevelMap.off == null };
+}
+
 function toModelConfig(metadata: CursorModelMetadata, name: string): ProviderModelConfig {
+	const thinking = toThinkingConfig(metadata.thinkingLevelMap);
 	return {
 		id: metadata.piModelId,
 		name,
-		reasoning: metadata.supportsReasoning,
-		...(metadata.thinkingLevelMap ? { thinkingLevelMap: metadata.thinkingLevelMap } : {}),
+		reasoning: thinking !== undefined,
+		...(thinking ? { thinking } : {}),
 		input: [...TEXT_AND_IMAGE_INPUT],
 		cost: { ...ZERO_COST },
 		contextWindow: metadata.contextWindow,
