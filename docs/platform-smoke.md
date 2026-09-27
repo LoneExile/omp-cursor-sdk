@@ -1,6 +1,8 @@
 # Platform Smoke Gate
 
-Status: current local-runtime release gate for Cursor provider/runtime changes. Cloud-runtime changes also require the separate paid `npm run smoke:cloud` gate. The Crabbox runner, packed-install platform-build suite, and real live PTY/ConPTY suite runner are implemented for macOS, Ubuntu, and Windows native targets with one-lease-per-target orchestration.
+> **Unported Pi-era tooling.** The scripts this document describes (`scripts/platform-smoke.mjs`, `scripts/platform-smoke/`, `scripts/cloud-runtime-smoke.mjs`, `scripts/local-resume-smoke.mjs` and the `scripts/lib/` helpers) still drive the Pi CLI with Pi-only flags (`pi install --approve`, `--approve`, `--list-models`, `--session-id`), and this omp fork does not load in Pi, so they do not run as-is and are **not** a release or pre-commit gate. The current gate is the omp-native validation in [AGENTS.md](../AGENTS.md) (`## Pre-commit validation (maintainer)`). The rest of this document is the Pi-era design, kept for porting.
+
+Status (Pi era): local-runtime release gate for Cursor provider/runtime changes. Cloud-runtime changes also require the separate paid `npm run smoke:cloud` gate. The Crabbox runner, packed-install platform-build suite, and real live PTY/ConPTY suite runner are implemented for macOS, Ubuntu, and Windows native targets with one-lease-per-target orchestration.
 
 Detailed detector, registry, command-rendering, implementation-history, replacement, and portability reference: [Platform Smoke Implementation Reference](./platform-smoke-implementation.md).
 
@@ -164,7 +166,7 @@ Cloud validation stays separate from `smoke:platform:all`. Releases that touch a
 npm run smoke:cloud
 ```
 
-The no-flag command is the required `cursor/composer-2-5` matrix. It uses current `gh` CLI authentication to create one private throwaway GitHub repository, seeds clean `main`, `starting-ref`, and `direct-push` branches, and runs persisted-session named lanes for:
+The no-flag command is the required `cursor-sdk/composer-2-5` matrix. It uses current `gh` CLI authentication to create one private throwaway GitHub repository, seeds clean `main`, `starting-ref`, and `direct-push` branches, and runs persisted-session named lanes for:
 
 - cancellation, with exact agent/run IDs captured before abort, retained `runIdSource` (`metadata` or installed-SDK `Agent.listRuns()` recovery), and terminal `cancelled` independently read through the SDK;
 - explicit HTTPS repository plus `startingRef`, requiring a distinct pushed cloud branch with remote-content and starting-ref-ancestry proof, recording whether the SDK returned branch metadata, and validating any returned PR URL through GitHub;
@@ -288,7 +290,7 @@ import { LOCAL_RESUME_SUITE_NAMES } from "./scripts/platform-smoke/local-resume-
 
 export default {
   packageName: "pi-cursor-sdk",
-  cursorModel: "cursor/composer-2-5",
+  cursorModel: "cursor-sdk/composer-2-5",
   artifactRoot: ".artifacts/platform-smoke",
   artifactRetention: {
     maxRunDirs: 18,

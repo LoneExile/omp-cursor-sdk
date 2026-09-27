@@ -94,7 +94,7 @@ This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchm
 - `test/helpers/pi-harness.ts` is the canonical fake pi/extension harness (`createPiHarness`, shared model/context/event runners, tool factories).
 - `test/helpers/cursor-provider-harness.ts` owns Cursor SDK provider mocks/stream helpers and re-exports pi-harness fixtures for provider tests.
 - `docs/cursor-model-ux-spec.md` is the maintainer design source of truth for Cursor model UX. Keep it aligned with behavior changes.
-- `docs/cursor-testing-lessons.md` is the maintainer source of truth for regression testing lessons (auth.json, isolated smoke harnesses, JSONL replay scans, plan-mode replay traps).
+- `docs/cursor-testing-lessons.md` is the maintainer source of truth for regression testing lessons (`CURSOR_API_KEY` in isolated runs, isolated smoke harnesses, JSONL replay scans, plan-mode replay traps).
 - `docs/cursor-dogfood-checklist.md` is the minimal one-session dogfood checklist (baseline env, JSONL ID patterns, bootstrap manifest, edit diff card).
 
 ## Operating rules
@@ -120,7 +120,8 @@ This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchm
 - Package-readiness check: `npm pack --dry-run`
 - Local development run, requires `CURSOR_API_KEY`: `omp -e ./src/index.ts --model cursor-sdk/composer-2.5`
 - List Cursor models: `omp models cursor-sdk -e ./src/index.ts`
-- Capture provider/SDK event artifacts for one prompt, requires a Cursor key: `CURSOR_API_KEY="your-key" npm run debug:provider-events -- --prompt "hello"`
+- Capture provider/SDK event artifacts for one prompt, requires `CURSOR_API_KEY`: from a `/tmp` scratch dir, `PI_CURSOR_SDK_EVENT_DEBUG=1 omp -e <repo> --model cursor-sdk/composer-2.5 --no-session -p "Reply with exactly OK"`, then read `.debug/cursor-sdk-events/**` and delete it.
+- The smoke and debug scripts `smoke:platform*`, `smoke:live`, `smoke:visual`, `smoke:isolated`, `smoke:cloud*`, `smoke:local-resume*`, `smoke:steering`, and `debug:provider-events`, with their `scripts/lib/` and `scripts/platform-smoke/` helpers, are unported Pi-era tooling: they drive the Pi CLI with Pi-only flags (`--approve`, `--list-models`, `--session-id`, `pi install`), and this fork does not load in Pi, so they do not run as-is and are not a gate. `docs/platform-smoke.md` and the harness sections of `docs/cursor-testing-lessons.md` describe them for a future port.
 
 There is no lint or format script in `package.json` at this time.
 
@@ -162,10 +163,10 @@ When plans, reviews, investigations, or generated smoke/debug artifacts are no l
 - Scrub Cursor SDK errors and output that may contain API keys, bearer tokens, cookies, sessions, or auth headers.
 - `PI_CURSOR_SDK_EVENT_DEBUG=1` and `npm run debug:provider-events` write raw local artifacts that may include prompts, tool args/results, local paths, or secrets; keep them under gitignored `.debug/`, do not print or commit them, and keep run-scoped debug state explicit rather than process-global.
 - Ambient Cursor settings/rules loading is enabled by default through `PI_CURSOR_SETTING_SOURCES=all`; keep SDK startup log filtering intact so settings/skills output does not corrupt pi's TUI. Users can narrow or disable Cursor setting sources explicitly when desired.
-- Live omp/Cursor smoke tests may call external services and require `CURSOR_API_KEY` from `~/.omp/.env` (loaded at omp startup) or the environment; provider turns also accept omp's resolved `options.apiKey`. Run them for Cursor provider/runtime changes. If auth is unavailable, report live smoke as release-blocked instead of skipped-ready. See `docs/cursor-testing-lessons.md` for isolated harness auth seeding.
+- Live omp/Cursor smoke tests may call external services and require `CURSOR_API_KEY` from `~/.omp/.env` (loaded at omp startup) or the environment; provider turns also accept omp's resolved `options.apiKey`. Run them for Cursor provider/runtime changes. If auth is unavailable, report live smoke as release-blocked instead of skipped-ready. See `docs/cursor-testing-lessons.md` for `CURSOR_API_KEY` in isolated runs.
 - For live runtime evidence, use `cursor-sdk/composer-2-5@slow` as much as needed. If Cursor Cloud does not support that exact model variant, use `cursor-sdk/composer-2-5`.
 - Live Cursor Cloud probes that create `bc-*` agents must capture agent/run IDs, verify archive/delete cleanup, and report any residual agent; do not assume cleanup from a passed smoke.
-- For Cursor provider/runtime changes, the canonical local runtime release and pre-commit gate is `npm run smoke:platform:all`; see `docs/platform-smoke.md`. That script runs doctor before the macOS/Ubuntu/Windows local-runtime matrix. Cloud runtime changes must also run the opt-in `npm run smoke:cloud` lane. The platform gate uses packed installs across macOS, Ubuntu, and Windows native with PTY/ConPTY capture, host-rendered xterm/PNG visual evidence, JSONL assertions, bridge diagnostics, usage/cache checks, abort cleanup, artifact manifests, and redaction scans. Use `docs/cursor-live-smoke-checklist.md`, `npm run smoke:visual`, `npm run smoke:live`, or direct `omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5` runs only for inner-loop debugging and focused visual/card audits before the full platform gate. Do not mark release-ready with optional/deferred/mostly-passing platform smoke items outstanding.
+- For Cursor provider/runtime changes, the gate is the omp-native pre-commit validation below. The Pi-era smoke scripts are unported (see `## Setup and commands`) and are not a gate.
 
 ## PR review workflow (maintainer)
 
@@ -182,16 +183,16 @@ Before publishing any npm/GitHub release or tagging release-ready status:
 
 - Run a thermo-nuclear/deep maintainability review on the exact release diff, including docs, tests, package metadata, generated artifacts, and PR/issue closure notes.
 - Remediate every finding, including polish. Repeat the review/fix loop until the reviewer reports no remaining findings.
-- This release review gate is in addition to the platform smoke gate; it does not replace `npm run smoke:platform:all`.
+- This release review gate is in addition to the pre-commit validation below; it does not replace it.
 
-## Pre-commit live smoke (maintainer)
+## Pre-commit validation (maintainer)
 
-Before **every commit** that touches Cursor provider/runtime, prompt/session send policy, agents-context dedup, bridge, replay, or related extension wiring:
+Before **every commit** that touches Cursor provider/runtime, prompt/session send policy, agents-context dedup, bridge, replay, or related extension wiring, run the omp-native checks this port uses:
 
-- Run the canonical local platform gate: `npm run smoke:platform:all` (see `docs/platform-smoke.md`; it runs doctor first). Also run `npm run smoke:cloud` when the commit touches actual cloud runtime execution.
-- Use `npm run smoke:live` (`scripts/tmux-live-smoke.sh`), `npm run smoke:visual` (`scripts/visual-tui-smoke.mjs`), `npm run smoke:isolated`, or direct `omp -e ./src/index.ts --cursor-no-fast --model cursor-sdk/composer-2-5` only as inner-loop/debug helpers when narrowing a specific failure before the platform gate. For card/color claims, capture ANSI from the offscreen TUI, render it through the canonical browser/xterm path, save PNG evidence, and inspect JSONL.
-- If `CURSOR_API_KEY` (from `~/.omp/.env` or the environment) or required Crabbox/platform resources are unavailable, **do not commit**—report blocked, not skipped-ready.
-- Unit tests (`npm test`, `npm run typecheck`) are necessary but not sufficient for these commits.
+- `npm test` and `npm run typecheck:src` pass, and the `npm run typecheck:tests` error count does not grow.
+- `omp models cursor-sdk -e .` lists the plugin's rows with the expected context windows and thinking levels.
+- Live turns through `omp -e <repo>` from a `/tmp` scratch dir with `PI_CURSOR_SDK_EVENT_DEBUG=1`: a print-mode turn (`--no-session -p "Reply with exactly OK"`), and for session, send-policy, compaction, or bridge changes a multi-prompt `--mode rpc --session-dir <dir>` session. Check `.debug/cursor-sdk-events/**/metadata.json` (model selection, send plan, agent id), then delete `.debug/`.
+- If `CURSOR_API_KEY` (from `~/.omp/.env` or the environment) is unavailable, **do not commit**—report the live check as blocked, not skipped-ready.
 
 ## Progress updates and handoff
 
@@ -213,6 +214,4 @@ This is an omp provider extension (not a server/web app). "Running the app" mean
 - When capturing print-mode (`-p`) output, redirect stdout to a file rather than piping through `tail`/`head` — those pipes buffer until the process exits, hiding streaming progress.
 - Use sessionful runs (`--session-dir`, then `--continue`/`--resume`; not `--no-session`) when testing session ledgers, resume identity, branch/fork/clone/switch behavior, or slash commands such as `/cursor-cloud`; `--no-session` is only proof for one-shot provider behavior.
 - For slow cloud or slash-command probes, prefer print mode for model turns or raw JSONL RPC with an explicit timeout; the packaged `RpcClient` has a fixed 30s request timeout that can falsely fail long cloud operations.
-- Basic setup validation here is unit/typecheck/print-mode only. `npm run smoke:platform:all` remains the maintainer local-runtime release/pre-commit gate and needs the full macOS/Ubuntu/Windows matrix hosts; a Linux-only cloud agent cannot satisfy that gate. Treat Linux-only `smoke:visual` / `smoke:local-resume` / `smoke:platform:doctor` results as partial evidence, not release-ready.
-- Visual smoke (`npm run smoke:visual`) needs `pi` on `PATH` (`export PATH="$PWD/node_modules/.bin:$PATH"`) and Playwright Chromium (`npx playwright install chromium`) for PNG capture; use `--no-screenshot` if Chromium is unavailable.
-- `npm run smoke:live` needs `pi` on `PATH`. Prefer `./node_modules/.bin` on `PATH` rather than relying on a global install.
+- Basic setup validation here is the pre-commit validation above: unit tests, typecheck, `omp models cursor-sdk -e .`, and print/RPC turns. The Pi-era smoke scripts (`smoke:visual`, `smoke:live`, `smoke:platform*`, …) are unported and need the Pi CLI; see `## Setup and commands`.

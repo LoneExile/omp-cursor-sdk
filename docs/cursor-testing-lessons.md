@@ -1,6 +1,6 @@
 # Cursor Testing Lessons
 
-> **Platform Smoke:** The required local cross-platform release gate is `npm run smoke:platform:all`; cloud-runtime changes additionally require `npm run smoke:cloud`. See [the platform smoke runbook](./platform-smoke.md). For portable guidance, see the [implementation reference](./platform-smoke-implementation.md#portability-to-other-pi-extensions) and the repo-local `docs/pi-extension-platform-testing.md` from a Crabbox checkout. The live smoke checklist remains useful for inner-loop development but is not the release gate.
+> **Gate:** the current pre-commit and release validation is omp-native: `npm test`, `npm run typecheck:src`, `omp models cursor-sdk -e .`, and live print/RPC turns through `omp -e <repo>` with `PI_CURSOR_SDK_EVENT_DEBUG=1` (see `AGENTS.md`, `## Pre-commit validation (maintainer)`). The smoke scripts referenced below (`smoke:isolated`, `smoke:live`, `smoke:platform*`, `smoke:cloud`, `debug:provider-events`) are unported Pi-era tooling that drives the Pi CLI with Pi-only flags; they do not run as-is against this omp fork and are not a gate. [The platform smoke runbook](./platform-smoke.md) describes their Pi-era design.
 
 ## Purpose
 
@@ -60,7 +60,7 @@ omp resolves the Cursor SDK key from `CURSOR_API_KEY`, supplied by `~/.omp/.env`
 
 Use isolated `/tmp` trees when validating:
 
-- packed tarball install (`npm pack` → extract → `pi install --approve -l`)
+- packed tarball install (`npm pack` → extract → `omp plugin install <dir>`; `omp plugin --help` accepts paths as targets)
 - clean `HOME` with no inherited shell profile state
 - plan-mode-style tool stripping via a shim extension
 - JSONL replay-error scans independent of stdout
@@ -69,7 +69,7 @@ Recommended layout:
 
 ```text
 /tmp/pi-cursor-sdk-isolated-<timestamp>/
-  home/                 # seeded ~/.pi/agent/auth.json
+  home/                 # clean HOME; CURSOR_API_KEY passed in the environment
   pack/                 # npm pack output (*.tgz)
   extract/package/      # unpacked extension
   project/              # empty pi project for install -l
@@ -79,7 +79,7 @@ Recommended layout:
     plan-strip/
 ```
 
-Commands:
+Commands (unported Pi-era harness: `scripts/isolated-cursor-smoke.sh` still runs `pi install --approve -l` and Pi-only flags, so it does not run as-is against this omp fork):
 
 ```bash
 # full isolated smoke (unit preflight + pack + live pi)
@@ -98,7 +98,7 @@ Every live check should use its own `--session-dir` under the isolated tree. Do 
 
 | Trap | What went wrong | Fix |
 | --- | --- | --- |
-| Clean `HOME` without auth | `pi` could not authenticate Cursor in isolated runs | Copy `~/.pi/agent/auth.json` into isolated `HOME` |
+| Clean `HOME` without auth | Cursor turns failed with a missing-key error in isolated runs | Pass `CURSOR_API_KEY` in the isolated environment (or an isolated `~/.omp/.env`) |
 | `npm pack \| tail -1` | Captured npm notice text, not tarball path | Use `ls -t "$PACK_DIR"/*.tgz \| head -1` |
 | Packed extension, no install | Provider never loaded in isolated project | Run `npm install --omit=dev` inside extracted package |
 | Inherited shell env | mise/profile hooks hung or polluted runs | Use `env -i ... MISE_DISABLE=1` for isolated pi calls |
@@ -106,7 +106,7 @@ Every live check should use its own `--session-dir` under the isolated tree. Do 
 | stdout-only assertions | Missed replay failures persisted only in JSONL | Scan JSONL for `Tool grep/cursor/find/ls not found` |
 | Naive JSONL substring scan | Successful `read` of docs mentioning replay errors looked like failures | `validate-smoke-jsonl.mjs` only flags error `toolResult` / error assistant messages |
 | Plan strip only on first turn | Under-tested multi-turn resync | Shim strips on every `turn_start`; stress multi-turn separately |
-| Assuming env auth equals pi auth | False "blocked" or false "pass" in CI-like shells | Check `auth.json` provider keys explicitly when needed |
+| Assuming a `/login` credential works | omp's built-in Cursor OAuth is not read by this plugin, so a logged-in shell can still fail | Check that `CURSOR_API_KEY` is set in the environment omp starts with |
 
 ## JSONL is the source of truth for replay regressions
 
@@ -181,14 +181,14 @@ Pass criteria:
 
 ## Local validation ladder
 
-Run local checks first, then the local platform smoke gate before claiming release-ready for provider/runtime changes. Add `npm run smoke:cloud` for cloud-runtime changes:
+Pi-era release sequence (the smoke steps are unported; today run the omp-native checks from the gate note above instead):
 
 ```bash
 npm test
 npm run typecheck
 npm pack --dry-run
 SKIP_LIVE=1 npm run smoke:isolated
-npm run smoke:isolated            # inner-loop helper; requires auth.json or CURSOR_API_KEY
+npm run smoke:isolated            # unported Pi-era helper; requires the Pi CLI and CURSOR_API_KEY
 npm run smoke:live                # inner-loop partial tmux checklist subset
 npm run smoke:platform:doctor
 npm run smoke:platform:all
@@ -206,8 +206,8 @@ Then use the [Cursor live smoke checklist](./cursor-live-smoke-checklist.md) onl
 ## What belongs in CI vs platform/manual smoke
 
 - **CI / default `npm test`:** mocked provider tests, extension lifecycle tests, JSONL validator tests, script syntax/help checks. No live Cursor calls.
-- **Local platform release gate:** `npm run smoke:platform:all` (runs doctor first). Requires real Cursor auth and cross-platform Crabbox setup.
-- **Cloud runtime release gate:** `npm run smoke:cloud` for PRs that touch actual cloud runtime execution.
+- **Pre-commit/release gate:** the omp-native checks from the gate note above; they need `CURSOR_API_KEY` for the live turns.
+- **Unported Pi-era gates:** `npm run smoke:platform:all` (cross-platform Crabbox matrix) and `npm run smoke:cloud` (cloud runtime) still drive the Pi CLI.
 - **Focused manual smoke:** `npm run smoke:isolated`, `npm run smoke:live`, and selected live-checklist sections for inner-loop debugging of behavior mocks cannot reproduce.
 
 If platform smoke auth or target setup is unavailable, report the release as **blocked**, not skipped-ready.
@@ -241,7 +241,7 @@ Hard repo rule: Cursor SDK behavior claims must come from the installed `@cursor
 
 When debugging pi parsing, replay routing, bridge timing, or send-plan behavior, capture the raw `onDelta`/`onStep` payloads **as the Cursor provider receives them** instead of using the direct SDK probe above.
 
-One-shot maintainer script (RPC pi run, gitignored artifacts by default):
+With omp, set `PI_CURSOR_SDK_EVENT_DEBUG=1` on an `omp -e <repo>` run (the opt-in shown later in this section). The one-shot maintainer script is unported Pi-era tooling (it drives a Pi RPC run):
 
 ```bash
 CURSOR_API_KEY=... npm run debug:provider-events -- \
