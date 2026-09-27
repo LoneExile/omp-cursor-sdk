@@ -228,7 +228,8 @@ The extension wires into OMP's session events:
   `before_agent_start` and nextTurn messages around the prompt); the agent is
   reset and re-bootstrapped only when the context diverges structurally
   (system prompt change, edited or shrunk history, a summary, a turn another
-  provider answered after a model switch, or tool results with no live run).
+  provider answered after a model switch, a cloud-runtime turn, or tool results
+  with no live run).
   Switching to a different Cursor model or effort changes the pool key
   (the model selection), so that turn already starts a fresh agent.
 - **compaction summarizer and side requests:** OMP runs the summarizer on the

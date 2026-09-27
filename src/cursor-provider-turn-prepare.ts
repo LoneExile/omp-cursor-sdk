@@ -8,6 +8,7 @@ import {
 	acquireSessionCursorAgent,
 	buildCursorSessionSendPrompt,
 	createOneShotCursorAgent,
+	invalidateSessionAgent,
 	isOneShotCursorAgentLease,
 	type OneShotCursorAgentLease,
 	planCursorSessionSend,
@@ -40,7 +41,7 @@ import {
 	preflightCursorCloudRuntime,
 } from "./cursor-cloud-options.js";
 import { inspectCursorCloudLocalState } from "./cursor-cloud-local-state.js";
-import { getCursorSessionName, getCursorSessionProjectTrusted } from "./cursor-session-scope.js";
+import { getCursorSessionName, getCursorSessionProjectTrusted, getCursorSessionScopeKey } from "./cursor-session-scope.js";
 import { resolveCursorPiToolBridgeEnabled } from "./cursor-pi-tool-bridge-env.js";
 import {
 	buildCursorToolManifestText,
@@ -480,9 +481,13 @@ export async function prepareCursorProviderTurn(
 	const selection = buildCursorModelSelection(model.id, options?.reasoning ?? "off", fastEnabled);
 	const context: PrepareCursorProviderTurnContext = { ...prepareParams, agentMode, selection, fastEnabled };
 
-	return resolvedConfig.runtime.value === "cloud"
-		? prepareCursorCloudProviderTurn(context)
-		: prepareCursorLocalProviderTurn(context);
+	if (resolvedConfig.runtime.value === "cloud") {
+		// A cloud turn's assistant messages also carry api `cursor-sdk`, so the local pooled
+		// agent could not tell it missed them; the next local turn must re-bootstrap.
+		invalidateSessionAgent(getCursorSessionScopeKey());
+		return prepareCursorCloudProviderTurn(context);
+	}
+	return prepareCursorLocalProviderTurn(context);
 }
 
 export async function requireCursorApiKey(options: SimpleStreamOptions | undefined): Promise<string> {
