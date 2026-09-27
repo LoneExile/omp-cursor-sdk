@@ -26,6 +26,7 @@ export class CursorPiToolBridgeRegistry implements CursorPiToolBridge {
 	private readonly routes = new Map<string, CursorPiToolBridgeRunImpl>();
 	private httpServer?: HttpServer;
 	private listenPromise?: Promise<void>;
+	private serverLifecycle = Promise.resolve();
 
 	constructor(
 		pi: CursorPiToolBridgeSnapshotApi,
@@ -70,11 +71,16 @@ export class CursorPiToolBridgeRegistry implements CursorPiToolBridge {
 	}
 
 	async registerRun(pathname: string, run: CursorPiToolBridgeRunImpl): Promise<string> {
-		await this.ensureHttpServer();
 		this.routes.set(pathname, run);
-		const address = this.getHttpServerAddress();
-		if (!address) throw new Error("Cursor pi tool bridge HTTP server is not listening");
-		return `http://${LOOPBACK_HOST}:${address.port}${pathname}`;
+		try {
+			await this.ensureHttpServer();
+			const address = this.getHttpServerAddress();
+			if (!address) throw new Error("Cursor pi tool bridge HTTP server is not listening");
+			return `http://${LOOPBACK_HOST}:${address.port}${pathname}`;
+		} catch (error) {
+			if (this.routes.get(pathname) === run) this.routes.delete(pathname);
+			throw error;
+		}
 	}
 
 	async unregisterRun(pathname: string, run: CursorPiToolBridgeRunImpl): Promise<void> {
@@ -111,56 +117,71 @@ export class CursorPiToolBridgeRegistry implements CursorPiToolBridge {
 		return false;
 	}
 
-	private async ensureHttpServer(): Promise<void> {
-		if (this.httpServer) {
-			await this.listenPromise;
-			return;
-		}
+	private serializeServerLifecycle<T>(operation: () => Promise<T>): Promise<T> {
+		const next = this.serverLifecycle.then(operation, operation);
+		this.serverLifecycle = next.then(() => undefined, () => undefined);
+		return next;
+	}
 
-		const server = createServer((req, res) => {
-			void this.handleHttpRequest(req, res);
+	private async ensureHttpServer(): Promise<void> {
+		return this.serializeServerLifecycle(async () => {
+			if (this.httpServer) {
+				await this.listenPromise;
+				return;
+			}
+			const server = createServer((req, res) => {
+				void this.handleHttpRequest(req, res);
+			});
+			this.httpServer = server;
+			this.listenPromise = new Promise<void>((resolve, reject) => {
+				const onError = (error: Error) => {
+					server.off("listening", onListening);
+					reject(error);
+				};
+				const onListening = () => {
+					server.off("error", onError);
+					resolve();
+				};
+				server.once("error", onError);
+				server.once("listening", onListening);
+				server.listen(0, LOOPBACK_HOST);
+			}).catch((error) => {
+				if (this.httpServer === server) {
+					this.httpServer = undefined;
+					this.listenPromise = undefined;
+				}
+				throw error;
+			});
+			await this.listenPromise;
 		});
-		this.httpServer = server;
-		this.listenPromise = new Promise<void>((resolve, reject) => {
-			const onError = (error: Error) => {
-				server.off("listening", onListening);
-				reject(error);
-			};
-			const onListening = () => {
-				server.off("error", onError);
-				resolve();
-			};
-			server.once("error", onError);
-			server.once("listening", onListening);
-			server.listen(0, LOOPBACK_HOST);
-		});
-		await this.listenPromise;
 	}
 
 	private async closeHttpServer(): Promise<void> {
-		const server = this.httpServer;
-		if (!server) return;
-		this.httpServer = undefined;
-		this.listenPromise = undefined;
-		await new Promise<void>((resolve, reject) => {
-			let settled = false;
-			let closeTimer: ReturnType<typeof setTimeout> | undefined;
-			const settle = (error?: Error): void => {
-				if (settled) return;
-				settled = true;
-				if (closeTimer) clearTimeout(closeTimer);
-				if (error) reject(error);
-				else resolve();
-			};
-
-			closeTimer = setTimeout(() => settle(), HTTP_SERVER_CLOSE_GRACE_MS);
-			closeTimer.unref?.();
-
-			server.close((error) => {
-				settle(error ?? undefined);
+		return this.serializeServerLifecycle(async () => {
+			const server = this.httpServer;
+			if (!server) return;
+			const listenPromise = this.listenPromise;
+			if (listenPromise) await listenPromise.catch(() => undefined);
+			if (this.httpServer !== server) return;
+			if (this.routes.size > 0) return;
+			this.httpServer = undefined;
+			this.listenPromise = undefined;
+			await new Promise<void>((resolve, reject) => {
+				let settled = false;
+				let closeTimer: ReturnType<typeof setTimeout> | undefined;
+				const settle = (error?: Error): void => {
+					if (settled) return;
+					settled = true;
+					if (closeTimer) clearTimeout(closeTimer);
+					if (error) reject(error);
+					else resolve();
+				};
+				closeTimer = setTimeout(() => settle(), HTTP_SERVER_CLOSE_GRACE_MS);
+				closeTimer.unref?.();
+				server.close((error) => { settle(error ?? undefined); });
+				server.closeIdleConnections();
+				server.closeAllConnections();
 			});
-			server.closeIdleConnections();
-			server.closeAllConnections();
 		});
 	}
 
