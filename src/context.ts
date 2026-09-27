@@ -171,6 +171,12 @@ function formatMessage(msg: Message): string | undefined {
 			const text = formatContentBlocks(msg.content);
 			return text ? `User: ${text}` : undefined;
 		}
+		// OMP converts extension custom/hook messages and text @file mentions to
+		// `developer` messages (pi-agent-core convertMessageToLlm).
+		case "developer": {
+			const text = formatContentBlocks(msg.content);
+			return text ? `Developer: ${text}` : undefined;
+		}
 		case "assistant": {
 			const blocks = Array.isArray(msg.content) ? msg.content : [{ type: "text" as const, text: String(msg.content) }];
 			const textParts: string[] = [];
@@ -384,10 +390,11 @@ export function shouldBootstrapCursorContext(
 		if (current.messageHashes[index] !== previous.messageHashes[index]) return true;
 	}
 	// An incremental prompt carries only the latest new user message. Rebootstrap
-	// if additional model-visible input (such as ! shell output) would be lost.
+	// if additional model-visible input (! shell output as `user`, OMP extension
+	// messages and @file mentions as `developer`) would be lost.
 	const appended = normalizePiContextMessages(context.messages.slice(previous.messageHashes.length));
-	const appendedUsers = appended.filter((message) => message.role === "user");
-	return appended.length > 0 && (appendedUsers.length !== 1 || appended.at(-1)?.role !== "user");
+	const appendedInputs = appended.filter((message) => message.role === "user" || message.role === "developer");
+	return appended.length > 0 && (appendedInputs.length !== 1 || appended.at(-1)?.role !== "user");
 }
 
 /** @deprecated Use planCursorSessionSend() for send mode and shouldBootstrapCursorContext() for context-only checks. */

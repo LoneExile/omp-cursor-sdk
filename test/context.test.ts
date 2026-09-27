@@ -15,6 +15,7 @@ import {
 	planCursorSessionSend,
 } from "../src/cursor-session-send-policy.js";
 import type { Context, UserMessage, AssistantMessage, ToolResultMessage } from "@oh-my-pi/pi-ai";
+import { convertToLlm } from "@oh-my-pi/pi-coding-agent";
 
 describe("buildCursorPrompt", () => {
 	it("includes system prompt", () => {
@@ -660,30 +661,58 @@ describe("cursor session prompt assembly", () => {
 		expect(prompt.text).not.toContain("User: Hello");
 	});
 
-	it("rebootstraps when bash execution output precedes the latest prompt", () => {
-		const priorContext: Context = {
-			messages: [{ role: "user", content: "Run the command", timestamp: 1 }],
-		};
-		const context: Context = {
-			messages: [
-				...priorContext.messages,
-				{
-					role: "bashExecution",
-					command: "printf ok",
-					output: "ok",
-					exitCode: 0,
-					timestamp: 2,
-				},
-				{ role: "user", content: "Now inspect the result", timestamp: 3 },
-			],
-		};
-		const sendState = {
-			bootstrapped: true,
-			contextFingerprint: computeCursorContextFingerprint(priorContext),
-			incrementalSendCount: 1,
-		};
+	// OMP providers receive messages already converted by the host's convertToLlm: `!` shell
+	// output becomes a `user` message; extension custom messages and text @file mentions
+	// become `developer` messages (pi-agent-core convertMessageToLlm, session/messages.ts).
+	function hostMessages(messages: unknown[]): Context["messages"] {
+		return convertToLlm(messages as Parameters<typeof convertToLlm>[0]);
+	}
 
-		expect(shouldBootstrapCursorContext(sendState, context)).toBe(true);
+	function sendStateFor(priorContext: Context) {
+		return { bootstrapped: true, contextFingerprint: computeCursorContextFingerprint(priorContext), incrementalSendCount: 1 };
+	}
+
+	it("rebootstraps when bash execution output precedes the latest prompt", () => {
+		const priorContext: Context = { messages: hostMessages([{ role: "user", content: "Run the command", timestamp: 1 }]) };
+		const context: Context = {
+			messages: hostMessages([
+				{ role: "user", content: "Run the command", timestamp: 1 },
+				{ role: "bashExecution", command: "printf ok", output: "ok", exitCode: 0, timestamp: 2 },
+				{ role: "user", content: "Now inspect the result", timestamp: 3 },
+			]),
+		};
+		expect(context.messages.map((message) => message.role)).toEqual(["user", "user", "user"]);
+
+		expect(shouldBootstrapCursorContext(sendStateFor(priorContext), context)).toBe(true);
+	});
+
+	it("rebootstraps when an OMP developer message precedes the latest prompt", () => {
+		const priorContext: Context = { messages: hostMessages([{ role: "user", content: "Run the command", timestamp: 1 }]) };
+		const context: Context = {
+			messages: hostMessages([
+				{ role: "user", content: "Run the command", timestamp: 1 },
+				{ role: "custom", customType: "project-notes", content: "Use pnpm, not npm.", display: true, timestamp: 2 },
+				{ role: "user", content: "Install the deps", timestamp: 3 },
+			]),
+		};
+		expect(context.messages.map((message) => message.role)).toEqual(["user", "developer", "user"]);
+
+		expect(shouldBootstrapCursorContext(sendStateFor(priorContext), context)).toBe(true);
+	});
+
+	it("includes OMP developer messages in the Cursor prompt", () => {
+		const context: Context = {
+			systemPrompt: ["Be helpful."],
+			messages: hostMessages([
+				{ role: "fileMention", files: [{ path: "notes.md", content: "Deploy on Fridays only." }], timestamp: 1 },
+				{ role: "user", content: "When do we deploy?", timestamp: 2 },
+			]),
+		};
+		expect(context.messages.map((message) => message.role)).toEqual(["developer", "user"]);
+
+		const prompt = buildCursorPrompt(context);
+		expect(prompt.text).toContain('Developer: <file path="notes.md">\nDeploy on Fridays only.\n</file>');
+		expect(prompt.text.indexOf("Developer:")).toBeLessThan(prompt.text.indexOf("User: When do we deploy?"));
 	});
 
 	it("keeps a plain follow-up incremental", () => {
