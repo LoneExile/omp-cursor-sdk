@@ -82,7 +82,7 @@ describe("streamCursor auth and abort", () => {
 		const events = await collectEvents(stream);
 
 		const error = getErrorEvent(events);
-		expect(error.error.errorMessage).toContain("/cursor-refresh-models");
+		expect(error.error.errorMessage).toContain("restart omp");
 		expect(error.error.errorMessage).toContain("CURSOR_API_KEY");
 		expect(error.error.errorMessage).toContain("~/.omp/.env");
 	});
@@ -99,7 +99,7 @@ describe("streamCursor auth and abort", () => {
 				const error = getErrorEvent(events);
 				expect(error).toBeDefined();
 				expect(error.error.errorMessage).toBe(
-					"Cursor SDK runs require a Cursor SDK API key; Cursor Agent CLI/Desktop login is not reused. Set CURSOR_API_KEY (Cursor Dashboard -> API Keys) in ~/.omp/.env or the environment, then run /cursor-refresh-models. omp's built-in /login Cursor OAuth is not used by this plugin.",
+					"Cursor SDK runs require a Cursor SDK API key; Cursor Agent CLI/Desktop login is not reused. Set CURSOR_API_KEY (Cursor Dashboard -> API Keys) in ~/.omp/.env or the environment, then restart omp (it reads ~/.omp/.env only at startup). omp's built-in /login Cursor OAuth is not used by this plugin.",
 				);
 				expect(mockedCreate).not.toHaveBeenCalled();
 			} finally {
@@ -154,7 +154,7 @@ describe("streamCursor auth and abort", () => {
 
 		const error = getErrorEvent(events);
 		expect(error.error.errorMessage).toContain("Cursor SDK request failed");
-		expect(error.error.errorMessage).toContain("/cursor-refresh-models");
+		expect(error.error.errorMessage).toContain("restart omp");
 		expect(error.error.errorMessage).toContain("CURSOR_API_KEY");
 		expect(error.error.errorMessage).toContain("~/.omp/.env");
 		expect(error.error.errorMessage).not.toBe("Error");
@@ -169,7 +169,7 @@ describe("streamCursor auth and abort", () => {
 		const error = getErrorEvent(events);
 		const message = error.error.errorMessage;
 		expect(message).toContain("invalid or unauthorized");
-		expect(message).toContain("/cursor-refresh-models");
+		expect(message).toContain("restart omp");
 		expect(message).toContain("CURSOR_API_KEY");
 		expect(message).not.toContain("super-secret-key-12345");
 	});
@@ -210,7 +210,7 @@ describe("streamCursor auth and abort", () => {
 		const error = getErrorEvent(events);
 		expect(error.reason).toBe("error");
 		expect(error.error.errorMessage).toContain("invalid or unauthorized");
-		expect(error.error.errorMessage).toContain("/cursor-refresh-models");
+		expect(error.error.errorMessage).toContain("restart omp");
 		expect(error.error.errorMessage).toContain("CURSOR_API_KEY");
 	});
 

@@ -270,7 +270,7 @@ describe("cursor-provider-errors", () => {
 		const error = new AuthenticationError("Invalid User API Key at https://alice:pw@api.cursor.com");
 		const localMessage = "Invalid User API Key at https://[redacted]@api.cursor.com";
 		const cloudMessage =
-			"Cursor Cloud Agents request failed because Cloud API authentication rejected the API key. Use a user API key from Cursor Dashboard -> API Keys or a service account API key from Team settings; Team Admin API keys are not supported as Cursor Cloud Agents credentials. Set CURSOR_API_KEY (Cursor Dashboard -> API Keys) in ~/.omp/.env or the environment, then run /cursor-refresh-models. omp's built-in /login Cursor OAuth is not used by this plugin.";
+			"Cursor Cloud Agents request failed because Cloud API authentication rejected the API key. Use a user API key from Cursor Dashboard -> API Keys or a service account API key from Team settings; Team Admin API keys are not supported as Cursor Cloud Agents credentials. Set CURSOR_API_KEY (Cursor Dashboard -> API Keys) in ~/.omp/.env or the environment, then restart omp (it reads ~/.omp/.env only at startup). omp's built-in /login Cursor OAuth is not used by this plugin.";
 
 		expect(sanitizeCursorProviderError(error, "secret-key")).toBe(localMessage);
 		expect(sanitizeCursorProviderError(error, "secret-key", "local")).toBe(localMessage);
@@ -354,7 +354,7 @@ describe("cursor-provider-errors", () => {
 
 		expect(isUnauthenticatedConnectError(error)).toBe(true);
 		expect(message).toContain("invalid or unauthorized");
-		expect(message).toContain("/cursor-refresh-models");
+		expect(message).toContain("restart omp");
 		expect(message).toContain("CURSOR_API_KEY");
 		expect(message).not.toContain("secret-key");
 		expect(message).not.toContain("Bearer");

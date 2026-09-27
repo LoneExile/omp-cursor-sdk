@@ -84,10 +84,9 @@ describe("discoverModels", () => {
 				message: expect.stringContaining("CURSOR_API_KEY"),
 			}),
 		]);
-		expect(issues[0].message).toContain("/cursor-refresh-models");
-		expect(issues[0].message).toContain("startup discovery does not parse Pi CLI arguments");
-		expect(issues[0].message).toContain("fallback models can run once auth exists");
-		expect(issues[0].message).toContain("/cursor-refresh-models");
+		expect(issues[0].message).toContain("restart omp");
+		expect(issues[0].message).toContain("Cursor Agent CLI/Desktop login is not reused");
+		expect(issues[0].message).toContain("they can run once the key is set");
 		expect(issues[0].message).not.toContain("will fail until pi is restarted");
 		expect(mockedList).not.toHaveBeenCalled();
 	});
@@ -169,7 +168,7 @@ describe("discoverModels", () => {
 
 			expect(models.some((model) => model.id === "composer-2.5")).toBe(true);
 			expect(issues).toEqual([expect.objectContaining({ reason: "missing-api-key" })]);
-			expect(issues[0].message).toContain("/cursor-refresh-models");
+			expect(issues[0].message).toContain("restart omp");
 			expect(mockedList).not.toHaveBeenCalled();
 		},
 	);
@@ -911,7 +910,7 @@ describe("discoverModels", () => {
 		]);
 		expect(issues[0].message).toContain("network error");
 		expect(issues[0].errorMessage).toBe("network error");
-		expect(issues[0].message).toContain("/cursor-refresh-models");
+		expect(issues[0].message).toContain("restart omp");
 		expect(issues[0].message).not.toContain("test-key-123");
 	});
 
@@ -955,8 +954,7 @@ describe("discoverModels", () => {
 				message: expect.stringContaining("Cursor model discovery returned no models"),
 			}),
 		]);
-		expect(issues[0].message).toContain("/cursor-refresh-models");
-		expect(issues[0].message).toContain("/cursor-refresh-models");
+		expect(issues[0].message).toContain("restart omp");
 	});
 
 	it("uses id as name when displayName is missing", async () => {

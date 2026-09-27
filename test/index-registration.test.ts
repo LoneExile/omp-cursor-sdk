@@ -711,7 +711,7 @@ describe("extension registration and discovery", () => {
 			options?.onFallback?.({
 				reason: "missing-api-key",
 				message:
-					"Cursor model discovery needs a Cursor SDK API key. Using fallback Cursor models so model selection still works; they can run once the key is set. Cursor Agent CLI/Desktop login is not reused. Set CURSOR_API_KEY (Cursor Dashboard -> API Keys) in ~/.omp/.env or the environment, then run /cursor-refresh-models. omp's built-in /login Cursor OAuth is not used by this plugin.",
+					"Cursor model discovery needs a Cursor SDK API key. Using fallback Cursor models so model selection still works; they can run once the key is set. Cursor Agent CLI/Desktop login is not reused. Set CURSOR_API_KEY (Cursor Dashboard -> API Keys) in ~/.omp/.env or the environment, then restart omp (it reads ~/.omp/.env only at startup). omp's built-in /login Cursor OAuth is not used by this plugin.",
 			});
 			return [makeProviderModelConfig("composer-2", { name: "Cursor Composer 2" })];
 		});
@@ -728,7 +728,7 @@ describe("extension registration and discovery", () => {
 		});
 
 		expect(notify).toHaveBeenCalledWith(
-			"Cursor model discovery needs a Cursor SDK API key. Using fallback Cursor models so model selection still works; they can run once the key is set. Cursor Agent CLI/Desktop login is not reused. Set CURSOR_API_KEY (Cursor Dashboard -> API Keys) in ~/.omp/.env or the environment, then run /cursor-refresh-models. omp's built-in /login Cursor OAuth is not used by this plugin.",
+			"Cursor model discovery needs a Cursor SDK API key. Using fallback Cursor models so model selection still works; they can run once the key is set. Cursor Agent CLI/Desktop login is not reused. Set CURSOR_API_KEY (Cursor Dashboard -> API Keys) in ~/.omp/.env or the environment, then restart omp (it reads ~/.omp/.env only at startup). omp's built-in /login Cursor OAuth is not used by this plugin.",
 			"warning",
 		);
 	});
