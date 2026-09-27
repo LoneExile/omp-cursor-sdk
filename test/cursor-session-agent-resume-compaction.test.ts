@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
 	__testUtils,
 	persistCursorSessionAgentResumeHandle,
@@ -29,6 +29,8 @@ function createHandle(agentId: string) {
 }
 
 describe("Cursor session resume during compaction", () => {
+	beforeEach(() => __testUtils.reset());
+
 	function registerHandlers(appended: unknown[]) {
 		const handlers = new Map<string, Function>();
 		registerCursorSessionAgentResume({
