@@ -48,35 +48,13 @@ Disposition outcomes:
 
 If resync runs but `context.tools` is still stale (e.g. only `read` listed), the provider must **not** emit `toolUse` for inactive tools. `test/cursor-native-replay-stress.test.ts` covers that stale-snapshot path.
 
-## Auth: use `auth.json`, not only env
+## Auth: use `CURSOR_API_KEY` from omp
 
-pi resolves Cursor auth in this order:
+omp resolves the Cursor SDK key from `CURSOR_API_KEY`, supplied by `~/.omp/.env` loaded at omp startup or by the environment. Provider turns also accept omp's resolved `options.apiKey`. There is no Pi `/login`, `--api-key` flow, or `~/.pi/agent/auth.json` for this plugin.
 
-1. pi `--api-key`
-2. stored `cursor` key in `~/.pi/agent/auth.json` from `/login`
-3. `CURSOR_API_KEY`
-
-For live smoke and isolated harnesses:
-
-- **Do not assume** `CURSOR_API_KEY` or `~/.secrets` alone is enough.
-- **Do assume** pi reads auth from the active `HOME`, usually `~/.pi/agent/auth.json`.
-- Isolated runs with `env -i HOME=/tmp/...` must **copy** `auth.json` into that temporary home before calling `pi`.
-
-Example seed step used by `scripts/isolated-cursor-smoke.sh`:
-
-```bash
-mkdir -p "$HOME/.pi/agent"
-cp "$REAL_HOME/.pi/agent/auth.json" "$HOME/.pi/agent/auth.json"
-chmod 600 "$HOME/.pi/agent/auth.json"
-```
-
-Fallback when `auth.json` lacks a `cursor` provider entry:
-
-```bash
-export CURSOR_API_KEY="your-key"
-```
-
-Never commit, log, or paste `auth.json` contents, API keys, or session JSONL with secrets.
+- Restart omp after changing `~/.omp/.env`; omp loads it at startup.
+- Isolated runs must provide `CURSOR_API_KEY` in their environment (or an isolated `~/.omp/.env`).
+- Never commit, log, or paste API keys or session JSONL contents.
 
 ## Isolated directories: why and how
 
@@ -190,7 +168,7 @@ Simulate plan-mode execute stripping with the repo fixture:
 It sets active tools to `read`, `bash`, `edit`, `write` on each `turn_start`. Run pi with:
 
 ```bash
-pi --approve -e scripts/fixtures/plan-strip-shim --cursor-no-fast --model cursor/composer-2-5 \
+omp --approve -e scripts/fixtures/plan-strip-shim --cursor-no-fast --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/plan-strip" \
   -p 'After reset, read README.md and answer PLAN_STRIP_OK=yes.'
 ```
@@ -268,7 +246,7 @@ One-shot maintainer script (RPC pi run, gitignored artifacts by default):
 ```bash
 CURSOR_API_KEY=... npm run debug:provider-events -- \
   --cwd . \
-  --model cursor/composer-2-5 \
+  --model cursor-sdk/composer-2-5 \
   --prompt 'Repro prompt here' \
   --out .debug/cursor-sdk-events/manual-repro
 ```
@@ -308,7 +286,7 @@ Artifacts under `--out` (default `.debug/cursor-sdk-events/<timestamp>/` under `
 During any normal pi session you can also opt in with:
 
 ```bash
-PI_CURSOR_SDK_EVENT_DEBUG=1 pi --approve -e . --model cursor/composer-2-5
+PI_CURSOR_SDK_EVENT_DEBUG=1 omp --approve -e . --model cursor-sdk/composer-2-5
 ```
 
 Multi-turn sessions group automatically by pi session file:
@@ -359,7 +337,7 @@ Ask the reporter (or capture yourself) for:
 | Field | Why |
 | --- | --- |
 | `pi --version` and installed `pi-cursor-sdk` version | Confirms extension/runtime in use |
-| Model ID (for example `cursor/composer-2-5`) | Routing/replay behavior is model-scoped |
+| Model ID (for example `cursor-sdk/composer-2-5`) | Routing/replay behavior is model-scoped |
 | Exact repro prompt and prior turns | Multi-turn replay history affects prompt text |
 | Flags: `--cursor-no-fast`, `PI_CURSOR_PI_TOOL_BRIDGE`, `PI_CURSOR_EXPOSE_BUILTIN_TOOLS`, `PI_CURSOR_SETTING_SOURCES`, `PI_CURSOR_TOOL_MANIFEST` | Bridge vs native-only vs narrowed settings; bootstrap callable-surface manifest |
 | Whether the listed names are `pi__*` bridge MCP, Cursor-native (`browser_navigate`, `WebSearch`), or `cursor-replay-*` replay IDs | Three different surfaces (see [Cursor native tool replay](./cursor-native-tool-replay.md#live-bridge-vs-replay)) |
@@ -380,7 +358,7 @@ chmod 600 "$SMOKE_DIR/home/.pi/agent/auth.json"
 env -i HOME="$SMOKE_DIR/home" PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
   MISE_DISABLE=1 \
   PI_CURSOR_PI_TOOL_BRIDGE_DEBUG=1 \
-  pi --approve -e . --cursor-no-fast --model cursor/composer-2-5 \
+  omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/session" \
   -p '<exact reporter prompt>'
 ```
@@ -392,7 +370,7 @@ For pi parsing, replay routing, or bridge timing, prefer:
 ```bash
 npm run debug:provider-events -- \
   --cwd "$PWD" \
-  --model cursor/composer-2-5 \
+  --model cursor-sdk/composer-2-5 \
   --prompt '<exact reporter prompt>' \
   --out "$SMOKE_DIR/provider-events"
 ```

@@ -39,7 +39,7 @@ Current implementation notes:
 - Local Cursor SDK usage events are used when the SDK reports them before the corresponding pi turn is emitted and the reported counts fit the selected pi model window. For each safe local SDK-attributed assistant turn, `usage.input`, `usage.output`, `usage.cacheRead`, and `usage.cacheWrite` come from the latest per-turn raw `turn-ended.usage` (not SDK `toTokenUsage`): observed local runtime keeps `inputTokens` as the full prompt with cache fields as a partition, even though published SDK `TokenUsage.totalTokens` sums all four fields. Pi maps that raw local shape to disjoint components (`input = inputTokens - cacheReadTokens - cacheWriteTokens`) and `usage.totalTokens = inputTokens + outputTokens` for occupancy/compaction. Cloud raw usage remains display-only and cloud assistant messages use approximate pi accounting until the cloud field semantics are independently captured. Approximate fallback never reports less occupancy than the last compatible same-model in-window assistant measurement in context. Cumulative `RunResult.usage` is never used for per-message occupancy. If the local SDK reports no usage in time, or reports full-agent-context-sized usage outside the selected model window, the provider falls back to local `input/output` activity estimates while setting `usage.totalTokens` to the current replayable context estimate so footer/compaction context does not collapse after split tool turns; after a split live-run turn times out waiting for SDK usage, later SDK usage for that live run is ignored rather than risk applying stale usage to the wrong pi turn. Cursor SDK cost is unavailable, so cost remains absent/zero. `src/cursor-usage-accounting.ts` owns this policy.
 - Audit observation, 2026-05-19, superseded by the 2026-05-21 replay pass and #68 incomplete visibility, then narrowed by the 2026-05-26 fast-local suppression: a missing-file read with Composer 2.5 emitted `tool-call-started` for Cursor `read`, then streamed final text `Error: File not found`, but did not emit `tool-call-completed` or an `onStep` `toolCall` error result. Leftover external/side-effectful started calls are surfaced at run completion through the same native replay routing as completed tools (activity cards when allowed, otherwise inactive/transcript traces), while fast local discovery starts are debug-only after a successful text-producing run. Cursor-reported completed/step errors remain visible.
 - Maintainer visual verification for replay-card changes should follow [Cursor Native Tool Visual Audit Workflow](./cursor-native-tool-visual-audit.md): offscreen PTY-driven pi run, xterm.js/Playwright screenshot rendering, and JSONL inspection before accepting commits or PRs.
-- Cursor provider/runtime releases must pass the local [Platform Smoke Gate](./platform-smoke.md): `npm run smoke:platform:all`. Cloud-runtime changes must also pass `npm run smoke:cloud`. Use [Cursor Live Smoke Checklist](./cursor-live-smoke-checklist.md) only for focused inner-loop/debug runs with real `pi --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5` invocations, manual observation, temporary session dirs, diagnostics scans, and persisted JSONL inspection. See [Cursor testing lessons](./cursor-testing-lessons.md) for auth.json seeding, isolated smoke harnesses, and replay JSONL scans.
+- Cursor provider/runtime releases must pass the local [Platform Smoke Gate](./platform-smoke.md): `npm run smoke:platform:all`. Cloud-runtime changes must also pass `npm run smoke:cloud`. Use [Cursor Live Smoke Checklist](./cursor-live-smoke-checklist.md) only for focused inner-loop/debug runs with real `omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5` invocations, manual observation, temporary session dirs, diagnostics scans, and persisted JSONL inspection. See [Cursor testing lessons](./cursor-testing-lessons.md) for `CURSOR_API_KEY` setup, isolated smoke harnesses, and replay JSONL scans.
 - For models without a catalog `context` parameter, context windows are not hardcoded. The extension ships a bundled SDK-derived default/non-Max cache generated from `createAgentPlatform().checkpointStore.loadLatest(agentId).tokenDetails.maxTokens`. Successful runs can update a local override cache, but model discovery does not probe models at startup.
 - Max Mode context windows are distinct from default/non-Max context windows. `@cursor/sdk` 1.0.23 documentation says the SDK may enable Max Mode automatically when a selected model requires it, but the public local-agent `ModelSelection` path still does not expose a manual Max Mode selector. Do not advertise Max Mode context windows unless the SDK catalog exposes an exact parameter/variant or the SDK public API adds a Max Mode selector that the extension actually sends.
 - The installed `@cursor/sdk` exposes latest-style `ModelListItem.aliases`. The extension registers only unambiguous aliases as pi model IDs (with the same context suffixes when applicable) and sends the alias back in `ModelSelection.id`. Cursor-only fast preferences are keyed by the selected SDK model ID/alias, with read fallback for older preferences keyed by the underlying catalog `id`. Aliases shared by multiple base models, such as generic family aliases, are skipped because the pi row metadata would otherwise imply one base model while Cursor may resolve the alias to another.
@@ -526,18 +526,17 @@ Use:
 Guaranteed first-pass support:
 
 ```bash
-pi --model cursor-sdk/gpt-5.5@1m --thinking medium
-pi --model cursor-sdk/gpt-5.5@1m --cursor-mode plan
-pi --model cursor-sdk/gpt-5.5@1m:medium
-pi --model cursor-sdk/gpt-5.5@272k:xhigh
+omp --model cursor-sdk/gpt-5.5@1m --thinking medium
+omp --model cursor-sdk/gpt-5.5@1m --cursor-mode plan
+omp --model cursor-sdk/gpt-5.5@272k --thinking xhigh
 ```
 
-These use pi's native thinking parser. `--thinking` wins over a `:<thinking>` suffix when both are present.
+These use omp's native thinking parser. On the command line, use `--thinking <level>`; the `:<level>` suffix is supported only in `modelRoles` in `config.yml`.
 
 Not first-pass support:
 
 ```bash
-pi --model cursor-sdk/gpt-5.5:medium:272k:fast
+omp --model cursor-sdk/gpt-5.5:medium:272k:fast
 ```
 
 Reason:
@@ -559,12 +558,12 @@ For print mode:
 Fast flag example:
 
 ```bash
-pi --model cursor-sdk/gpt-5.5@1m --cursor-fast -p "Say ok only"
+omp --model cursor-sdk/gpt-5.5@1m --cursor-fast -p "Say ok only"
 ```
 
 ## Discovered Model Capability Examples
 
-These examples document the capability shapes the extension handles, not an exhaustive live catalog. The exact Cursor catalog changes over time; use `pi --approve -e . --list-models cursor` or `Cursor.models.list()` for the current model surface. When the SDK reports aliases, only unambiguous aliases are registered; shared generic aliases are skipped.
+These examples document the capability shapes the extension handles, not an exhaustive live catalog. The exact Cursor catalog changes over time; use `omp --approve -e . --list-models cursor-sdk` or `Cursor.models.list()` for the current model surface. When the SDK reports aliases, only unambiguous aliases are registered; shared generic aliases are skipped.
 
 | Example model shape | Cursor controls | Pi representation |
 |---|---|---|
@@ -732,11 +731,11 @@ Before calling done:
    - verify resume restores model, thinking, and Cursor-only state
 
 3. Print mode:
-   - `pi --model cursor-sdk/gpt-5.5@1m:medium -p "Say ok only"`
-   - `pi --model cursor-sdk/gpt-5.5@272k --thinking xhigh -p "Say ok only"`
-   - `pi --model cursor-sdk/claude-opus-4-7@1m --thinking max -p "Say ok only"`
-   - `pi --model cursor-sdk/gpt-5.5@1m --cursor-fast -p "Say ok only"`
-   - `pi --model cursor-sdk/gpt-5.5@1m --cursor-mode plan -p "Say ok only"`
+   - `omp --model cursor-sdk/gpt-5.5@1m:medium -p "Say ok only"`
+   - `omp --model cursor-sdk/gpt-5.5@272k --thinking xhigh -p "Say ok only"`
+   - `omp --model cursor-sdk/claude-opus-4-7@1m --thinking max -p "Say ok only"`
+   - `omp --model cursor-sdk/gpt-5.5@1m --cursor-fast -p "Say ok only"`
+   - `omp --model cursor-sdk/gpt-5.5@1m --cursor-mode plan -p "Say ok only"`
    - confirm requests use selected context, pi thinking, fast flag state, and SDK-native mode
 
 4. Tool bridge and replay:

@@ -28,15 +28,15 @@ The bridge is enabled by default when bridgeable active pi tools exist. Cursor s
 Rollback, timeout, and diagnostics controls:
 
 ```bash
-PI_CURSOR_ASK_QUESTION=0 pi --model cursor/composer-2-5
-PI_CURSOR_PI_TOOL_BRIDGE=0 pi --model cursor/composer-2-5
-PI_CURSOR_EXPOSE_BUILTIN_TOOLS=1 pi --model cursor/composer-2-5
-PI_CURSOR_MCP_TOOL_TIMEOUT_SECONDS=7200 pi --model cursor/composer-2-5
-PI_CURSOR_MCP_TOOL_TIMEOUT_MS=7200000 pi --model cursor/composer-2-5
-PI_CURSOR_PI_BRIDGE_CALL_TIMEOUT_MS=120000 pi --model cursor/composer-2-5
-PI_CURSOR_MCP_CONNECT_TIMEOUT_SECONDS=5 pi --model cursor/composer-2-5
-PI_CURSOR_MCP_CONNECT_TIMEOUT_MS=5000 pi --model cursor/composer-2-5
-PI_CURSOR_PI_TOOL_BRIDGE_DEBUG=1 pi --model cursor/composer-2-5
+PI_CURSOR_ASK_QUESTION=0 omp --model cursor-sdk/composer-2-5
+PI_CURSOR_PI_TOOL_BRIDGE=0 omp --model cursor-sdk/composer-2-5
+PI_CURSOR_EXPOSE_BUILTIN_TOOLS=1 omp --model cursor-sdk/composer-2-5
+PI_CURSOR_MCP_TOOL_TIMEOUT_SECONDS=7200 omp --model cursor-sdk/composer-2-5
+PI_CURSOR_MCP_TOOL_TIMEOUT_MS=7200000 omp --model cursor-sdk/composer-2-5
+PI_CURSOR_PI_BRIDGE_CALL_TIMEOUT_MS=120000 omp --model cursor-sdk/composer-2-5
+PI_CURSOR_MCP_CONNECT_TIMEOUT_SECONDS=5 omp --model cursor-sdk/composer-2-5
+PI_CURSOR_MCP_CONNECT_TIMEOUT_MS=5000 omp --model cursor-sdk/composer-2-5
+PI_CURSOR_PI_TOOL_BRIDGE_DEBUG=1 omp --model cursor-sdk/composer-2-5
 ```
 
 `PI_CURSOR_ASK_QUESTION=0` disables only `cursor_ask_question` / `pi__cursor_ask_question`, leaving the rest of the pi bridge available; it is enabled by default. `PI_CURSOR_PI_TOOL_BRIDGE=0` disables the bridge, including `pi__cursor_ask_question`. `PI_CURSOR_EXPOSE_BUILTIN_TOOLS=1` opts in to exposing overlapping pi tool names that Cursor already has native equivalents for (`read`, `bash`, `write`, `edit`, `grep`, `find`, and `ls`). By default those names are hidden even when pi's Cursor replay wrapper has registered them as extension tools; non-overlapping active built-ins remain bridgeable by default. The installed Cursor SDK uses a 60-second MCP protocol default; pi-cursor-sdk overrides that seam by default with 3600 seconds for MCP `callTool` requests and 10 seconds for verified initialize/listTools requests on first send. Bridged calls also have a local fail-closed deadline capped by the effective MCP tool timeout; lower it with `PI_CURSOR_PI_BRIDGE_CALL_TIMEOUT_MS` to reject stale pending state and abort active pi execution sooner. Unknown MCP protocol timeout stacks keep the SDK default. `PI_CURSOR_PI_TOOL_BRIDGE_DEBUG=1` emits typed, allowlisted, scrubbed single-line JSONL bridge diagnostics to `process.stderr` with prefix `[pi-cursor-sdk:bridge]`; it is off by default, uses run-safe IDs that are not reused in endpoint paths, and does not print endpoint URLs/path components/tokens, raw args/results, file contents, or secrets. Cursor-native tools, Cursor settings, plugins, and configured Cursor MCP servers still come from the Cursor SDK local agent path. Cloud Cursor agents are out of scope for this bridge.
@@ -203,7 +203,7 @@ Native replay wrappers are registered only for tool names not already owned by a
 Disable native replay registration entirely:
 
 ```bash
-PI_CURSOR_NATIVE_TOOL_DISPLAY=0 pi --model cursor/composer-2-5
+PI_CURSOR_NATIVE_TOOL_DISPLAY=0 omp --model cursor-sdk/composer-2-5
 ```
 
 `PI_CURSOR_REGISTER_NATIVE_TOOLS=0` is also accepted as a registration-only opt-out.

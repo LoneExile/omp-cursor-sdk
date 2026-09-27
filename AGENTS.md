@@ -114,7 +114,7 @@ This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchm
 
 - Install dependencies: `npm install`. There is no build step: omp loads `./src/index.ts` directly under Bun (`pi.extensions` in `package.json`).
 - Install into omp for manual testing: `omp plugin link "$PWD"` (symlink; restart omp), remove with `omp plugin uninstall omp-cursor-sdk`.
-- Run tests: `npm test` (bun test over the scoped file list in `package.json`; `bunfig.toml` preloads `test/setup/isolated-agent-dir.ts`, so tests never write `~/.omp/agent`). Add new bun-compatible test files to that list.
+- `npm test` (Bun, scoped list in `package.json`) is the maintained suite; other test files are legacy Pi-bound suites that do not currently run.
 - Typecheck src only: `npm run typecheck:src` (must pass)
 - Typecheck tests/helpers: `npm run typecheck:tests` (has pre-existing errors in Pi-bound tests; the count must not grow)
 - Package-readiness check: `npm pack --dry-run`
@@ -162,10 +162,10 @@ When plans, reviews, investigations, or generated smoke/debug artifacts are no l
 - Scrub Cursor SDK errors and output that may contain API keys, bearer tokens, cookies, sessions, or auth headers.
 - `PI_CURSOR_SDK_EVENT_DEBUG=1` and `npm run debug:provider-events` write raw local artifacts that may include prompts, tool args/results, local paths, or secrets; keep them under gitignored `.debug/`, do not print or commit them, and keep run-scoped debug state explicit rather than process-global.
 - Ambient Cursor settings/rules loading is enabled by default through `PI_CURSOR_SETTING_SOURCES=all`; keep SDK startup log filtering intact so settings/skills output does not corrupt pi's TUI. Users can narrow or disable Cursor setting sources explicitly when desired.
-- Live `pi`/Cursor smoke tests may call external services and require Cursor auth in `~/.pi/agent/auth.json` and/or `CURSOR_API_KEY`; run them for Cursor provider/runtime changes. If auth is unavailable, report live smoke as release-blocked instead of skipped-ready. See `docs/cursor-testing-lessons.md` for isolated harness auth seeding.
+- Live omp/Cursor smoke tests may call external services and require `CURSOR_API_KEY` from `~/.omp/.env` (loaded at omp startup) or the environment; provider turns also accept omp's resolved `options.apiKey`. Run them for Cursor provider/runtime changes. If auth is unavailable, report live smoke as release-blocked instead of skipped-ready. See `docs/cursor-testing-lessons.md` for isolated harness auth seeding.
 - For live runtime evidence, use `cursor-sdk/composer-2-5@slow` as much as needed. If Cursor Cloud does not support that exact model variant, use `cursor-sdk/composer-2-5`.
 - Live Cursor Cloud probes that create `bc-*` agents must capture agent/run IDs, verify archive/delete cleanup, and report any residual agent; do not assume cleanup from a passed smoke.
-- For Cursor provider/runtime changes, the canonical local runtime release and pre-commit gate is `npm run smoke:platform:all`; see `docs/platform-smoke.md`. That script runs doctor before the macOS/Ubuntu/Windows local-runtime matrix. Cloud runtime changes must also run the opt-in `npm run smoke:cloud` lane. The platform gate uses packed installs across macOS, Ubuntu, and Windows native with PTY/ConPTY capture, host-rendered xterm/PNG visual evidence, JSONL assertions, bridge diagnostics, usage/cache checks, abort cleanup, artifact manifests, and redaction scans. Use `docs/cursor-live-smoke-checklist.md`, `npm run smoke:visual`, `npm run smoke:live`, or direct `pi --approve -e . --cursor-no-fast --model cursor/composer-2-5` runs only for inner-loop debugging and focused visual/card audits before the full platform gate. Do not mark release-ready with optional/deferred/mostly-passing platform smoke items outstanding.
+- For Cursor provider/runtime changes, the canonical local runtime release and pre-commit gate is `npm run smoke:platform:all`; see `docs/platform-smoke.md`. That script runs doctor before the macOS/Ubuntu/Windows local-runtime matrix. Cloud runtime changes must also run the opt-in `npm run smoke:cloud` lane. The platform gate uses packed installs across macOS, Ubuntu, and Windows native with PTY/ConPTY capture, host-rendered xterm/PNG visual evidence, JSONL assertions, bridge diagnostics, usage/cache checks, abort cleanup, artifact manifests, and redaction scans. Use `docs/cursor-live-smoke-checklist.md`, `npm run smoke:visual`, `npm run smoke:live`, or direct `omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5` runs only for inner-loop debugging and focused visual/card audits before the full platform gate. Do not mark release-ready with optional/deferred/mostly-passing platform smoke items outstanding.
 
 ## PR review workflow (maintainer)
 
@@ -190,7 +190,7 @@ Before **every commit** that touches Cursor provider/runtime, prompt/session sen
 
 - Run the canonical local platform gate: `npm run smoke:platform:all` (see `docs/platform-smoke.md`; it runs doctor first). Also run `npm run smoke:cloud` when the commit touches actual cloud runtime execution.
 - Use `npm run smoke:live` (`scripts/tmux-live-smoke.sh`), `npm run smoke:visual` (`scripts/visual-tui-smoke.mjs`), `npm run smoke:isolated`, or direct `omp -e ./src/index.ts --cursor-no-fast --model cursor-sdk/composer-2-5` only as inner-loop/debug helpers when narrowing a specific failure before the platform gate. For card/color claims, capture ANSI from the offscreen TUI, render it through the canonical browser/xterm path, save PNG evidence, and inspect JSONL.
-- If Cursor auth (`~/.pi/agent/auth.json` or `CURSOR_API_KEY`) or required Crabbox/platform resources are unavailable, **do not commit**—report blocked, not skipped-ready.
+- If `CURSOR_API_KEY` (from `~/.omp/.env` or the environment) or required Crabbox/platform resources are unavailable, **do not commit**—report blocked, not skipped-ready.
 - Unit tests (`npm test`, `npm run typecheck`) are necessary but not sufficient for these commits.
 
 ## Progress updates and handoff
@@ -203,11 +203,11 @@ Keep this file concise and repo-specific. Update it when commands, package layou
 
 ## Cursor Cloud specific instructions
 
-This is a `pi` provider extension (not a server/web app). "Running the app" means launching `pi` with this extension loaded. Standard commands live in `## Setup and commands`; only the non-obvious caveats are below.
+This is an omp provider extension (not a server/web app). "Running the app" means launching `omp` with this extension loaded. Standard commands live in `## Setup and commands`; only the non-obvious caveats are below.
 
 - Dependencies install with `npm install`. There is no build step; omp loads `./src/index.ts` directly under Bun.
-- Node: `engines` requires `>=22.19.0`. Prefer a compliant Node on `PATH` for tests and live `pi` (for example `nvm use 22.22.2`). Older Node may run some commands but is unsupported.
-- `CURSOR_API_KEY` is provided as a cloud-agent secret, so live Cursor runs and full live model discovery work without `/login`. `npm test`, `npm run typecheck`, and `npm pack --dry-run` need no key.
+- Node: `engines` requires `>=22.19.0`. Prefer a compliant Node on `PATH` for tests and live `omp` (for example `nvm use 22.22.2`). Older Node may run some commands but is unsupported.
+- `CURSOR_API_KEY` is provided as a cloud-agent secret, so live Cursor runs and full live model discovery work without a Pi `/login` flow. `npm test`, `npm run typecheck`, and `npm pack --dry-run` need no key.
 - Run the extension locally with `./node_modules/.bin/omp -e ./src/index.ts --model cursor-sdk/composer-2-5` (`@oh-my-pi/pi-coding-agent` 18.3.4 installs that binary). Print-mode smoke: `./node_modules/.bin/omp -e ./src/index.ts --model cursor-sdk/composer-2-5 --cursor-no-fast --no-session -p "..."`.
 - Cold-start gotcha: the *first* Cursor SDK run in a fresh VM can take several minutes (SDK/transport warm-up); subsequent runs complete in ~10s. Warm up with one throwaway run before any timing-sensitive or recorded demo, and don't treat a slow first run as a hang.
 - When capturing print-mode (`-p`) output, redirect stdout to a file rather than piping through `tail`/`head` — those pipes buffer until the process exits, hiding streaming progress.

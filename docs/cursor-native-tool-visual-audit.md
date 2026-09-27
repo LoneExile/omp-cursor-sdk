@@ -82,7 +82,7 @@ npx playwright install chromium
 
 `scripts/visual-tui-smoke.mjs` is the durable source of truth for this workflow. It must keep supporting:
 
-- fixed-size tmux PTY execution of the parent-resolved `pi --approve -e <extension-dir> --model cursor/composer-2-5`
+- fixed-size tmux PTY execution of the parent-resolved `omp --approve -e <extension-dir> --model cursor-sdk/composer-2-5`
 - parent-resolved `pi` and `tmux` command paths reused in tmux-launched runs, with `process.execPath`'s directory prepended for prereq checks and tmux launches so Node shims use the validated Node
 - `PI_CURSOR_NATIVE_TOOL_DISPLAY=1`
 - `PI_CURSOR_REGISTER_NATIVE_TOOLS=1` by default
