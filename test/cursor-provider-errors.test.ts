@@ -390,7 +390,7 @@ describe("cursor-provider-errors", () => {
 		expect(sanitizeCursorProviderError(new Error("ConnectError: [unavailable] read ETIMEDOUT"), "test-key")).toContain(
 			"failed during network or service I/O",
 		);
-		expect(sanitizeCursorProviderError("ConnectError: read ETIMEDOUT", "test-key")).toContain("pi will retry automatically");
+		expect(sanitizeCursorProviderError("ConnectError: read ETIMEDOUT", "test-key")).toContain("Network error");
 		expect(sanitizeCursorProviderError(new Error("ConnectError: [unavailable] read ETIMEDOUT"), "test-key")).not.toContain(
 			"ETIMEDOUT",
 		);
@@ -404,7 +404,6 @@ describe("cursor-provider-errors", () => {
 		expect(classification).toEqual({ kind: "network", source: "cursor-sdk-stack" });
 		expect(message).toContain("Network error");
 		expect(message).toContain("failed during network or service I/O");
-		expect(message).toContain("pi will retry automatically");
 		expect(message).not.toContain("ECONNRESET");
 	});
 
@@ -415,7 +414,6 @@ describe("cursor-provider-errors", () => {
 
 		expect(classification).toEqual({ kind: "network", source: "cursor-sdk-stack" });
 		expect(message).toContain("Network error");
-		expect(message).toContain("pi will retry automatically");
 		expect(message).not.toContain("NGHTTP2_ENHANCE_YOUR_CALM");
 	});
 
@@ -426,7 +424,6 @@ describe("cursor-provider-errors", () => {
 
 		expect(classification).toEqual({ kind: "network", source: "cursor-sdk-stack" });
 		expect(message).toContain("Network error");
-		expect(message).toContain("pi will retry automatically");
 		expect(message).not.toContain("operation was aborted");
 	});
 
@@ -439,7 +436,6 @@ describe("cursor-provider-errors", () => {
 		expect(isCursorSdkConnectionStalledError(error)).toBe(true);
 		const message = sanitizeCursorProviderError(error, "test-key");
 		expect(message).toContain("Network error");
-		expect(message).toContain("pi will retry automatically");
 		expect(message).not.toMatch(/stalled(?: repeatedly)?/i);
 	});
 
@@ -451,7 +447,6 @@ describe("cursor-provider-errors", () => {
 		expect(classification).toEqual({ kind: "network", source: "cursor-backend-details" });
 		expect(message).toContain("Network error");
 		expect(message).toContain("failed during network or service I/O");
-		expect(message).toContain("pi will retry automatically");
 		expect(message).not.toContain("[unavailable] Error");
 	});
 

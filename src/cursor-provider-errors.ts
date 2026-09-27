@@ -13,11 +13,11 @@ const AUTH_CURSOR_SDK_ERROR_MESSAGE =
 	`Cursor SDK request failed because the Cursor SDK API key may be invalid or unauthorized. ${CURSOR_API_KEY_SETUP_HINT}`;
 const CLOUD_AUTH_CURSOR_SDK_ERROR_MESSAGE =
 	`Cursor Cloud Agents request failed because Cloud API authentication rejected the API key. Use a user API key from Cursor Dashboard -> API Keys or a service account API key from Team settings; Team Admin API keys are not supported as Cursor Cloud Agents credentials. ${CURSOR_API_KEY_SETUP_HINT}`;
-// Keep "Network error" aligned with pi's agent-level retry classifier.
+// Keep "Network error" aligned with omp's retry classifier (pi-ai error/flags.ts TRANSIENT_TRANSPORT_PATTERN `network.?error`).
 const NETWORK_CURSOR_SDK_ERROR_MESSAGE =
-	"Network error: Cursor SDK request failed during network or service I/O. Check your connection; pi will retry automatically when auto-retry is enabled.";
+	"Network error: Cursor SDK request failed during network or service I/O. Check your connection; omp will retry automatically when auto-retry is enabled.";
 
-// Keep this phrase aligned with pi's agent-level retry classifier (`provider.?returned.?error`).
+// Keep this phrase aligned with omp's retry classifier (pi-ai error/flags.ts TRANSIENT_TRANSPORT_PATTERN `provider.?returned.?error`).
 const RETRYABLE_CURSOR_RUN_FAILURE_PREFIX = "Provider returned error: Cursor SDK run failed";
 
 export type CursorSdkRunFailureSource = Pick<RunResult, "id" | "requestId" | "status" | "durationMs" | "model" | "result" | "error">;

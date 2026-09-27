@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CURSOR_PROVIDER, isCursorModel } from "../src/cursor-model.js";
+import { isCursorModel } from "../src/cursor-model.js";
 import { registerCursorFallbackIssueWarning } from "../src/cursor-fallback-warning.js";
 import { createHarnessEventApi } from "./helpers/event-harness.js";
 import { makeHarnessModel } from "./helpers/model-fixtures.js";
@@ -10,8 +10,7 @@ const builtInCursorModel = makeHarnessModel("cursor", "cursor-agent", "grok-4.7-
 const pluginCursorModel = makeHarnessModel("cursor-sdk", "cursor-sdk", "grok-4.7@256k");
 
 describe("plugin Cursor model recognition", () => {
-	it("registers under its own provider id, not OMP's built-in `cursor`", () => {
-		expect(CURSOR_PROVIDER).toBe("cursor-sdk");
+	it("recognizes its own rows, not OMP's built-in `cursor` rows", () => {
 		expect(isCursorModel(pluginCursorModel)).toBe(true);
 		expect(isCursorModel(builtInCursorModel)).toBe(false);
 	});

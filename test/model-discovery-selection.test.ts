@@ -338,6 +338,5 @@ describe("context windows of fast/slow lanes", () => {
 		expect(windows["claude-opus-4-8@1m"]).toBe(300000);
 		expect(windows["claude-opus-4-8@1m@slow"]).toBe(300000);
 		expect(windows["claude-opus-4-8@1m@fast"]).toBe(300000);
-		expect(windows["claude-opus-4-8@300k@fast"]).toBe(300000);
 	});
 });

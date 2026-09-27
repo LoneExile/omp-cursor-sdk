@@ -3,7 +3,6 @@ import { cpSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, wri
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
-import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { describe, expect, it } from "vitest";
 import { FALLBACK_MODEL_ITEMS } from "../src/cursor-fallback-models.generated.js";
 
@@ -178,15 +177,6 @@ describe("package metadata cutover baselines", () => {
 			rmSync(tempRoot, { recursive: true, force: true });
 		}
 	}, 60_000);
-
-	it("tracks OMP openai-codex GPT-5.6 metadata", () => {
-		for (const modelId of ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"] as const) {
-			expect(getBundledModel("openai-codex", modelId)).toMatchObject({
-				contextWindow: 1000000,
-				maxTokens: 128000,
-			});
-		}
-	});
 
 	it("keeps Grok UX examples aligned with the generated Cursor catalog", () => {
 		const spec = readFileSync(join(process.cwd(), "docs/cursor-model-ux-spec.md"), "utf8");

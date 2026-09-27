@@ -1,6 +1,4 @@
-import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
-import { CURSOR_PROVIDER } from "./cursor-model.js";
 
 /**
  * Pi recognizes `context_length_exceeded` (its `OVERFLOW_PATTERNS` includes
@@ -74,5 +72,3 @@ export function rewriteCursorOverflowAssistantMessage(
 	if (!rewritten) return undefined;
 	return { ...message, errorMessage: rewritten };
 }
-
-export type CursorOverflowExtensionApi = Pick<ExtensionAPI, "on">;
