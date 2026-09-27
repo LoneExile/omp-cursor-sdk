@@ -97,7 +97,29 @@ function classifyIn(binding: CursorSessionBinding | undefined, context: Context,
 }
 
 function createAgentMock(agentId: string) {
-	return { agentId, [Symbol.asyncDispose]: vi.fn().mockResolvedValue(undefined) };
+	let markDisposed!: () => void;
+	/** Settles when the pool disposes the agent. */
+	const disposed = new Promise<void>((resolve) => {
+		markDisposed = resolve;
+	});
+	return { agentId, disposed, [Symbol.asyncDispose]: vi.fn(async () => markDisposed()) };
+}
+
+/**
+ * `promise`, or a failure naming `what` once `ms` pass first. The timer only bounds the
+ * wait on a real signal; it never stands in for one.
+ */
+async function settlesWithin<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+	let rejectTimeout!: (error: Error) => void;
+	const timeout = new Promise<never>((_resolve, reject) => {
+		rejectTimeout = reject;
+	});
+	const timer = setTimeout(() => rejectTimeout(new Error(`${what} did not happen within ${ms} ms`)), ms);
+	try {
+		return await Promise.race([promise, timeout]);
+	} finally {
+		clearTimeout(timer);
+	}
 }
 
 function acquireFor(conversationId: string, agent: ReturnType<typeof createAgentMock>, mainConversation = true) {
@@ -414,7 +436,9 @@ describe("a new main conversation (/fresh)", () => {
 		expect(entry(PARENT.id)).toBeUndefined();
 		expect(entry(IDLE_ADVISOR_ID)).toBeUndefined();
 		expect(entry(BUSY_ADVISOR_ID)?.status).toBe("busy");
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		// cursor-provider.ts disposes superseded agents detached from the request, and the main
+		// agent's bridge run closes first (a flush tick, then its HTTP server): wait for it.
+		await settlesWithin(Promise.all([mainAgent.disposed, idleAdvisorAgent.disposed]), 2000, "disposal of the superseded agents");
 		expect(mainAgent[Symbol.asyncDispose]).toHaveBeenCalledTimes(1);
 		expect(idleAdvisorAgent[Symbol.asyncDispose]).toHaveBeenCalledTimes(1);
 		expect(busyAdvisorAgent[Symbol.asyncDispose]).not.toHaveBeenCalled();
