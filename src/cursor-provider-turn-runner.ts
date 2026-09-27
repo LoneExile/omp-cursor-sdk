@@ -1,5 +1,5 @@
 import { CursorLiveRunAbortError } from "./cursor-live-run-coordinator.js";
-import { getCursorConversationId, isCursorOneShotRequest } from "./cursor-one-shot-request.js";
+import { classifyCursorRequestRoute } from "./cursor-one-shot-request.js";
 import { drainExistingCursorLiveRunBeforeSend } from "./cursor-provider-live-run-drain.js";
 import { invalidateSessionAgent } from "./cursor-session-agent.js";
 import { resolveCursorStringApiKeySync } from "./cursor-api-key.js";
@@ -82,8 +82,9 @@ export class CursorProviderTurnRunner {
 			this.runtimeTarget = resolvedConfig.runtime.value;
 			// Decided before the drain: a one-shot request (summarizer, omp side request) must
 			// not drain or attach to a live run of the pooled conversation it may run beside.
-			const oneShot = resolvedConfig.runtime.value === "local" && isCursorOneShotRequest(context, options);
-			const conversationId = getCursorConversationId(options);
+			const route = this.params.route ?? classifyCursorRequestRoute(context, options);
+			const oneShot = resolvedConfig.runtime.value === "local" && route.oneShot;
+			const { conversationId, mainConversation } = route;
 			if (resolvedConfig.runtime.value === "local") {
 				// The observed local-executor closed-pipe EPIPE is contained only from this
 				// turn's pre-send live-run drain through run completion; for live runs the
@@ -126,6 +127,7 @@ export class CursorProviderTurnRunner {
 				resolvedConfig,
 				oneShot,
 				conversationId,
+				mainConversation,
 			});
 
 			sendResult = await sendCursorProviderTurn({

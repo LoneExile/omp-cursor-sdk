@@ -20,7 +20,11 @@ function registerLineage() {
 	return appendEntry;
 }
 
-function preparedLocalSend(agentId: string, reason: "one_shot" | "incremental"): CursorProviderTurnPrepareResult {
+function preparedLocalSend(
+	agentId: string,
+	reason: "one_shot" | "incremental",
+	mainConversation = reason !== "one_shot",
+): CursorProviderTurnPrepareResult {
 	const run = { id: `run-${agentId}`, requestId: "request-1", agentId, status: "running", cancel: vi.fn().mockResolvedValue(undefined) };
 	return {
 		runtimeTarget: "local",
@@ -39,6 +43,7 @@ function preparedLocalSend(agentId: string, reason: "one_shot" | "incremental"):
 			nativeReplayId: "replay-1",
 			agentMode: "agent",
 			modelSelection: { id: "composer-2.5" },
+			mainConversation,
 		},
 		runtime: { kind: "direct", turnCoordinator: {} },
 		sessionAgentLease: { store: undefined },
@@ -59,10 +64,11 @@ async function send(prepared: CursorProviderTurnPrepareResult) {
 describe("Cursor agent lineage on send", () => {
 	beforeEach(() => lineageTestUtils.reset());
 
-	it("records the pooled agent but not a one-shot agent whose store is temporary", async () => {
+	it("records the main conversation's agent, not a one-shot or another loop's agent", async () => {
 		const appendEntry = registerLineage();
 
 		await send(preparedLocalSend("agent-one-shot-summary", "one_shot"));
+		await send(preparedLocalSend("agent-advisor", "incremental", false));
 		expect(appendEntry).not.toHaveBeenCalled();
 
 		await send(preparedLocalSend("agent-pooled", "incremental"));

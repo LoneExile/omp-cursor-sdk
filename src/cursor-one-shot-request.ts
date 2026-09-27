@@ -56,3 +56,82 @@ export function isCursorOneShotRequest(
 export function getCursorConversationId(options?: CursorRequestRoutingOptions): string {
 	return options?.sessionId ?? "";
 }
+
+/** How one provider request is served: a one-shot agent, or a pooled conversation agent. */
+export type CursorRequestRoute =
+	| { oneShot: true; conversationId: string; mainConversation: false }
+	| { oneShot: false; conversationId: string; mainConversation: boolean };
+
+interface CursorConversationTrackerState {
+	/** The session's own conversation: its provider session id and provider state store. */
+	mainId?: string;
+	mainProviderState?: object;
+	/** Set by before_agent_start: the next pooled request starts the session's prompt. */
+	armed: boolean;
+	/** Conversation ids already seen as another loop of this session (advisors). */
+	otherIds: Set<string>;
+}
+
+const conversationTracker: CursorConversationTrackerState = { armed: false, otherIds: new Set() };
+
+interface CursorConversationTrackingExtensionApi {
+	on(event: "session_start", handler: (event: unknown, ctx: { sessionManager?: { getSessionId?(): string } }) => unknown): void;
+	on(event: "before_agent_start", handler: () => unknown): void;
+}
+
+/**
+ * Track which conversation of the session is its own. omp runs other agent loops beside
+ * the main one that also carry a provider state store: advisors share the session's store
+ * under their own provider session id (pi-coding-agent session/session-advisors.ts), and
+ * auto-learn capture uses a store of its own (sdk.ts createAutoLearnCaptureRunner). Neither
+ * emits extension events, so the main conversation is the one whose id is the session
+ * id (AgentSession.sessionId falls back to sessionManager.getSessionId(),
+ * agent-session.ts #activeProviderSessionId), or, after `/fresh` or with
+ * `--provider-session-id`, the first pooled request after before_agent_start.
+ */
+export function registerCursorConversationTracking(pi: CursorConversationTrackingExtensionApi): void {
+	pi.on("session_start", (_event, ctx) => {
+		conversationTracker.mainId = ctx.sessionManager?.getSessionId?.() ?? undefined;
+		conversationTracker.armed = false;
+		conversationTracker.otherIds.clear();
+	});
+	pi.on("before_agent_start", () => {
+		conversationTracker.armed = true;
+		return undefined;
+	});
+}
+
+export function classifyCursorRequestRoute(
+	context: Pick<Context, "systemPrompt">,
+	options?: CursorRequestRoutingOptions,
+): CursorRequestRoute {
+	const conversationId = getCursorConversationId(options);
+	if (isCursorOneShotRequest(context, options)) return { oneShot: true, conversationId, mainConversation: false };
+	const tracker = conversationTracker;
+	const providerState = options?.providerSessionState;
+	// Another agent session's loop (auto-learn capture keeps its own store).
+	if (tracker.mainProviderState && providerState !== tracker.mainProviderState) {
+		return { oneShot: true, conversationId, mainConversation: false };
+	}
+	const claimsMain =
+		tracker.mainId === undefined ||
+		conversationId === tracker.mainId ||
+		(tracker.armed && !tracker.otherIds.has(conversationId));
+	if (claimsMain) {
+		tracker.mainId = conversationId;
+		tracker.mainProviderState = providerState;
+		tracker.armed = false;
+		return { oneShot: false, conversationId, mainConversation: true };
+	}
+	tracker.otherIds.add(conversationId);
+	return { oneShot: false, conversationId, mainConversation: false };
+}
+
+export const __testUtils = {
+	reset(): void {
+		conversationTracker.mainId = undefined;
+		conversationTracker.mainProviderState = undefined;
+		conversationTracker.armed = false;
+		conversationTracker.otherIds.clear();
+	},
+};

@@ -78,6 +78,8 @@ export interface PrepareCursorProviderTurnParams {
 	oneShot?: boolean;
 	/** omp provider session id of the conversation (see getCursorConversationId). */
 	conversationId?: string;
+	/** The session's own conversation (default); see classifyCursorRequestRoute. */
+	mainConversation?: boolean;
 }
 
 interface PrepareCursorProviderTurnContext extends PrepareCursorProviderTurnParams {
@@ -156,7 +158,7 @@ async function prepareCursorCloudProviderTurn(
 			hasPriorContext: context.messages.length > 1,
 		});
 		if (!preflight.ok) throw new Error(formatCursorCloudPreflightError(preflight));
-		if (getPendingCursorLiveRun(context) || getActiveCursorLiveRunForCurrentScope()) {
+		if (getPendingCursorLiveRun(context) || getActiveCursorLiveRunForCurrentScope(prepareParams.conversationId)) {
 			throw new Error("Cursor cloud runtime cannot start while a local Cursor live run is pending; finish or abort the local run, then retry.");
 		}
 
@@ -239,6 +241,7 @@ async function prepareCursorCloudProviderTurn(
 				nativeReplayId,
 				agentMode,
 				modelSelection: selection,
+				mainConversation: prepareParams.mainConversation !== false,
 			},
 			contextWindowAgentId: agent.agentId,
 			textDeltas,
@@ -296,6 +299,7 @@ async function prepareCursorLocalProviderTurn(
 			useHttp1ForAgent,
 			debugRecorder: sdkEventDebug,
 			conversationId: prepareParams.conversationId,
+			mainConversation: prepareParams.mainConversation !== false,
 			onBridgeToolRequest: (request: CursorPiBridgeToolRequest) => {
 				if (liveRunForBridgeQueue && !liveRunForBridgeQueue.disposed) {
 					cursorLiveRuns.queueEvent(liveRunForBridgeQueue, { type: "bridge-tool", request });
@@ -363,7 +367,10 @@ async function prepareCursorLocalProviderTurn(
 		const sessionBridgeRun = bridgeRun;
 		const promptInputTokens = estimateCursorPromptTokens(prompt, promptOptions);
 		// One-shot runs (the compaction summarizer) return plain text: no replay cards, no live run.
-		const useNativeToolReplay = !oneShotLease && isCursorNativeToolDisplayRuntimeEnabled();
+		// Replay cards and bridged omp tools belong to the main loop; another conversation
+		// (an advisor) and one-shot requests run without them.
+		const mainConversation = !oneShotLease && prepareParams.mainConversation !== false;
+		const useNativeToolReplay = mainConversation && isCursorNativeToolDisplayRuntimeEnabled();
 		const activeToolNames = getActiveContextToolNames(context);
 		sdkEventDebug?.recordProviderMeta({
 			model: {
@@ -438,6 +445,7 @@ async function prepareCursorLocalProviderTurn(
 				nativeReplayId,
 				agentMode,
 				modelSelection: selection,
+				mainConversation,
 				...(sessionAgentLease.resumeNotice ? { resumeNotice: sessionAgentLease.resumeNotice } : {}),
 			},
 			contextWindowAgentId: agent.agentId,

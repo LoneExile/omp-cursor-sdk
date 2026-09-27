@@ -105,6 +105,8 @@ export interface CursorLiveRunCoordinator {
 	requestIdleDispose(run: CursorLiveRun): void;
 	release(run: CursorLiveRun): Promise<void>;
 	count(): number;
+	/** Any undisposed pending run (test teardown). */
+	getAnyPending(): CursorLiveRun | undefined;
 }
 
 type CursorLiveBridgeMatcher = Pick<CursorPiToolBridgeRun, "hasPendingPiToolCallId">;
@@ -541,6 +543,13 @@ export function createCursorLiveRunCoordinator(deps: CursorLiveRunCoordinatorDep
 				}
 			})();
 			return state.releasing;
+		},
+
+		getAnyPending(): CursorLiveRun | undefined {
+			for (const run of pendingRuns.values()) {
+				if (!run.disposed) return run;
+			}
+			return undefined;
 		},
 
 		count(): number {

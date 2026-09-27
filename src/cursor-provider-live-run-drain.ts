@@ -19,7 +19,8 @@ import {
 	type CursorNativeToolDisplayItem,
 } from "./cursor-native-tool-display-state.js";
 import { type CursorPiBridgeToolRequest } from "./cursor-pi-tool-bridge.js";
-import { resetSessionCursorAgent } from "./cursor-session-agent.js";
+import { resetSessionCursorAgent, sessionAgentEntryKey } from "./cursor-session-agent.js";
+import { getCursorSessionScopeKey } from "./cursor-session-scope.js";
 import { applyCursorUsage } from "./cursor-usage-accounting.js";
 import { CursorPartialContentEmitter, cursorTextMessageSeparator } from "./cursor-partial-content-emitter.js";
 import { emitDisplayOnlyTraceBlock } from "./cursor-display-only-trace.js";
@@ -68,8 +69,9 @@ export function getPendingCursorLiveRun(context: Context): CursorLiveRun | undef
 	return cursorLiveRuns.getPendingFromContext(context, getCursorNativeReplayIdFromToolCallId);
 }
 
-export function getActiveCursorLiveRunForCurrentScope(): CursorLiveRun | undefined {
-	return cursorLiveRuns.getActiveForScope();
+/** The active live run of one conversation of the current session scope. */
+export function getActiveCursorLiveRunForCurrentScope(conversationId?: string): CursorLiveRun | undefined {
+	return cursorLiveRuns.getActiveForScope(sessionAgentEntryKey(getCursorSessionScopeKey(), conversationId));
 }
 
 function splitTextIntoReplayDeltas(text: string): string[] {
@@ -438,7 +440,7 @@ export async function drainExistingCursorLiveRunBeforeSend(
 ): Promise<LiveRunPreSendOutcome> {
 	turnDebugRecorder?.recordDrainEvent("pre_send_start", {});
 	while (true) {
-		const run = getPendingCursorLiveRun(context) ?? getActiveCursorLiveRunForCurrentScope();
+		const run = getPendingCursorLiveRun(context) ?? getActiveCursorLiveRunForCurrentScope(conversationId);
 		if (!run || run.disposed) {
 			turnDebugRecorder?.recordDrainEvent("pre_send_end", { outcome: "continue_send", reason: "no_pending_run" });
 			return "continue_send";
@@ -502,7 +504,7 @@ export function resetCursorNativeReplayIdleDisposeMs(): void {
 
 export async function releaseAllPendingCursorLiveRunsForTests(): Promise<void> {
 	while (cursorLiveRuns.count() > 0) {
-		const run = cursorLiveRuns.getActiveForScope();
+		const run = cursorLiveRuns.getAnyPending();
 		if (!run) break;
 		const before = cursorLiveRuns.count();
 		await cursorLiveRuns.release(run);

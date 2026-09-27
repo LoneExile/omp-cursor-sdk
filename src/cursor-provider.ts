@@ -24,6 +24,8 @@ import { rewriteCursorOverflowAssistantMessage } from "./cursor-provider-overflo
 import { resolveCursorApiKey, resolveCursorStringApiKeySync } from "./cursor-api-key.js";
 import { CursorProviderTurnRunner } from "./cursor-provider-turn-runner.js";
 import { getCursorSessionScopeKey } from "./cursor-session-scope.js";
+import { sessionAgentEntryKey } from "./cursor-session-agent.js";
+import { classifyCursorRequestRoute } from "./cursor-one-shot-request.js";
 import { runExclusiveCursorSessionTurn, __testUtils as cursorSessionTurnQueueTestUtils } from "./cursor-session-turn-queue.js";
 
 function makeInitialMessage(model: Model<Api>): AssistantMessage {
@@ -57,6 +59,7 @@ export function streamCursor(
 
 	(async () => {
 		const partial = makeInitialMessage(model);
+		const route = classifyCursorRequestRoute(context, options);
 
 		const runner = new CursorProviderTurnRunner({
 			model,
@@ -65,15 +68,20 @@ export function streamCursor(
 			partial,
 			options,
 			sdkEventDebugRef,
+			route,
 		});
 
 		try {
 			stream.push({ type: "start", partial });
-			await runExclusiveCursorSessionTurn(
-				getCursorSessionScopeKey(),
-				() => runner.run(installCursorSdkProcessErrorGuard()),
-				options?.signal,
-			);
+			// Turns of one pooled conversation run one at a time; a one-shot request runs
+			// on its own agent and waits for nothing.
+			await (route.oneShot
+				? runner.run(installCursorSdkProcessErrorGuard())
+				: runExclusiveCursorSessionTurn(
+					sessionAgentEntryKey(getCursorSessionScopeKey(), route.conversationId),
+					() => runner.run(installCursorSdkProcessErrorGuard()),
+					options?.signal,
+				));
 		} catch (error) {
 			await runner.handleOuterCatch(error);
 		}

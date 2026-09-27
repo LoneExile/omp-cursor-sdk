@@ -8,6 +8,7 @@ import type {
 } from "@oh-my-pi/pi-ai";
 import type { AgentModeOption, ModelSelection, SDKAgent, SDKImage } from "@cursor/sdk";
 import type { CursorLiveRun } from "./cursor-live-run-coordinator.js";
+import type { CursorRequestRoute } from "./cursor-one-shot-request.js";
 import type { SessionCursorAgentLease } from "./cursor-session-agent.js";
 import type { planCursorSessionSend } from "./cursor-session-agent.js";
 import type { CursorSdkEventDebugSink } from "./cursor-sdk-event-debug.js";
@@ -22,6 +23,8 @@ export interface CursorProviderTurnRunnerParams {
 	partial: AssistantMessage;
 	options?: SimpleStreamOptions;
 	sdkEventDebugRef: { current?: CursorSdkEventDebugSink };
+	/** Decided once per request before the session turn queue (see classifyCursorRequestRoute). */
+	route?: CursorRequestRoute;
 }
 
 export interface CursorProviderTurnSendPayload {
@@ -39,6 +42,8 @@ export interface CursorProviderTurnSendMeta {
 	nativeReplayId: string;
 	agentMode: AgentModeOption;
 	modelSelection: ModelSelection;
+	/** The session's own conversation: the only one recorded in lineage and resumed. */
+	mainConversation: boolean;
 	resumeNotice?: string;
 }
 

@@ -15,6 +15,7 @@ import { CURSOR_PROVIDER, CURSOR_SDK_API } from "./cursor-model.js";
 import { registerCursorFallbackIssueWarning } from "./cursor-fallback-warning.js";
 import { registerCursorAgentsContextDedup } from "./cursor-agents-context-registration.js";
 import { registerCursorSdkSessionProcessErrorGuard } from "./cursor-sdk-process-error-guard.js";
+import { registerCursorConversationTracking } from "./cursor-one-shot-request.js";
 
 type CursorExtensionApi =
 	& Pick<ExtensionAPI, "registerProvider" | "registerCommand" | "on">
@@ -29,7 +30,8 @@ type CursorExtensionApi =
 	& Parameters<typeof registerCursorPiToolBridge>[0]
 	& Parameters<typeof registerCursorFallbackIssueWarning>[0]
 	& Parameters<typeof registerCursorAgentsContextDedup>[0]
-	& Parameters<typeof registerCursorSdkSessionProcessErrorGuard>[0];
+	& Parameters<typeof registerCursorSdkSessionProcessErrorGuard>[0]
+	& Parameters<typeof registerCursorConversationTracking>[0];
 
 function createCursorProviderConfig(models: ProviderModelConfig[]): ProviderConfig {
 	return {
@@ -55,6 +57,7 @@ export default async function (pi: CursorExtensionApi) {
 	registerCursorSessionAgentLineage(pi);
 	registerCursorSessionAgentLifecycle(pi);
 	registerCursorSessionAgentResume(pi);
+	registerCursorConversationTracking(pi);
 	// No session_before_compact handler: its presence alone turns off omp's speculative
 	// compaction for every session in the process. Summarizer and other host side
 	// requests are recognized per request and run on a one-shot agent

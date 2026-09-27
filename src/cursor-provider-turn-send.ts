@@ -116,9 +116,9 @@ export async function sendCursorProviderTurn(sendParams: SendCursorProviderTurnP
 		}
 		const runPromise = agent.send(payload, sendOptions);
 		// Record at send initiation (promise created), including later reject/cancel paths.
-		// A one-shot agent lives in a temporary store removed after its run, so there is
-		// no agent left for lineage to point at.
-		if (prepared.runtimeTarget === "local" && meta.sendPlan.reason !== "one_shot") {
+		// Only the main conversation's agents: a one-shot agent lives in a temporary store
+		// removed after its run, and another loop's agent (an advisor) is not the session's.
+		if (prepared.runtimeTarget === "local" && meta.mainConversation) {
 			recordCursorSessionAgentLineage(agent.agentId);
 		}
 		const run = await runPromise;
