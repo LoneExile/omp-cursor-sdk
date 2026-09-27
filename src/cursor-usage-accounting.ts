@@ -120,16 +120,19 @@ function isCompatibleCursorAssistantMeasurement(assistant: AssistantMessage, mod
 }
 
 /**
- * Latest client-side history rewrite in the request. OMP hands providers compaction and
- * branch summaries as `user` messages carrying `historyRewriteAt` (pi-agent-core
- * convertMessageToLlm); a kept pre-compaction assistant's usage still counts the
- * summarized-away prefix. Same staleness rule as pi-agent-core findRequestUsageAnchor.
+ * Latest client-side history rewrite in the request, mirroring pi-agent-core
+ * findRequestUsageAnchor. OMP hands providers compaction and branch summaries as
+ * `user` messages carrying `historyRewriteAt` (pi-agent-core convertMessageToLlm), and
+ * tool-output pruning stamps `prunedAt` on the rewritten toolResult. Usage reported at
+ * or before either still counts the removed text.
  */
 function getLatestHistoryRewriteAt(context: Context): number {
 	let rewriteAt = Number.NEGATIVE_INFINITY;
 	for (const message of context.messages) {
 		if (message.role === "user" && message.historyRewriteAt !== undefined) {
 			rewriteAt = Math.max(rewriteAt, message.historyRewriteAt, message.timestamp);
+		} else if (message.role === "toolResult" && message.prunedAt !== undefined) {
+			rewriteAt = Math.max(rewriteAt, message.prunedAt);
 		}
 	}
 	return rewriteAt;

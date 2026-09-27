@@ -67,4 +67,32 @@ describe("Cursor usage after OMP compaction (#204)", () => {
 
 		expect(partial.usage.totalTokens).toBe(42_000);
 	});
+
+	// Tool-output pruning rewrites a toolResult in place and stamps `prunedAt`
+	// (pi-agent-core compaction/pruning.ts, shake.ts); host findRequestUsageAnchor
+	// treats usage reported at or before it as stale.
+	it("does not raise occupancy to usage reported before a tool result was pruned", () => {
+		const PRUNED_AT = 9_000;
+		const toolCallTurn: AssistantMessage = {
+			...cursorAssistant("", 2_000, 150_000),
+			content: [{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "big.log" } }],
+			stopReason: "toolUse",
+		};
+		const agentMessages = [
+			{ role: "user", content: "Summarize big.log.", timestamp: 1_000 },
+			toolCallTurn,
+			{ role: "toolResult", toolCallId: "call-1", toolName: "read", content: [{ type: "text", text: "x".repeat(400) }], isError: false, prunedAt: PRUNED_AT, timestamp: 2_100 },
+			cursorAssistant("The log shows retries.", 3_000, 180_000),
+			{ role: "user", content: "Anything else?", timestamp: 11_000 },
+		];
+		const context: Context = { systemPrompt: ["Be helpful."], messages: convertToLlm(agentMessages as Parameters<typeof convertToLlm>[0]) };
+		expect(context.messages[2]).toMatchObject({ role: "toolResult", prunedAt: PRUNED_AT });
+
+		const partial = cursorAssistant("Nothing else.", 12_000);
+		applyCursorApproximateUsage(partial, model, context, 500);
+		expect(partial.usage.totalTokens).toBe(
+			Math.max(partial.usage.input + partial.usage.output, estimateCursorContextTotalTokens(partial, model, context)),
+		);
+		expect(partial.usage.totalTokens).toBeLessThan(10_000);
+	});
 });
