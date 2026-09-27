@@ -246,7 +246,7 @@ The extension wires into OMP's session events:
   the constant is imported from the host's own `pi-agent-core`), or a provider
   session id containing `:side:` (handoff documents, `/btw` and other ephemeral
   turns, `session-handoff.ts`, `agent-session.ts` `runEphemeralTurn`), runs on a
-  one-shot agent: no pool entry, no pi tool bridge, no live run, no
+  one-shot agent: no pool entry, no pi tool bridge, no live run, no lineage or
   resume handle, a temporary store removed afterwards. Such a request never
   carries tool results for the pooled live run, so skipping the pre-send drain
   leaves that run to the continuation that owns it; on the pool it would chain
