@@ -182,7 +182,7 @@ describe("package metadata cutover baselines", () => {
 	it("tracks OMP openai-codex GPT-5.6 metadata", () => {
 		for (const modelId of ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"] as const) {
 			expect(getBundledModel("openai-codex", modelId)).toMatchObject({
-				contextWindow: 372000,
+				contextWindow: 1000000,
 				maxTokens: 128000,
 			});
 		}

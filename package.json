@@ -157,11 +157,11 @@
     "@cursor/sdk": "1.0.23",
     "@hono/node-server": "2.0.12",
     "@modelcontextprotocol/sdk": "1.30.0",
-    "@oh-my-pi/omptype": "17.3.0",
-    "@oh-my-pi/pi-ai": "17.3.0",
-    "@oh-my-pi/pi-coding-agent": "17.3.0",
-    "@oh-my-pi/pi-tui": "17.3.0",
-    "@oh-my-pi/pi-utils": "17.3.0",
+    "@oh-my-pi/omptype": "18.3.4",
+    "@oh-my-pi/pi-ai": "18.3.4",
+    "@oh-my-pi/pi-coding-agent": "18.3.4",
+    "@oh-my-pi/pi-tui": "18.3.4",
+    "@oh-my-pi/pi-utils": "18.3.4",
     "zod": "^3.25.0"
   },
   "bundledDependencies": [
