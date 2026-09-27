@@ -660,6 +660,48 @@ describe("cursor session prompt assembly", () => {
 		expect(prompt.text).not.toContain("User: Hello");
 	});
 
+	it("rebootstraps when bash execution output precedes the latest prompt", () => {
+		const priorContext: Context = {
+			messages: [{ role: "user", content: "Run the command", timestamp: 1 }],
+		};
+		const context: Context = {
+			messages: [
+				...priorContext.messages,
+				{
+					role: "bashExecution",
+					command: "printf ok",
+					output: "ok",
+					exitCode: 0,
+					timestamp: 2,
+				},
+				{ role: "user", content: "Now inspect the result", timestamp: 3 },
+			],
+		};
+		const sendState = {
+			bootstrapped: true,
+			contextFingerprint: computeCursorContextFingerprint(priorContext),
+			incrementalSendCount: 1,
+		};
+
+		expect(shouldBootstrapCursorContext(sendState, context)).toBe(true);
+	});
+
+	it("keeps a plain follow-up incremental", () => {
+		const priorContext: Context = {
+			messages: [{ role: "user", content: "Run the command", timestamp: 1 }],
+		};
+		const context: Context = {
+			messages: [...priorContext.messages, { role: "user", content: "Now inspect the result", timestamp: 2 }],
+		};
+		const sendState = {
+			bootstrapped: true,
+			contextFingerprint: computeCursorContextFingerprint(priorContext),
+			incrementalSendCount: 1,
+		};
+
+		expect(shouldBootstrapCursorContext(sendState, context)).toBe(false);
+	});
+
 	it("rebootstraps after branch shrink using shouldBootstrapCursorContext", () => {
 		const context: Context = {
 			messages: [{ role: "user", content: "Hello", timestamp: 1 }],
