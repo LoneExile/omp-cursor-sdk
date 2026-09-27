@@ -16,7 +16,7 @@ import {
 	resetCursorNativeReplayIdleDisposeMs,
 	setCursorNativeReplayIdleDisposeMs,
 } from "./cursor-provider-live-run-drain.js";
-import { disposeAllSessionCursorAgents } from "./cursor-session-agent.js";
+import { disposeAllSessionCursorAgents, disposeSupersededSessionConversations } from "./cursor-session-agent.js";
 import { attachCursorSdkEventDebugPiStreamTap, type CursorSdkEventDebugSink } from "./cursor-sdk-event-debug.js";
 import { installCursorSdkProcessErrorGuard } from "./cursor-sdk-process-error-guard.js";
 import { sanitizeCursorProviderError } from "./cursor-provider-errors.js";
@@ -89,6 +89,11 @@ function streamCursorInSession(
 	(async () => {
 		const partial = makeInitialMessage(model);
 		const route = classifyCursorRequestRoute(context, options, resolution);
+		if (!route.oneShot && route.replacedMainConversationId !== undefined) {
+			// Not awaited: the superseded entries leave the pool now, and their SDK agents
+			// close without holding up this turn (disposal already ignores close failures).
+			void disposeSupersededSessionConversations(route.conversationId, route.replacedMainConversationId).catch(() => undefined);
+		}
 
 		const runner = new CursorProviderTurnRunner({
 			model,

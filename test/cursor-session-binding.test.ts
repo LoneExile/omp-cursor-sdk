@@ -4,6 +4,7 @@ import { getRegisteredCursorPiToolBridge } from "../src/cursor-pi-tool-bridge.js
 import type { CursorPiToolBridgeRegistry } from "../src/cursor-pi-tool-bridge-server.js";
 import type { Context, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 import { classifyCursorRequestRoute } from "../src/cursor-one-shot-request.js";
+import { streamCursor } from "../src/cursor-provider.js";
 import {
 	resolveCursorRequestBinding,
 	runInCursorSessionBinding,
@@ -96,6 +97,18 @@ function classifyIn(binding: CursorSessionBinding | undefined, context: Context,
 
 function createAgentMock(agentId: string) {
 	return { agentId, [Symbol.asyncDispose]: vi.fn().mockResolvedValue(undefined) };
+}
+
+function acquireFor(conversationId: string, agent: ReturnType<typeof createAgentMock>, mainConversation = true) {
+	return acquireSessionCursorAgent({
+		apiKey: "test-key",
+		agentMode: "agent",
+		cwd: "/tmp/project",
+		modelSelection: { id: "composer-2.5" },
+		conversationId,
+		mainConversation,
+		createAgent: vi.fn().mockResolvedValue(agent) as never,
+	});
 }
 
 describe("per-session state across in-process subagent binds", () => {
@@ -301,17 +314,6 @@ describe("session_switch (/new, /fork, /resume)", () => {
 		);
 	}
 
-	function acquireFor(conversationId: string, agent: ReturnType<typeof createAgentMock>) {
-		return acquireSessionCursorAgent({
-			apiKey: "test-key",
-			agentMode: "agent",
-			cwd: "/tmp/project",
-			modelSelection: { id: "composer-2.5" },
-			conversationId,
-			createAgent: vi.fn().mockResolvedValue(agent) as never,
-		});
-	}
-
 	it("moves scope, pool, resume state and the main conversation to the new session, and back on /resume", async () => {
 		const root = await registerSession(PARENT, "main");
 		expect(classifyIn(undefined, loopTurn("Refactor the parser"), { sessionId: PARENT.id, providerSessionState: root.providerSessionState }).route.mainConversation).toBe(true);
@@ -341,5 +343,60 @@ describe("session_switch (/new, /fork, /resume)", () => {
 		expect(isOneShotCursorAgentLease(lease)).toBe(false);
 		expect(lease.agent).toBe(resumedAgent);
 		expect(sessionAgentTestUtils.sessionAgentsByScope.get(sessionAgentEntryKey(PARENT.file, PARENT.id))?.status).toBe("ready");
+	});
+});
+
+describe("a new main conversation (/fresh)", () => {
+	const FRESH_ID = "01a0e2f0-0000-7000-8000-00000000f001";
+	const IDLE_ADVISOR_ID = "01a0e2f0-0000-7000-8000-00000000ad01";
+	const BUSY_ADVISOR_ID = "01a0e2f0-0000-7000-8000-00000000ad02";
+	const entry = (conversationId: string) => sessionAgentTestUtils.sessionAgentsByScope.get(sessionAgentEntryKey(PARENT.file, conversationId));
+
+	beforeEach(async () => {
+		await disposeAllSessionCursorAgents();
+		bindingTestUtils.reset();
+		await resetIndexExtensionTestState();
+	});
+
+	afterEach(async () => {
+		await disposeAllSessionCursorAgents();
+		bindingTestUtils.reset();
+	});
+
+	it("frees the previous main conversation's agent and idle advisor agents, and keeps a busy one", async () => {
+		const root = await registerSession(PARENT, "main");
+		await prompt(root.pi, PARENT, "main", "Refactor the parser");
+		expect(classifyIn(undefined, loopTurn("Refactor the parser"), { sessionId: PARENT.id, providerSessionState: root.providerSessionState }).route.mainConversation).toBe(true);
+		const mainAgent = createAgentMock("agent-main");
+		const idleAdvisorAgent = createAgentMock("agent-advisor-idle");
+		const busyAdvisorAgent = createAgentMock("agent-advisor-busy");
+		await root.inSession(() => acquireFor(PARENT.id, mainAgent));
+		await root.inSession(() => acquireFor(IDLE_ADVISOR_ID, idleAdvisorAgent, false));
+		const busyAdvisor = await root.inSession(() => acquireFor(BUSY_ADVISOR_ID, busyAdvisorAgent, false));
+		let finishAdvisorRun!: () => void;
+		busyAdvisor.trackRunCompletion(new Promise<void>((resolve) => { finishAdvisorRun = resolve; }));
+
+		// agent-session.ts freshSession: the next prompt's turn carries a new provider session
+		// id and the same store. The request stops right after routing (aborted signal).
+		await prompt(root.pi, PARENT, "main", "Start over");
+		const controller = new AbortController();
+		controller.abort();
+		const stream = streamCursor(
+			{ id: "composer-2.5", api: "cursor-sdk", provider: "cursor-sdk" } as never,
+			loopTurn("Start over"),
+			{ sessionId: FRESH_ID, providerSessionState: root.providerSessionState, signal: controller.signal },
+		);
+		for await (const _event of stream) {
+			// drain
+		}
+
+		expect(entry(PARENT.id)).toBeUndefined();
+		expect(entry(IDLE_ADVISOR_ID)).toBeUndefined();
+		expect(entry(BUSY_ADVISOR_ID)?.status).toBe("busy");
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(mainAgent[Symbol.asyncDispose]).toHaveBeenCalledTimes(1);
+		expect(idleAdvisorAgent[Symbol.asyncDispose]).toHaveBeenCalledTimes(1);
+		expect(busyAdvisorAgent[Symbol.asyncDispose]).not.toHaveBeenCalled();
+		finishAdvisorRun();
 	});
 });

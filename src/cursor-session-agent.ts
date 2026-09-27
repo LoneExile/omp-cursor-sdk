@@ -808,6 +808,29 @@ export async function disposeSessionCursorAgent(scopeKey: string = getCursorSess
 	await disposePoolEntryForScope(scopeKey, { terminal: true });
 }
 
+/**
+ * A new main conversation in the scope (`/fresh`, whose advisors move to new ids with it)
+ * leaves the scope's other conversation agents unused until scope teardown. Dispose the
+ * previous main conversation's entry and every idle entry of another conversation; busy
+ * entries (an advisor run in flight) stay. The entries leave the pool before this returns
+ * its promise.
+ */
+export async function disposeSupersededSessionConversations(
+	mainConversationId: string,
+	previousMainConversationId: string,
+	scopeKey: string = getCursorSessionScopeKey(),
+): Promise<void> {
+	const mainEntryKey = sessionAgentEntryKey(scopeKey, mainConversationId);
+	const previousEntryKey = sessionAgentEntryKey(scopeKey, previousMainConversationId);
+	const superseded = [...sessionAgentsByScope.entries()]
+		.filter(([entryKey, entry]) =>
+			entryKey !== mainEntryKey &&
+			isEntryOfScope(entryKey, scopeKey) &&
+			(entryKey === previousEntryKey || entry.status === "ready"))
+		.map(([entryKey]) => entryKey);
+	await Promise.all(superseded.map((entryKey) => disposePoolEntryForKey(entryKey)));
+}
+
 export async function disposeAllSessionCursorAgents(): Promise<void> {
 	const scopeKeys = [...new Set([...sessionAgentsByScope.keys(), ...terminalDisposedScopeGenerations.keys()])];
 	await Promise.all(scopeKeys.map((scopeKey) => disposePoolEntryForScope(scopeKey, { terminal: true })));

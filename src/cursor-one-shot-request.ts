@@ -68,12 +68,20 @@ export function getCursorConversationId(options?: CursorRequestRoutingOptions): 
 /** How one provider request is served: a one-shot agent, or a pooled conversation agent. */
 export type CursorRequestRoute =
 	| { oneShot: true; conversationId: string; mainConversation: false }
-	| { oneShot: false; conversationId: string; mainConversation: boolean };
+	| {
+			oneShot: false;
+			conversationId: string;
+			mainConversation: boolean;
+			/** The main conversation this request took over (after `/fresh`), now unused. */
+			replacedMainConversationId?: string;
+		};
 
 interface CursorConversationTrackerState {
 	/** The session's own conversation: its provider session id and provider state store. */
 	mainId?: string;
 	mainProviderState?: object;
+	/** A request took `mainId` since the last session_start. */
+	claimed: boolean;
 	/** Set by before_agent_start: the next pooled request starts the session's prompt. */
 	armed: boolean;
 	/** Conversation ids already seen as another loop of this session (advisors). */
@@ -82,7 +90,7 @@ interface CursorConversationTrackerState {
 
 // Per session (see cursor-session-binding.ts).
 const conversationTracker: CursorConversationTrackerState = cursorSessionSlotView(
-	cursorSessionSlot<CursorConversationTrackerState>(() => ({ armed: false, otherIds: new Set() })),
+	cursorSessionSlot<CursorConversationTrackerState>(() => ({ armed: false, claimed: false, otherIds: new Set() })),
 );
 
 interface CursorConversationTrackingExtensionApi {
@@ -116,6 +124,7 @@ export function isCursorAdvisorRequest(context: Pick<Context, "tools">): boolean
 export function registerCursorConversationTracking(pi: CursorConversationTrackingExtensionApi): void {
 	pi.on("session_start", (_event, ctx) => {
 		conversationTracker.mainId = ctx.sessionManager?.getSessionId?.() ?? undefined;
+		conversationTracker.claimed = false;
 		conversationTracker.armed = false;
 		conversationTracker.otherIds.clear();
 	});
@@ -156,12 +165,16 @@ export function classifyCursorRequestRoute(
 		conversationId === tracker.mainId ||
 		(tracker.armed && !tracker.otherIds.has(conversationId));
 	if (claimsMain) {
+		const replacedMainConversationId = tracker.claimed && tracker.mainId !== conversationId ? tracker.mainId : undefined;
 		tracker.mainId = conversationId;
+		tracker.claimed = true;
 		tracker.mainProviderState = providerState;
 		tracker.armed = false;
 		// Later calls of this session resolve to it by their store (advisors share it).
 		learnCursorProviderSessionState(currentCursorSessionBinding(), providerState);
-		return { oneShot: false, conversationId, mainConversation: true };
+		return replacedMainConversationId === undefined
+			? { oneShot: false, conversationId, mainConversation: true }
+			: { oneShot: false, conversationId, mainConversation: true, replacedMainConversationId };
 	}
 	tracker.otherIds.add(conversationId);
 	return { oneShot: false, conversationId, mainConversation: false };
@@ -173,6 +186,7 @@ export const __testUtils = {
 	reset(): void {
 		conversationTracker.mainId = undefined;
 		conversationTracker.mainProviderState = undefined;
+		conversationTracker.claimed = false;
 		conversationTracker.armed = false;
 		conversationTracker.otherIds.clear();
 	},

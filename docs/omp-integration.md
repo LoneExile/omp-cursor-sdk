@@ -340,8 +340,12 @@ The extension wires into OMP's session events:
   `/fresh` arrives first. Of the other requests, the main conversation is
   the one whose id is the session id, or, after `/fresh` or with
   `--provider-session-id`, the first pooled request after
-  `before_agent_start`. Only the main conversation persists local-resume
-  handles and lineage entries. Within one conversation, a request whose pool
+  `before_agent_start`. When a request takes over the main conversation
+  from an earlier id (`/fresh`, whose advisors get new ids too), the
+  previous main conversation's entry and every idle entry of another
+  conversation in the scope are disposed (SDK agent, bridge run, store
+  handle); busy entries stay. Only the main conversation persists
+  local-resume handles and lineage entries. Within one conversation, a request whose pool
   key differs from an entry that is still being created or running a turn gets
   a one-shot agent instead of tearing that entry down; a `ready` entry with a
   different key is replaced (a model or effort switch between turns). Turns of
