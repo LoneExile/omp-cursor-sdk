@@ -16,6 +16,14 @@ import { registerCursorFallbackIssueWarning } from "./cursor-fallback-warning.js
 import { registerCursorAgentsContextDedup } from "./cursor-agents-context-registration.js";
 import { registerCursorSdkSessionProcessErrorGuard } from "./cursor-sdk-process-error-guard.js";
 import { registerCursorConversationTracking } from "./cursor-one-shot-request.js";
+import {
+	bindCursorExtensionApi,
+	createCursorSessionBinding,
+	markCursorSessionBindingClosed,
+	markCursorSessionBindingStarted,
+	runInCursorSessionBinding,
+	type CursorSessionBinding,
+} from "./cursor-session-binding.js";
 
 type CursorExtensionApi =
 	& Pick<ExtensionAPI, "registerProvider" | "registerCommand" | "on">
@@ -51,7 +59,19 @@ function registerCursorProvider(pi: Pick<ExtensionAPI, "registerProvider">, mode
 	pi.registerProvider(CURSOR_PROVIDER, createCursorProviderConfig(models));
 }
 
-export default async function (pi: CursorExtensionApi) {
+export default async function (hostPi: CursorExtensionApi) {
+	// One binding per registration: the root session's, or a subagent's re-bind of the
+	// same module (see cursor-session-binding.ts). Everything below, and every callback
+	// the host invokes later, runs inside it.
+	const binding = createCursorSessionBinding();
+	const pi = bindCursorExtensionApi(hostPi, binding);
+	await runInCursorSessionBinding(binding, () => registerCursorExtension(pi, binding));
+}
+
+async function registerCursorExtension(pi: CursorExtensionApi, binding: CursorSessionBinding): Promise<void> {
+	pi.on("session_start", (_event, ctx) => {
+		markCursorSessionBindingStarted(binding, ctx.sessionManager?.getSessionId?.() ?? undefined, ctx.agent?.kind);
+	});
 	// Session cwd must register before other session_start listeners that depend on it.
 	registerCursorSessionScope(pi);
 	registerCursorSessionAgentLineage(pi);
@@ -106,4 +126,7 @@ export default async function (pi: CursorExtensionApi) {
 	registerCursorProvider(pi, models);
 	// Register last so session_shutdown cleanup remains protected until other Cursor handlers finish.
 	registerCursorSdkSessionProcessErrorGuard(pi);
+	pi.on("session_shutdown", () => {
+		markCursorSessionBindingClosed(binding);
+	});
 }

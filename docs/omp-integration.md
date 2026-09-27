@@ -218,6 +218,30 @@ Assistants listed before the rewrite stay valid.
 
 The extension wires into OMP's session events:
 
+- **one binding per session:** OMP imports the module once per root session
+  (the legacy loader imports with a fresh `?mtime` tag,
+  `legacy-pi-compat.ts` `loadLegacyPiModule`) and re-runs the same module's
+  factory for every in-process subagent, `/tan` clone and revived worker,
+  which re-bind the parent's prepared factories to their own ExtensionAPI
+  (`sdk.ts` `preloadedPreparedExtensions`, `loader.ts`
+  `bindPreparedExtensions`), then emit their own `session_start`
+  (`task/executor.ts`). Each registration therefore gets a session binding
+  (`src/cursor-session-binding.ts`): session scope, pi tool bridge and its
+  tracked tool executions, resume and lineage state, fast/mode/runtime/flag
+  state, the session error guard, cloud ledger and replay-tool registration
+  are per binding, and every handler, command and tool of a registration
+  runs inside it. A child's registration or `session_start` no longer aborts
+  the parent's bridged tool call, disposes its bridge endpoints, moves the
+  plugin's scope to the child or disposes the parent's pooled agent. Provider
+  calls cannot use the registration that registered the provider: a
+  subagent's `createAgentSession` clears and re-registers the extension's
+  sources in the shared model registry (`sdk.ts` `clearSourceRegistrations`,
+  `pi-ai` `api-registry.ts` keeps one entry per api), so each call resolves
+  its session from its `providerSessionState` store (one per AgentSession),
+  else its provider session id, else the root session. There is no
+  registration-time cleanup: in one module instance a later factory call is
+  always another live session, a reload is a new module instance, and a
+  replaced session cleans up in its own `session_shutdown`.
 - **session scope:** cwd/session-file tracking via `session_start`
   (OMP's event carries no project-trust or session-info payload — Pi's
   `project_trust` and `session_info_changed` events do not exist in OMP).

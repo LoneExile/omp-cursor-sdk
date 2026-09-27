@@ -21,6 +21,7 @@ This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchm
 - `src/cursor-run-final-text.ts` owns final assistant text selection for run outcomes and live-run drain.
 - `src/cursor-provider-errors.ts` owns scrubbed Cursor SDK run failure detail, abort reason formatting, and provider error sanitization.
 - `src/cursor-provider-lazy.ts` owns the `streamSimple` wrapper that defers Cursor provider execution to invocation and converts provider runtime failures into stream errors; the provider module stays in Pi's static extension graph so host peers resolve through Pi's loader.
+- `src/cursor-session-binding.ts` owns per-registration session bindings: omp re-runs the factory in the same module for every in-process subagent, so per-session state lives in binding slots (`cursorSessionSlot`), every handler, command and tool runs inside its registration's binding, and each provider call resolves its session from its provider state store or provider session id.
 - `src/cursor-session-scope.ts` owns pi session cwd, session file/id/name/generation scope keys, and `session_start` / `session_info_changed` registration for session-agent pooling, cloud agent names, and debug grouping.
 - `src/cursor-session-store.ts` owns per-session Cursor SDK SQLite store identity derivation, open/disposal, temporary fileless stores, and guarded removal.
 - `src/cursor-http1.ts` owns branch-scoped local HTTP/1.1 session state, global-preference override tracking, and extension-owned SDK configuration/null reset.

@@ -9,7 +9,6 @@ import {
 	ListToolsRequestSchema,
 	type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import { bridgeToolExecutionAbortTracker } from "./cursor-pi-tool-bridge-abort.js";
 import { MCP_ENDPOINT_ROOT, MCP_SERVER_NAME } from "./cursor-pi-tool-bridge-constants.js";
 import {
 	type CursorPiToolBridgeDiagnosticEvent,
@@ -38,6 +37,8 @@ import { asRecord, getFirstStringByKeys } from "./cursor-record-utils.js";
 export interface CursorPiToolBridgeRunHost {
 	registerRun(pathname: string, run: CursorPiToolBridgeRunImpl): Promise<string>;
 	unregisterRun(pathname: string, run: CursorPiToolBridgeRunImpl): Promise<void>;
+	/** Abort the host tool execution a bridged call started, if it is still running. */
+	abortToolExecution(piToolCallId: string, reason: string): void;
 }
 
 const MCP_SERVER_VERSION = "0.1.0";
@@ -376,7 +377,7 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 		kind: "cancelled" | "error" = "error",
 	): void {
 		if (this.rejectPending(pending, error, kind)) {
-			bridgeToolExecutionAbortTracker.abort(pending.request.piToolCallId, error.message);
+			this.registry.abortToolExecution(pending.request.piToolCallId, error.message);
 		}
 	}
 

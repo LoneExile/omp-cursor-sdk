@@ -14,6 +14,7 @@ import { isCursorModel } from "./cursor-model.js";
 import { registerCursorModelLifecycle, type CursorModelLifecycleExtensionApi } from "./cursor-model-lifecycle.js";
 import { resolveCursorPiToolBridgeEnabled } from "./cursor-pi-tool-bridge-env.js";
 import { resolveEffectiveCursorConfigForContext } from "./cursor-runtime-state.js";
+import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 
 export const CURSOR_ACTIVATE_SKILL_TOOL_NAME = "cursor_activate_skill";
 export const CURSOR_ACTIVATE_SKILL_MCP_NAME = "pi__cursor_activate_skill";
@@ -36,7 +37,8 @@ interface CursorSkillActivationDetails {
 	availableSkillNames: string[];
 }
 
-let currentSkillsByName = new Map<string, Skill>();
+// Per session (see cursor-session-binding.ts): each session's visible skills.
+const skillState = cursorSessionSlotView(cursorSessionSlot(() => ({ byName: new Map<string, Skill>() })));
 
 function escapeXml(value: string): string {
 	return value
@@ -54,11 +56,11 @@ function getVisibleSkills(skills: readonly Skill[] | undefined): Skill[] {
 }
 
 function setCurrentSkills(skills: readonly Skill[] | undefined): void {
-	currentSkillsByName = new Map(getVisibleSkills(skills).map((skill) => [skill.name, skill]));
+	skillState.byName = new Map(getVisibleSkills(skills).map((skill) => [skill.name, skill]));
 }
 
 function getAvailableSkillNames(): string[] {
-	return [...currentSkillsByName.keys()].sort();
+	return [...skillState.byName.keys()].sort();
 }
 
 function resolveEffectiveRuntimeForSkillLifecycle(
@@ -69,7 +71,7 @@ function resolveEffectiveRuntimeForSkillLifecycle(
 }
 
 function shouldExposeSkillTool(model: ExtensionContext["model"], runtime: CursorRuntime): boolean {
-	return runtime === "local" && isCursorModel(model) && resolveCursorPiToolBridgeEnabled() && currentSkillsByName.size > 0;
+	return runtime === "local" && isCursorModel(model) && resolveCursorPiToolBridgeEnabled() && skillState.byName.size > 0;
 }
 
 function syncCursorSkillToolForModel(
@@ -204,7 +206,7 @@ export function registerCursorSkillTool(pi: CursorSkillToolExtensionApi): void {
 			if (!requestedName) {
 				throw new Error("No skill name was provided.");
 			}
-			const skill = currentSkillsByName.get(requestedName);
+			const skill = skillState.byName.get(requestedName);
 			if (!skill) {
 				throw new Error(
 					`Skill not available: ${requestedName}. Available skills: ${getAvailableSkillNames().join(", ") || "none"}.`,

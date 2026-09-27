@@ -10,7 +10,7 @@ import {
 	CURSOR_PI_TOOL_BRIDGE_CALL_TIMEOUT_MS_ENV,
 	CURSOR_PI_TOOL_BRIDGE_ENV,
 } from "./cursor-pi-tool-bridge-env.js";
-import { bridgeToolExecutionAbortTracker } from "./cursor-pi-tool-bridge-abort.js";
+import { cursorSessionSlot } from "./cursor-session-binding.js";
 import { isCursorPiBridgeToolCallId, MCP_SERVER_NAME } from "./cursor-pi-tool-bridge-constants.js";
 import { LOOPBACK_HOST, CursorPiToolBridgeRegistry } from "./cursor-pi-tool-bridge-server.js";
 import type {
@@ -46,7 +46,9 @@ export {
 	buildCursorPiToolBridgeSurfaceSignature,
 } from "./cursor-pi-tool-bridge-snapshot.js";
 
-let registeredCursorPiToolBridge: CursorPiToolBridgeRegistry | undefined;
+// Per session (see cursor-session-binding.ts): a subagent re-binds this factory in the
+// same module, and its bridge must not replace, abort or dispose its parent's.
+const bridgeSlot = cursorSessionSlot<{ bridge?: CursorPiToolBridgeRegistry }>(() => ({}));
 
 const WINDOWS_BRIDGE_ABORT_ENV = "PI_CURSOR_BRIDGE_TOOL_CALL_ID";
 
@@ -89,8 +91,11 @@ Get-CimInstance Win32_Process -Filter "Name = 'bash.exe' OR Name = 'sh.exe'" |
 }
 
 export function registerCursorPiToolBridge(pi: CursorPiToolBridgeExtensionApi): CursorPiToolBridge {
-	bridgeToolExecutionAbortTracker.abortAll("Cursor pi tool bridge extension reloaded");
-	void registeredCursorPiToolBridge?.disposeAll("Cursor pi tool bridge extension reloaded");
+	// No cleanup of an earlier registration here. In one module instance a later factory
+	// call is always another live session (a subagent re-binding the prepared factory,
+	// sdk.ts preloadedPreparedExtensions); a reload imports a new module instance
+	// (legacy-pi-compat.ts loadLegacyPiModule, fresh `?mtime` tag), and the replaced
+	// session's own session_shutdown handler below disposes its bridge.
 	// tool_call/tool_result handlers attach on the first run that exposes pi tools: omp's
 	// speculative local-read execution is off whenever any extension handles either event
 	// (pi-coding-agent speculation/host.ts hasLifecycleHandlers), so registering them at load
@@ -100,14 +105,13 @@ export function registerCursorPiToolBridge(pi: CursorPiToolBridgeExtensionApi): 
 		if (toolHooksAttached) return;
 		toolHooksAttached = true;
 		pi.on("tool_call", (event, ctx) => {
-			if (registeredCursorPiToolBridge !== bridge) return undefined;
 			if (!bridge.hasPendingPiToolCallId(event.toolCallId)) {
 				return isCursorPiBridgeToolCallId(event.toolCallId)
 					? { block: true, reason: "Cursor pi bridge tool call is no longer pending" }
 					: undefined;
 			}
 			const windowsAbortMarker = installWindowsBridgeBashAbortMarker(event);
-			const trackingStarted = bridgeToolExecutionAbortTracker.track(event.toolCallId, {
+			const trackingStarted = bridge.abortTracker.track(event.toolCallId, {
 				// OMP's ExtensionContext exposes abort() but no signal, so the
 				// tracker cannot observe host-initiated aborts from the signal
 				// alone; cancellation arrives via tool_result, session_shutdown,
@@ -127,26 +131,26 @@ export function registerCursorPiToolBridge(pi: CursorPiToolBridgeExtensionApi): 
 			return { block: true, reason: "Cursor pi bridge tool execution was aborted before it started" };
 		});
 		pi.on("tool_result", (event) => {
-			bridgeToolExecutionAbortTracker.finish(event.toolCallId);
+			bridge.abortTracker.finish(event.toolCallId);
 		});
 	};
 	const bridge = new CursorPiToolBridgeRegistry(pi, process.env, attachToolHooks);
-	registeredCursorPiToolBridge = bridge;
+	bridgeSlot.get().bridge = bridge;
 	// Closest OMP analog to upstream's host-abort signal edge: any bridge
-	// execution still active when a turn ends is aborted. No-op when none.
+	// execution of this session still active when its turn ends is aborted.
 	pi.on("turn_end", () => {
-		bridgeToolExecutionAbortTracker.abortAll("Cursor pi tool bridge turn ended");
+		bridge.abortTracker.abortAll("Cursor pi tool bridge turn ended");
 	});
 	pi.on("session_shutdown", async () => {
 		const reason = "Cursor pi tool bridge session shutdown";
-		bridgeToolExecutionAbortTracker.abortAll(reason);
+		bridge.abortTracker.abortAll(reason);
 		await bridge.disposeAll(reason);
 	});
 	return bridge;
 }
 
 export function getRegisteredCursorPiToolBridge(): CursorPiToolBridge | undefined {
-	return registeredCursorPiToolBridge;
+	return bridgeSlot.get().bridge;
 }
 
 export const __testUtils = {
@@ -164,23 +168,23 @@ export const __testUtils = {
 		return new CursorPiToolBridgeRegistry(pi, env);
 	},
 	getRegisteredBridgeForTests() {
-		return registeredCursorPiToolBridge;
+		return bridgeSlot.get().bridge;
 	},
 	serializeDiagnosticForTests(event: CursorPiToolBridgeDiagnosticEvent) {
 		return serializeCursorPiToolBridgeDiagnostic(event);
 	},
 	getActiveBridgeToolExecutionAbortCount() {
-		return bridgeToolExecutionAbortTracker.getActiveCount();
+		return bridgeSlot.get().bridge?.abortTracker.getActiveCount() ?? 0;
 	},
 	buildWindowsBridgeBashAbortCommandForTests: buildWindowsBridgeBashAbortCommand,
 	installWindowsBridgeBashAbortMarkerForTests: installWindowsBridgeBashAbortMarker,
 	emitBridgeToolExecutionProcessAbortSignalForTests(signal: NodeJS.Signals) {
-		bridgeToolExecutionAbortTracker.emitProcessAbortSignalForTests(signal);
+		bridgeSlot.get().bridge?.abortTracker.emitProcessAbortSignalForTests(signal);
 	},
 	resetRegisteredBridgeForTests() {
-		bridgeToolExecutionAbortTracker.abortAll("Cursor pi tool bridge test reset");
-		const bridge = registeredCursorPiToolBridge;
-		registeredCursorPiToolBridge = undefined;
+		const bridge = bridgeSlot.get().bridge;
+		bridge?.abortTracker.abortAll("Cursor pi tool bridge test reset");
+		bridgeSlot.reset();
 		return bridge?.disposeAll("Cursor pi tool bridge test reset") ?? Promise.resolve();
 	},
 };

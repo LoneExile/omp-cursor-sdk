@@ -1,6 +1,7 @@
 import type { CursorSdkModule } from "./cursor-sdk-runtime.js";
 import type { CursorResolvedSetting } from "./cursor-config.js";
 import { asRecord } from "./cursor-record-utils.js";
+import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 
 export const CURSOR_HTTP1_ENTRY_TYPE = "cursor-http1-state";
 
@@ -12,8 +13,14 @@ type CursorHttp1Sdk = {
 	Cursor: Pick<CursorSdkModule["Cursor"], "configure">;
 };
 
-let sessionCursorHttp1Enabled: boolean | undefined;
-let globalPreferenceAuthoritative = false;
+interface CursorHttp1SessionState {
+	sessionCursorHttp1Enabled: boolean | undefined;
+	globalPreferenceAuthoritative: boolean;
+}
+
+// Per session (see cursor-session-binding.ts). The SDK transport setting itself is
+// process-wide and re-applied by every local turn (configureCursorSdkHttp1).
+const sessionState = cursorSessionSlotView(cursorSessionSlot<CursorHttp1SessionState>(() => ({ sessionCursorHttp1Enabled: undefined, globalPreferenceAuthoritative: false })));
 let configuredCursor: CursorHttp1Sdk["Cursor"] | undefined;
 
 export function isCursorHttp1EntryData(value: unknown): value is CursorHttp1EntryData {
@@ -21,19 +28,19 @@ export function isCursorHttp1EntryData(value: unknown): value is CursorHttp1Entr
 }
 
 export function getStoredCursorHttp1Enabled(): boolean | undefined {
-	return sessionCursorHttp1Enabled;
+	return sessionState.sessionCursorHttp1Enabled;
 }
 
 export function setStoredCursorHttp1Enabled(enabled: boolean | undefined): void {
-	sessionCursorHttp1Enabled = enabled;
+	sessionState.sessionCursorHttp1Enabled = enabled;
 }
 
 export function getResolvedSessionCursorHttp1Enabled(): boolean | undefined {
-	return globalPreferenceAuthoritative ? undefined : sessionCursorHttp1Enabled;
+	return sessionState.globalPreferenceAuthoritative ? undefined : sessionState.sessionCursorHttp1Enabled;
 }
 
 export function setCursorHttp1GlobalPreferenceAuthoritative(authoritative: boolean): void {
-	globalPreferenceAuthoritative = authoritative;
+	sessionState.globalPreferenceAuthoritative = authoritative;
 }
 
 export function clearCursorSdkHttp1(): void {
@@ -58,8 +65,8 @@ export function configureCursorSdkHttp1(
 
 export const __testUtils = {
 	reset(): void {
-		sessionCursorHttp1Enabled = undefined;
-		globalPreferenceAuthoritative = false;
+		sessionState.sessionCursorHttp1Enabled = undefined;
+		sessionState.globalPreferenceAuthoritative = false;
 		configuredCursor = undefined;
 	},
 };

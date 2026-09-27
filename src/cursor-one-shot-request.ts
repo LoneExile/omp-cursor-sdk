@@ -3,6 +3,12 @@ import type { Context, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 // (pi-coding-agent extensibility/plugins/legacy-pi-compat.ts PI_PACKAGE_NAMES), so the
 // comparison below uses the exact string the summarizer sends.
 import { SUMMARIZATION_SYSTEM_PROMPT } from "@oh-my-pi/pi-agent-core/compaction/utils";
+import {
+	currentCursorSessionBinding,
+	cursorSessionSlot,
+	cursorSessionSlotView,
+	learnCursorProviderSessionState,
+} from "./cursor-session-binding.js";
 
 /**
  * omp tags side-channel requests (handoff documents, `/btw`, IRC and other ephemeral
@@ -72,7 +78,10 @@ interface CursorConversationTrackerState {
 	otherIds: Set<string>;
 }
 
-const conversationTracker: CursorConversationTrackerState = { armed: false, otherIds: new Set() };
+// Per session (see cursor-session-binding.ts).
+const conversationTracker: CursorConversationTrackerState = cursorSessionSlotView(
+	cursorSessionSlot<CursorConversationTrackerState>(() => ({ armed: false, otherIds: new Set() })),
+);
 
 interface CursorConversationTrackingExtensionApi {
 	on(event: "session_start", handler: (event: unknown, ctx: { sessionManager?: { getSessionId?(): string } }) => unknown): void;
@@ -121,6 +130,8 @@ export function classifyCursorRequestRoute(
 		tracker.mainId = conversationId;
 		tracker.mainProviderState = providerState;
 		tracker.armed = false;
+		// Later calls of this session resolve to it by their store (advisors share it).
+		learnCursorProviderSessionState(currentCursorSessionBinding(), providerState);
 		return { oneShot: false, conversationId, mainConversation: true };
 	}
 	tracker.otherIds.add(conversationId);

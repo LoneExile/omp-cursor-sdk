@@ -7,6 +7,7 @@ import type {
 	CursorPiToolBridgeSnapshotApi,
 } from "./cursor-pi-tool-bridge-types.js";
 import { asRecord } from "./cursor-record-utils.js";
+import { CursorPiToolBridgeToolExecutionAbortTracker } from "./cursor-pi-tool-bridge-abort.js";
 import type { CursorPiToolBridgeRunImpl } from "./cursor-pi-tool-bridge-run.js";
 import {
 	buildCursorPiToolBridgeSnapshot,
@@ -20,6 +21,8 @@ export const LOOPBACK_HOST = "127.0.0.1";
 const HTTP_SERVER_CLOSE_GRACE_MS = 250;
 
 export class CursorPiToolBridgeRegistry implements CursorPiToolBridge {
+	/** This registration's bridged tool executions (tool_call → tool_result). */
+	readonly abortTracker = new CursorPiToolBridgeToolExecutionAbortTracker();
 	private readonly pi: CursorPiToolBridgeSnapshotApi;
 	private readonly env: Record<string, string | undefined>;
 	private readonly runs = new Set<CursorPiToolBridgeRunImpl>();
@@ -73,6 +76,10 @@ export class CursorPiToolBridgeRegistry implements CursorPiToolBridge {
 		}
 		run.emitStartDiagnostics(bridgeEnabled);
 		return run;
+	}
+
+	abortToolExecution(piToolCallId: string, reason: string): void {
+		this.abortTracker.abort(piToolCallId, reason);
 	}
 
 	async disposeAll(reason = "Cursor pi tool bridge disposed"): Promise<void> {

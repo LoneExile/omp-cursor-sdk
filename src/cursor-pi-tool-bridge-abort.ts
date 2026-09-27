@@ -6,7 +6,8 @@ interface CursorPiToolBridgeActiveToolExecution {
 	onAbort?: () => void;
 }
 
-class CursorPiToolBridgeToolExecutionAbortTracker {
+/** Bridged omp tool executions of one registration (one session); see cursor-session-binding.ts. */
+export class CursorPiToolBridgeToolExecutionAbortTracker {
 	private readonly activeExecutions = new Map<string, CursorPiToolBridgeActiveToolExecution>();
 	private processSignalHandlersInstalled = false;
 
@@ -138,4 +139,3 @@ class CursorPiToolBridgeToolExecutionAbortTracker {
 	}
 }
 
-export const bridgeToolExecutionAbortTracker = new CursorPiToolBridgeToolExecutionAbortTracker();

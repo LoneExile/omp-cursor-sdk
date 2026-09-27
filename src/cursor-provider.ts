@@ -26,6 +26,7 @@ import { CursorProviderTurnRunner } from "./cursor-provider-turn-runner.js";
 import { getCursorSessionScopeKey } from "./cursor-session-scope.js";
 import { sessionAgentEntryKey } from "./cursor-session-agent.js";
 import { classifyCursorRequestRoute } from "./cursor-one-shot-request.js";
+import { resolveCursorRequestBinding, runInCursorSessionBinding } from "./cursor-session-binding.js";
 import { runExclusiveCursorSessionTurn, __testUtils as cursorSessionTurnQueueTestUtils } from "./cursor-session-turn-queue.js";
 
 function makeInitialMessage(model: Model<Api>): AssistantMessage {
@@ -49,6 +50,16 @@ function makeInitialMessage(model: Model<Api>): AssistantMessage {
 }
 
 export function streamCursor(
+	model: Model<Api>,
+	context: Context,
+	options?: SimpleStreamOptions,
+): AssistantMessageEventStream {
+	// The whole turn, including its fire-and-forget run completion, runs in the session
+	// that sent the request (see resolveCursorRequestBinding).
+	return runInCursorSessionBinding(resolveCursorRequestBinding(options), () => streamCursorInSession(model, context, options));
+}
+
+function streamCursorInSession(
 	model: Model<Api>,
 	context: Context,
 	options?: SimpleStreamOptions,

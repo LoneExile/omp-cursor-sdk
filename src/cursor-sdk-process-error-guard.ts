@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { classifyCursorConnectError, isCursorSdkAbortConnectError, isCursorSdkConnectionStalledError } from "./cursor-provider-errors.js";
+import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 
 interface CursorSdkProcessErrorGuardToken {
 	suppressAbortErrors: boolean;
@@ -25,7 +26,11 @@ type GenericProcessEmit = (event: string | symbol, ...args: unknown[]) => boolea
 // ConnectRPC suppression remains scoped to active provider turns.
 const activeProviderTurns = new Set<CursorSdkProcessErrorGuardToken>();
 const activeSessions = new Set<CursorSdkSessionProcessErrorGuardToken>();
-let activeLifecycleSessionGuard: CursorSdkSessionProcessErrorGuard | undefined;
+// Per session (see cursor-session-binding.ts): a subagent's session_shutdown must not
+// remove its parent's guard.
+const lifecycleGuards = cursorSessionSlotView(
+	cursorSessionSlot<{ active?: CursorSdkSessionProcessErrorGuard }>(() => ({})),
+);
 let originalProcessEmit: GenericProcessEmit | undefined;
 let cursorProcessEmit: GenericProcessEmit | undefined;
 let bunUnhandledRejectionListenerInstalled = false;
@@ -182,8 +187,8 @@ export const __testUtils = {
 	activeProviderTurnCount: (): number => activeProviderTurns.size,
 	activeSessionCount: (): number => activeSessions.size,
 	resetLifecycleSessionGuard(): void {
-		activeLifecycleSessionGuard?.dispose();
-		activeLifecycleSessionGuard = undefined;
+		lifecycleGuards.active?.dispose();
+		lifecycleGuards.active = undefined;
 	},
 };
 
@@ -229,11 +234,11 @@ export function installCursorSdkSessionProcessErrorGuard(): CursorSdkSessionProc
 
 export function registerCursorSdkSessionProcessErrorGuard(pi: Pick<ExtensionAPI, "on">): void {
 	pi.on("session_start", () => {
-		activeLifecycleSessionGuard?.dispose();
-		activeLifecycleSessionGuard = installCursorSdkSessionProcessErrorGuard();
+		lifecycleGuards.active?.dispose();
+		lifecycleGuards.active = installCursorSdkSessionProcessErrorGuard();
 	});
 	pi.on("session_shutdown", () => {
-		activeLifecycleSessionGuard?.dispose();
-		activeLifecycleSessionGuard = undefined;
+		lifecycleGuards.active?.dispose();
+		lifecycleGuards.active = undefined;
 	});
 }

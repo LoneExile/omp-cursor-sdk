@@ -4,6 +4,7 @@ import type { ExtensionAPI, SessionEntry } from "@oh-my-pi/pi-coding-agent";
 import type { SessionCursorAgentSendState } from "./cursor-session-agent.js";
 import { asRecord } from "./cursor-record-utils.js";
 import { getCursorSessionScopeKey } from "./cursor-session-scope.js";
+import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 import type { CursorSessionStoreIdentity } from "./cursor-session-store.js";
 
 export const CURSOR_SESSION_AGENT_RESUME_ENTRY_TYPE = "cursor-sdk-agent-resume";
@@ -73,13 +74,15 @@ interface CursorSessionResumeState {
 	unownedUserEntryIds: Set<string>;
 }
 
-const state: CursorSessionResumeState = {
+// Per session (see cursor-session-binding.ts): a subagent's session_start and turn_end
+// must not redirect or flush its parent's resume handle.
+const state: CursorSessionResumeState = cursorSessionSlotView(cursorSessionSlot<CursorSessionResumeState>(() => ({
 	scopeKey: getCursorSessionScopeKey(),
 	cwd: process.cwd(),
 	branchPathHash: EMPTY_BRANCH_HASH,
 	compactionGeneration: 0,
 	unownedUserEntryIds: new Set(),
-};
+})));
 
 function hashParts(parts: readonly string[]): string {
 	const hash = createHash("sha256");

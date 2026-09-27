@@ -1,5 +1,6 @@
 import type { CursorPiToolDisplay } from "./cursor-transcript-utils.js";
 import { parseOptionalEnvBoolean } from "./cursor-env-boolean.js";
+import { cursorSessionCollection, cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 
 export interface CursorNativeToolDisplayItem extends CursorPiToolDisplay {
 	id: string;
@@ -9,11 +10,23 @@ export interface CursorNativeToolDisplayItem extends CursorPiToolDisplay {
 export const NATIVE_CURSOR_TOOL_DISPLAY_ENV = "PI_CURSOR_NATIVE_TOOL_DISPLAY";
 export const NATIVE_CURSOR_TOOL_REGISTRATION_ENV = "PI_CURSOR_REGISTER_NATIVE_TOOLS";
 
-export const registeredNativeToolNames = new Set<string>();
-export const skippedNativeToolNames = new Set<string>();
+// Per session (see cursor-session-binding.ts): replay tools are registered on each
+// session's own ExtensionAPI, so a subagent registers its own and never relies on its
+// parent's registration.
+export const registeredNativeToolNames = cursorSessionCollection(() => new Set<string>());
+export const skippedNativeToolNames = cursorSessionCollection(() => new Set<string>());
 export const nativeToolResults = new Map<string, CursorNativeToolDisplayItem>();
 
-let nativeToolDisplayRuntimeRequested = false;
+const displayState = cursorSessionSlotView(
+	cursorSessionSlot(() => ({ runtimeRequested: false, registrationStarted: false })),
+);
+
+/** Latch per session: set before the first await of the replay-tool registration. */
+export function claimCursorNativeToolRegistration(): boolean {
+	if (displayState.registrationStarted) return false;
+	displayState.registrationStarted = true;
+	return true;
+}
 
 export function readBooleanEnv(name: string, env: Record<string, string | undefined> = process.env): boolean | undefined {
 	return parseOptionalEnvBoolean(env[name]);
@@ -31,7 +44,7 @@ export function isCursorNativeToolRegistrationRequested(mode?: string): boolean 
 }
 
 export function setCursorNativeToolDisplayRuntimeRequested(requested: boolean): void {
-	nativeToolDisplayRuntimeRequested = requested;
+	displayState.runtimeRequested = requested;
 }
 
 export function isCursorNativeToolDisplayEnabled(): boolean {
@@ -39,7 +52,7 @@ export function isCursorNativeToolDisplayEnabled(): boolean {
 }
 
 export function isCursorNativeToolDisplayRuntimeEnabled(): boolean {
-	return nativeToolDisplayRuntimeRequested && readBooleanEnv(NATIVE_CURSOR_TOOL_DISPLAY_ENV) !== false && registeredNativeToolNames.size > 0;
+	return displayState.runtimeRequested && readBooleanEnv(NATIVE_CURSOR_TOOL_DISPLAY_ENV) !== false && registeredNativeToolNames.size > 0;
 }
 
 export function canRenderCursorToolNatively(toolName: string): boolean {
@@ -77,11 +90,12 @@ export function isCursorFileMutationToolName(toolName: string): toolName is "edi
 export const __testUtils = {
 	nativeToolResultCount: () => nativeToolResults.size,
 	registerNativeToolNameForTests(toolName: string): void {
-		nativeToolDisplayRuntimeRequested = true;
+		displayState.runtimeRequested = true;
 		registeredNativeToolNames.add(toolName);
 	},
 	reset(): void {
-		nativeToolDisplayRuntimeRequested = false;
+		displayState.runtimeRequested = false;
+		displayState.registrationStarted = false;
 		registeredNativeToolNames.clear();
 		skippedNativeToolNames.clear();
 		nativeToolResults.clear();

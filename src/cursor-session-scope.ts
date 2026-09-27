@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import type { ExtensionHandler, SessionStartEvent } from "@oh-my-pi/pi-coding-agent";
 import { truncateCursorDisplayLine } from "./cursor-display-text.js";
+import { cursorSessionSlot } from "./cursor-session-binding.js";
 
 interface CursorSessionScopeExtensionApi {
 	on(event: "session_start", handler: ExtensionHandler<SessionStartEvent>): void;
@@ -12,16 +13,18 @@ export const MAX_CURSOR_SESSION_NAME_LENGTH = 100;
 
 type CursorSessionScopeChangeHandler = (previousScopeKey: string) => Promise<void> | void;
 
-const state = {
+// Per session (see cursor-session-binding.ts): a subagent's session_start must not move
+// its parent's scope.
+const scopeSlot = cursorSessionSlot(() => ({
 	sessionCwd: process.cwd(),
 	sessionFile: undefined as string | undefined,
 	sessionId: undefined as string | undefined,
 	sessionName: undefined as string | undefined,
 	projectTrusted: false,
 	sessionGeneration: 0,
-};
+}));
 
-const scopeGenerations = new Map<string, number>([[ANONYMOUS_SESSION_SCOPE_KEY, state.sessionGeneration]]);
+const scopeGenerations = new Map<string, number>([[ANONYMOUS_SESSION_SCOPE_KEY, 0]]);
 const projectTrustResolutionCwds = new Set<string>();
 let nextSessionGeneration = 1;
 let scopeChangeHandler: CursorSessionScopeChangeHandler | undefined;
@@ -30,6 +33,7 @@ let scopeChangeHandler: CursorSessionScopeChangeHandler | undefined;
  * Pi session file when known; used to scope reused Cursor SDK agents to one pi session.
  */
 export function getCursorSessionFile(): string | undefined {
+	const state = scopeSlot.get();
 	return state.sessionFile;
 }
 
@@ -38,6 +42,7 @@ export function getCursorSessionFile(): string | undefined {
  * before the first session_start (tests and early startup).
  */
 export function getCursorSessionScopeKey(): string {
+	const state = scopeSlot.get();
 	if (state.sessionFile) return state.sessionFile;
 	if (state.sessionId) return `${EPHEMERAL_SESSION_SCOPE_PREFIX}${state.sessionId}`;
 	return ANONYMOUS_SESSION_SCOPE_KEY;
@@ -53,14 +58,17 @@ export function getCursorSessionScopeGeneration(scopeKey: string = getCursorSess
  * changes without a new session_start event are not reflected here.
  */
 export function getCursorSessionCwd(): string {
+	const state = scopeSlot.get();
 	return state.sessionCwd;
 }
 
 export function getCursorSessionProjectTrusted(): boolean {
+	const state = scopeSlot.get();
 	return state.projectTrusted;
 }
 
 export function getCursorSessionName(): string | undefined {
+	const state = scopeSlot.get();
 	return state.sessionName;
 }
 
@@ -76,6 +84,7 @@ function setCursorSessionScope(
 	projectTrusted = false,
 	sessionName?: string,
 ): void {
+	const state = scopeSlot.get();
 	state.sessionCwd = cwd;
 	state.sessionFile = sessionFile;
 	state.sessionId = sessionId;
@@ -97,15 +106,10 @@ function isCliProjectTrustApproved(args = process.argv.slice(2)): boolean {
 }
 
 function resetCursorSessionScope(): void {
-	state.sessionCwd = process.cwd();
-	state.sessionFile = undefined;
-	state.sessionId = undefined;
-	state.sessionName = undefined;
-	state.projectTrusted = false;
-	state.sessionGeneration = 0;
+	scopeSlot.reset();
 	nextSessionGeneration = 1;
 	scopeGenerations.clear();
-	scopeGenerations.set(ANONYMOUS_SESSION_SCOPE_KEY, state.sessionGeneration);
+	scopeGenerations.set(ANONYMOUS_SESSION_SCOPE_KEY, 0);
 	projectTrustResolutionCwds.clear();
 }
 

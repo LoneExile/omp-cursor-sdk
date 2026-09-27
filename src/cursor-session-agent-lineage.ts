@@ -1,6 +1,7 @@
 import type { ExtensionAPI, SessionEntry } from "@oh-my-pi/pi-coding-agent";
 import { isCursorLocalAgentId } from "./cursor-session-agent-resume.js";
 import { getCursorSessionScopeKey } from "./cursor-session-scope.js";
+import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 import { asRecord } from "./cursor-record-utils.js";
 
 export const CURSOR_SESSION_AGENT_LINEAGE_ENTRY_TYPE = "cursor-sdk-agent-lineage";
@@ -33,9 +34,11 @@ interface CursorSessionAgentLineageState {
 	recordedAgentIds: Set<string>;
 }
 
-const state: CursorSessionAgentLineageState = {
-	recordedAgentIds: new Set(),
-};
+// Per session (see cursor-session-binding.ts): lineage entries go to the session whose
+// provider call sent the agent.
+const state: CursorSessionAgentLineageState = cursorSessionSlotView(
+	cursorSessionSlot<CursorSessionAgentLineageState>(() => ({ recordedAgentIds: new Set() })),
+);
 
 export function parseCursorSessionAgentLineageEntryData(value: unknown): CursorSessionAgentLineageEntryData | undefined {
 	const record = asRecord(value);
