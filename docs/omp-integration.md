@@ -231,22 +231,32 @@ The extension wires into OMP's session events:
   provider answered after a model switch, or tool results with no live run).
   Switching to a different Cursor model or effort changes the pool key
   (the model selection), so that turn already starts a fresh agent.
-- **compaction summarizer:** OMP runs it on the session side-stream, outside
-  the agent loop, and with async compaction concurrently with normal turns.
-  The plugin registers no `session_before_compact` handler: its presence alone
-  disables speculative compaction for every session in the process
+- **compaction summarizer and side requests:** OMP runs the summarizer on the
+  session side-stream, outside the agent loop, with async compaction
+  concurrently with normal turns, and mid-run compaction between two provider
+  calls of a tool loop (`session-maintenance.ts` mid-turn path). The plugin
+  registers no `session_before_compact` handler: its presence alone disables
+  speculative compaction for every session in the process
   (`session-maintenance.ts` `hasHandlers("session_before_compact")` checks in
   `maybeStartSpeculativeCompaction`, `deferThresholdCompactionToSpeculation`,
-  `#claimArmedSpeculation`). Instead `session.compacting` (emitted and awaited
-  before the summarizer's LLM call on every compaction path) opens a window
-  that `session_compact` or the next `before_agent_start` closes. Inside it, a
-  request that does not continue the pooled conversation runs on a one-shot
-  agent: no pool entry, no pi tool bridge, no live run, no resume handle, a
-  temporary store removed afterwards. Turn events cannot mark it: the agent
-  loop delivers `turn_start`/`turn_end` to extensions fire-and-forget
-  (`pi-agent-core` `agent.ts` `#emit`), so they are not ordered before the
-  provider call. Handoff generation emits no `session.compacting` and still
-  uses the pooled agent.
+  `#claimArmedSpeculation`). Instead each request is classified by its shape
+  (`src/cursor-one-shot-request.ts`): a context whose system prompt is exactly
+  `[SUMMARIZATION_SYSTEM_PROMPT]` (compaction and branch summaries,
+  `pi-agent-core` `compaction/compaction.ts`, `compaction/branch-summarization.ts`;
+  the constant is imported from the host's own `pi-agent-core`), or a provider
+  session id containing `:side:` (handoff documents, `/btw` and other ephemeral
+  turns, `session-handoff.ts`, `agent-session.ts` `runEphemeralTurn`), runs on a
+  one-shot agent: no pool entry, no pi tool bridge, no live run, no
+  resume handle, a temporary store removed afterwards. Such a request never
+  carries tool results for the pooled live run, so skipping the pre-send drain
+  leaves that run to the continuation that owns it; on the pool it would chain
+  into a run that is waiting for tool results. The plugin does not rely on
+  `session.compacting`: auto-handoff emits it before `generateHandoffDocument`
+  (`#prepareCompactionFromHooks`), speculative handoff does not
+  (`#runSpeculation`), and both are recognized by the side session id. Turn
+  events cannot mark these requests: the agent loop delivers
+  `turn_start`/`turn_end` to extensions fire-and-forget (`pi-agent-core`
+  `agent.ts` `#emit`).
 - **tool bridge:** an MCP bridge can expose OMP tools to the Cursor agent. Its
   `tool_call`/`tool_result` handlers attach on the first Cursor run that
   exposes pi tools, because any such handler turns off OMP's speculative

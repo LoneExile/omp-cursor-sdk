@@ -563,15 +563,6 @@ export function invalidateSessionAgent(
 	if (options?.deadTransport) deadTransportScopeKeys.add(scopeKey);
 }
 
-/** The pooled conversation's send state without acquiring (or waiting for) the pooled agent. */
-export function peekSessionCursorAgentSendState(
-	scopeKey: string = getCursorSessionScopeKey(),
-): SessionCursorAgentSendState | undefined {
-	const entry = sessionAgentsByScope.get(scopeKey);
-	if (!isActivePoolEntry(entry) || invalidatedScopeKeys.has(scopeKey)) return undefined;
-	return { ...entry.sendState };
-}
-
 export interface OneShotCursorAgentLease extends SessionCursorAgentLease {
 	dispose(): Promise<void>;
 }

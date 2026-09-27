@@ -371,7 +371,7 @@ export function persistCursorSessionAgentResumeHandle(input: PendingCursorSessio
 }
 
 // The compaction summarizer runs on a one-shot agent that never persists a handle
-// (cursor-compaction-summary.ts), so only pooled conversation sends reach this point.
+// (cursor-one-shot-request.ts), so only pooled conversation sends reach this point.
 function flushPendingCursorSessionAgentResumeHandle(branch: readonly SessionEntry[]): void {
 	restoreFromBranch(branch);
 	const pending = state.pendingHandle;
