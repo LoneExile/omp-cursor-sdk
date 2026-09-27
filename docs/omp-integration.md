@@ -219,12 +219,34 @@ The extension wires into OMP's session events:
   (OMP's event carries no project-trust or session-info payload — Pi's
   `project_trust` and `session_info_changed` events do not exist in OMP).
 - **agent pooling & resume:** session-scoped Cursor SDK agents are pooled
-  and resumed across turns within a session.
-- **skill catalog:** Cursor's local loop gets OMP's active skills via
-  `getActiveSkills()` (Pi's `before_agent_start.systemPromptOptions.skills`
-  does not exist in OMP); hidden skills (`Skill.hide`) are filtered like
-  Pi filtered `disableModelInvocation`.
-- **tool bridge:** an MCP bridge can expose OMP tools to the Cursor agent.
+  and resumed across turns within a session. A follow-up turn is sent
+  incrementally with every user and developer message appended since the
+  last send (OMP adds plan/goal context, `!` output, @file mentions,
+  `before_agent_start` and nextTurn messages around the prompt); the agent is
+  reset and re-bootstrapped only when the context diverges structurally
+  (system prompt change, edited or shrunk history, a summary, or tool results
+  with no live run).
+- **compaction summarizer:** OMP runs it on the session side-stream, outside
+  the agent loop, and with async compaction concurrently with normal turns.
+  The plugin registers no `session_before_compact` handler: its presence alone
+  disables speculative compaction for every session in the process
+  (`session-maintenance.ts` `hasHandlers("session_before_compact")` checks in
+  `maybeStartSpeculativeCompaction`, `deferThresholdCompactionToSpeculation`,
+  `#claimArmedSpeculation`). Instead `session.compacting` (emitted and awaited
+  before the summarizer's LLM call on every compaction path) opens a window
+  that `session_compact` or the next `before_agent_start` closes. Inside it, a
+  request that does not continue the pooled conversation runs on a one-shot
+  agent: no pool entry, no pi tool bridge, no live run, no resume handle, a
+  temporary store removed afterwards. Turn events cannot mark it: the agent
+  loop delivers `turn_start`/`turn_end` to extensions fire-and-forget
+  (`pi-agent-core` `agent.ts` `#emit`), so they are not ordered before the
+  provider call. Handoff generation emits no `session.compacting` and still
+  uses the pooled agent.
+- **tool bridge:** an MCP bridge can expose OMP tools to the Cursor agent. Its
+  `tool_call`/`tool_result` handlers attach on the first Cursor run that
+  exposes pi tools, because any such handler turns off OMP's speculative
+  local-read tool execution (`speculation/host.ts` `hasLifecycleHandlers`) and
+  OMP has no unsubscribe.
 - **native tool display:** the port registers only the self-contained
   `cursor_replay_activity` tool. Pi shadowed the builtin
   read/bash/edit/write/grep/find/ls tools to render Cursor-native activity;

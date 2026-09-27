@@ -31,6 +31,8 @@ export class CursorPiToolBridgeRegistry implements CursorPiToolBridge {
 	constructor(
 		pi: CursorPiToolBridgeSnapshotApi,
 		env: Record<string, string | undefined> = process.env,
+		/** Called before a run that exposes pi tools starts (the bridge's tool hooks attach lazily). */
+		private readonly onEnabledRun: () => void = () => {},
 	) {
 		this.pi = pi;
 		this.env = env;
@@ -56,7 +58,9 @@ export class CursorPiToolBridgeRegistry implements CursorPiToolBridge {
 			})
 			: createEmptySnapshot();
 		const { CursorPiToolBridgeRunImpl } = await import("./cursor-pi-tool-bridge-run.js");
-		const run = new CursorPiToolBridgeRunImpl(this, this.env, snapshot, bridgeEnabled && snapshot.tools.length > 0, options);
+		const enabled = bridgeEnabled && snapshot.tools.length > 0;
+		if (enabled) this.onEnabledRun();
+		const run = new CursorPiToolBridgeRunImpl(this, this.env, snapshot, enabled, options);
 		this.runs.add(run);
 		await run.start();
 		run.emitStartDiagnostics(bridgeEnabled);

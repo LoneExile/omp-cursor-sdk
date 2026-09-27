@@ -18,7 +18,6 @@ export interface CursorSessionAgentLifecycleExtensionApi {
 	on(event: "session_compact", handler: ExtensionHandler<SessionCompactEvent>): void;
 	on(event: "session_before_tree", handler: ExtensionHandler<SessionBeforeTreeEvent>): void;
 	on(event: "session_tree", handler: ExtensionHandler<SessionTreeEvent>): void;
-	on(event: "model_select", handler: () => Promise<void> | void): void;
 }
 
 export function registerCursorSessionAgentLifecycle(pi: CursorSessionAgentLifecycleExtensionApi): void {
@@ -41,8 +40,5 @@ export function registerCursorSessionAgentLifecycle(pi: CursorSessionAgentLifecy
 	});
 	pi.on("session_tree", async () => {
 		await resetSessionCursorAgent();
-	});
-	pi.on("model_select", () => {
-		invalidateSessionAgent();
 	});
 }

@@ -563,6 +563,75 @@ export function invalidateSessionAgent(
 	if (options?.deadTransport) deadTransportScopeKeys.add(scopeKey);
 }
 
+/** The pooled conversation's send state without acquiring (or waiting for) the pooled agent. */
+export function peekSessionCursorAgentSendState(
+	scopeKey: string = getCursorSessionScopeKey(),
+): SessionCursorAgentSendState | undefined {
+	const entry = sessionAgentsByScope.get(scopeKey);
+	if (!isActivePoolEntry(entry) || invalidatedScopeKeys.has(scopeKey)) return undefined;
+	return { ...entry.sendState };
+}
+
+export interface OneShotCursorAgentLease extends SessionCursorAgentLease {
+	dispose(): Promise<void>;
+}
+
+/**
+ * SDK agent for a request that is not part of the pooled session conversation (omp's
+ * compaction summarizer). It never enters the pool, has no pi tool bridge, never
+ * resumes or persists a resume handle, and uses a temporary store removed on dispose.
+ */
+export async function createOneShotCursorAgent(params: SessionCursorAgentCreateParams): Promise<OneShotCursorAgentLease> {
+	const scopeKey = `${getCursorSessionScopeKey()}::one-shot:${allocateSessionAgentInstanceId()}`;
+	const { sessionStore } = await openCursorSessionStoreForScope({
+		cwd: params.cwd,
+		scopeKey,
+		persistent: false,
+		hasResumeHandle: false,
+	});
+	let agent: SDKAgent;
+	try {
+		const createAgent = params.createAgent ?? (await loadCursorSdk()).Agent.create;
+		agent = await createAgent({
+			apiKey: params.apiKey,
+			model: params.modelSelection,
+			mode: params.agentMode,
+			local: buildCursorLocalAgentOptions({
+				cwd: params.cwd,
+				settingSources: params.settingSources,
+				localSafety: params.localSafety,
+				store: sessionStore.store,
+			}),
+		});
+	} catch (error) {
+		await sessionStore.dispose().catch(() => undefined);
+		throw error;
+	}
+	let disposed: Promise<void> | undefined;
+	return {
+		scopeKey,
+		poolKey: scopeKey,
+		instanceId: 0,
+		agent,
+		store: sessionStore.store,
+		storeIdentity: sessionStore.identity,
+		sendState: createInitialSendState(),
+		created: true,
+		commitSend: () => {},
+		trackRunCompletion: () => {},
+		dispose: () => {
+			disposed ??= (async () => {
+				try {
+					await agent[Symbol.asyncDispose]?.();
+				} finally {
+					await sessionStore.dispose();
+				}
+			})().catch(() => undefined);
+			return disposed;
+		},
+	};
+}
+
 export async function acquireSessionCursorAgent(params: SessionCursorAgentCreateParams): Promise<SessionCursorAgentLease> {
 	const requestedScopeKey = getCursorSessionScopeKey();
 	const scopeKey = getAcquireScopeKey(requestedScopeKey);

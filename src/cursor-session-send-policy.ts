@@ -13,7 +13,7 @@ export const MAX_COMPLETED_INCREMENTAL_SENDS_BEFORE_REBOOTSTRAP = 20;
 
 export type CursorSessionSendMode = "bootstrap" | "incremental";
 
-export type CursorSessionSendReason = "initial" | "context_divergence" | "incremental_threshold" | "process_resume" | "incremental";
+export type CursorSessionSendReason = "initial" | "context_divergence" | "incremental_threshold" | "process_resume" | "incremental" | "one_shot";
 
 export interface CursorSessionSendPlan {
 	mode: CursorSessionSendMode;

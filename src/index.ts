@@ -15,7 +15,7 @@ import { CURSOR_PROVIDER, CURSOR_SDK_API } from "./cursor-model.js";
 import { registerCursorFallbackIssueWarning } from "./cursor-fallback-warning.js";
 import { registerCursorAgentsContextDedup } from "./cursor-agents-context-registration.js";
 import { registerCursorSdkSessionProcessErrorGuard } from "./cursor-sdk-process-error-guard.js";
-import { prepareCursorSessionForCompaction } from "./cursor-session-compaction-prep.js";
+import { registerCursorCompactionSummaryWindow } from "./cursor-compaction-summary.js";
 
 type CursorExtensionApi =
 	& Pick<ExtensionAPI, "registerProvider" | "registerCommand" | "on">
@@ -30,7 +30,8 @@ type CursorExtensionApi =
 	& Parameters<typeof registerCursorPiToolBridge>[0]
 	& Parameters<typeof registerCursorFallbackIssueWarning>[0]
 	& Parameters<typeof registerCursorAgentsContextDedup>[0]
-	& Parameters<typeof registerCursorSdkSessionProcessErrorGuard>[0];
+	& Parameters<typeof registerCursorSdkSessionProcessErrorGuard>[0]
+	& Parameters<typeof registerCursorCompactionSummaryWindow>[0];
 
 function createCursorProviderConfig(models: ProviderModelConfig[]): ProviderConfig {
 	return {
@@ -56,9 +57,10 @@ export default async function (pi: CursorExtensionApi) {
 	registerCursorSessionAgentLineage(pi);
 	registerCursorSessionAgentLifecycle(pi);
 	registerCursorSessionAgentResume(pi);
-	pi.on("session_before_compact", async () => {
-		await prepareCursorSessionForCompaction();
-	});
+	// No session_before_compact handler: its presence alone turns off omp's speculative
+	// compaction for every session in the process. The summarizer is routed to a one-shot
+	// agent instead (cursor-compaction-summary.ts).
+	registerCursorCompactionSummaryWindow(pi);
 	registerCursorRuntimeControls(pi);
 	registerCursorNativeToolDisplay(pi);
 	registerCursorQuestionTool(pi);

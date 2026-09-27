@@ -7,6 +7,8 @@ import { installCursorSdkOutputFilter, suppressCursorSdkOutput } from "./cursor-
 import {
 	acquireSessionCursorAgent,
 	buildCursorSessionSendPrompt,
+	createOneShotCursorAgent,
+	type OneShotCursorAgentLease,
 	planCursorSessionSend,
 	resetSessionCursorAgent,
 	type CursorSessionSendPlan,
@@ -70,6 +72,8 @@ export interface PrepareCursorProviderTurnParams {
 	throwIfAborted: () => void;
 	/** Snapshot resolved once by the runner before draining; reused unchanged through prepare. */
 	resolvedConfig: CursorResolvedSdkConfig;
+	/** Local only: run on a one-shot agent outside the session pool (see isCursorOneShotRequest). */
+	oneShot?: boolean;
 }
 
 interface PrepareCursorProviderTurnContext extends PrepareCursorProviderTurnParams {
@@ -101,6 +105,16 @@ function buildCloudCursorProviderTurnLifecycle(agent: SDKAgent): CursorProviderT
 		dispose: async () => {
 			await agent[Symbol.asyncDispose]?.();
 		},
+	};
+}
+
+// A one-shot run never updates the pool or a resume handle; its agent and store go when the turn ends.
+function buildOneShotCursorProviderTurnLifecycle(lease: OneShotCursorAgentLease): CursorProviderTurnLifecycle {
+	return {
+		trackRunCompletion: () => {},
+		commitSend: () => {},
+		abandon: () => lease.dispose(),
+		dispose: () => lease.dispose(),
 	};
 }
 
@@ -244,6 +258,7 @@ async function prepareCursorLocalProviderTurn(
 
 	let restoreCursorSdkOutputFilter: (() => void) | undefined;
 	let sessionAgentScopeKey: string | undefined;
+	let oneShotLease: OneShotCursorAgentLease | undefined;
 	let liveRun: CursorLiveRun | undefined;
 	let completed = false;
 
@@ -286,7 +301,8 @@ async function prepareCursorLocalProviderTurn(
 			createAgent: (createOptions: Parameters<typeof Agent.create>[0]) =>
 				suppressCursorSdkOutput(() => Agent.create(createOptions)),
 		};
-		let sessionAgentLease = await acquireSessionCursorAgent(sessionAgentAcquireParams);
+		oneShotLease = prepareParams.oneShot ? await createOneShotCursorAgent(sessionAgentAcquireParams) : undefined;
+		let sessionAgentLease = oneShotLease ?? (await acquireSessionCursorAgent(sessionAgentAcquireParams));
 		sessionAgentScopeKey = sessionAgentLease.scopeKey;
 		throwIfAborted();
 
@@ -311,7 +327,9 @@ async function prepareCursorLocalProviderTurn(
 				}),
 			};
 		};
-		let sendPlan = planCursorSessionSend(sessionAgentLease.sendState, context);
+		let sendPlan: CursorSessionSendPlan = oneShotLease
+			? { mode: "bootstrap", resetAgent: false, reason: "one_shot" }
+			: planCursorSessionSend(sessionAgentLease.sendState, context);
 		if (sessionAgentLease.created && sessionAgentLease.resumed && sendPlan.mode === "incremental") {
 			sendPlan = { mode: "bootstrap", resetAgent: false, reason: "process_resume" };
 		}
@@ -336,7 +354,8 @@ async function prepareCursorLocalProviderTurn(
 		};
 		const sessionBridgeRun = bridgeRun;
 		const promptInputTokens = estimateCursorPromptTokens(prompt, promptOptions);
-		const useNativeToolReplay = isCursorNativeToolDisplayRuntimeEnabled();
+		// One-shot runs (the compaction summarizer) return plain text: no replay cards, no live run.
+		const useNativeToolReplay = !oneShotLease && isCursorNativeToolDisplayRuntimeEnabled();
 		const activeToolNames = getActiveContextToolNames(context);
 		sdkEventDebug?.recordProviderMeta({
 			model: {
@@ -418,7 +437,9 @@ async function prepareCursorLocalProviderTurn(
 			sessionAgentLease,
 			localForce: resolvedConfig.local.force,
 			restoreCursorSdkOutputFilter,
-			lifecycle: buildLocalCursorProviderTurnLifecycle(sessionAgentLease, sessionAgentScopeKey),
+			lifecycle: oneShotLease
+				? buildOneShotCursorProviderTurnLifecycle(oneShotLease)
+				: buildLocalCursorProviderTurnLifecycle(sessionAgentLease, sessionAgentScopeKey),
 			runtime: liveRun
 				? { kind: "live", liveRun, turnCoordinator }
 				: { kind: "direct", turnCoordinator },
@@ -429,6 +450,8 @@ async function prepareCursorLocalProviderTurn(
 				await cursorLiveRuns
 					.release(liveRun)
 					.catch(() => abandonSessionCursorAgent(sessionAgentScopeKey).catch(() => {}));
+			} else if (oneShotLease) {
+				await oneShotLease.dispose();
 			} else {
 				await abandonSessionCursorAgent(sessionAgentScopeKey).catch(() => {});
 			}

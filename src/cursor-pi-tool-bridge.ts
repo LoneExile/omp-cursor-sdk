@@ -91,38 +91,47 @@ Get-CimInstance Win32_Process -Filter "Name = 'bash.exe' OR Name = 'sh.exe'" |
 export function registerCursorPiToolBridge(pi: CursorPiToolBridgeExtensionApi): CursorPiToolBridge {
 	bridgeToolExecutionAbortTracker.abortAll("Cursor pi tool bridge extension reloaded");
 	void registeredCursorPiToolBridge?.disposeAll("Cursor pi tool bridge extension reloaded");
-	const bridge = new CursorPiToolBridgeRegistry(pi);
-	registeredCursorPiToolBridge = bridge;
-	pi.on("tool_call", (event, ctx) => {
-		if (registeredCursorPiToolBridge !== bridge) return undefined;
-		if (!bridge.hasPendingPiToolCallId(event.toolCallId)) {
-			return isCursorPiBridgeToolCallId(event.toolCallId)
-				? { block: true, reason: "Cursor pi bridge tool call is no longer pending" }
-				: undefined;
-		}
-		const windowsAbortMarker = installWindowsBridgeBashAbortMarker(event);
-		const trackingStarted = bridgeToolExecutionAbortTracker.track(event.toolCallId, {
-			// OMP's ExtensionContext exposes abort() but no signal, so the
-			// tracker cannot observe host-initiated aborts from the signal
-			// alone; cancellation arrives via tool_result, session_shutdown,
-			// or the turn_end handler below. A locally-owned AbortController
-			// was tried and removed: it made the tracker's signal
-			// self-referential (only our own abort could trip it) and
-			// double-fired ctx.abort() on tracker-initiated aborts.
-			abort: () => {
-				ctx.abort();
-				killWindowsBridgeBashMarkerTree(windowsAbortMarker);
-			},
-			cancelPending: (reason) => {
-				bridge.cancelPendingPiToolCallId(event.toolCallId, reason);
-			},
+	// tool_call/tool_result handlers attach on the first run that exposes pi tools: omp's
+	// speculative local-read execution is off whenever any extension handles either event
+	// (pi-coding-agent speculation/host.ts hasLifecycleHandlers), so registering them at load
+	// would turn it off for sessions that never use a Cursor model. omp has no unsubscribe.
+	let toolHooksAttached = false;
+	const attachToolHooks = (): void => {
+		if (toolHooksAttached) return;
+		toolHooksAttached = true;
+		pi.on("tool_call", (event, ctx) => {
+			if (registeredCursorPiToolBridge !== bridge) return undefined;
+			if (!bridge.hasPendingPiToolCallId(event.toolCallId)) {
+				return isCursorPiBridgeToolCallId(event.toolCallId)
+					? { block: true, reason: "Cursor pi bridge tool call is no longer pending" }
+					: undefined;
+			}
+			const windowsAbortMarker = installWindowsBridgeBashAbortMarker(event);
+			const trackingStarted = bridgeToolExecutionAbortTracker.track(event.toolCallId, {
+				// OMP's ExtensionContext exposes abort() but no signal, so the
+				// tracker cannot observe host-initiated aborts from the signal
+				// alone; cancellation arrives via tool_result, session_shutdown,
+				// or the turn_end handler below. A locally-owned AbortController
+				// was tried and removed: it made the tracker's signal
+				// self-referential (only our own abort could trip it) and
+				// double-fired ctx.abort() on tracker-initiated aborts.
+				abort: () => {
+					ctx.abort();
+					killWindowsBridgeBashMarkerTree(windowsAbortMarker);
+				},
+				cancelPending: (reason) => {
+					bridge.cancelPendingPiToolCallId(event.toolCallId, reason);
+				},
+			});
+			if (trackingStarted) return undefined;
+			return { block: true, reason: "Cursor pi bridge tool execution was aborted before it started" };
 		});
-		if (trackingStarted) return undefined;
-		return { block: true, reason: "Cursor pi bridge tool execution was aborted before it started" };
-	});
-	pi.on("tool_result", (event) => {
-		bridgeToolExecutionAbortTracker.finish(event.toolCallId);
-	});
+		pi.on("tool_result", (event) => {
+			bridgeToolExecutionAbortTracker.finish(event.toolCallId);
+		});
+	};
+	const bridge = new CursorPiToolBridgeRegistry(pi, process.env, attachToolHooks);
+	registeredCursorPiToolBridge = bridge;
 	// Closest OMP analog to upstream's host-abort signal edge: any bridge
 	// execution still active when a turn ends is aborted. No-op when none.
 	pi.on("turn_end", () => {

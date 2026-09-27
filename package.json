@@ -119,7 +119,7 @@
     "typecheck:tests": "tsc -p tsconfig.test.json --noEmit",
     "typecheck:replay-compile": "tsc --noEmit -p test/tsconfig.json",
     "verify": "npm run check:platform-smoke && npm run typecheck && npm test",
-    "test": "bun test test/cursor-api-key.test.ts test/model-list-cache.test.ts test/model-discovery-selection.test.ts test/context.test.ts test/package-metadata.test.ts test/cursor-config.test.ts test/cursor-model-lifecycle.test.ts test/cursor-session-scope.test.ts test/cursor-model.test.ts test/cursor-provider-errors.test.ts test/cursor-provider-run-finalizer-abort.test.ts test/cursor-text-boundaries.test.ts test/cursor-session-agent-resume-compaction.test.ts test/cursor-pi-tool-bridge-server-lifecycle.test.ts test/cursor-usage-compaction.test.ts test/cursor-session-send-policy.test.ts",
+    "test": "bun test test/cursor-api-key.test.ts test/model-list-cache.test.ts test/model-discovery-selection.test.ts test/context.test.ts test/package-metadata.test.ts test/cursor-config.test.ts test/cursor-model-lifecycle.test.ts test/cursor-session-scope.test.ts test/cursor-model.test.ts test/cursor-provider-errors.test.ts test/cursor-provider-run-finalizer-abort.test.ts test/cursor-text-boundaries.test.ts test/cursor-session-agent-resume-compaction.test.ts test/cursor-pi-tool-bridge-server-lifecycle.test.ts test/cursor-usage-compaction.test.ts test/cursor-session-send-policy.test.ts test/cursor-compaction-summary.test.ts test/cursor-pi-tool-bridge-hooks.test.ts",
     "test:full": "bun test test/*.test.ts",
     "test:upstream": "vitest run",
     "test:watch": "vitest",

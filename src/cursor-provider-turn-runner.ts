@@ -1,4 +1,5 @@
 import { CursorLiveRunAbortError } from "./cursor-live-run-coordinator.js";
+import { isCursorOneShotRequest } from "./cursor-compaction-summary.js";
 import { drainExistingCursorLiveRunBeforeSend } from "./cursor-provider-live-run-drain.js";
 import { invalidateSessionAgent } from "./cursor-session-agent.js";
 import { resolveCursorStringApiKeySync } from "./cursor-api-key.js";
@@ -79,7 +80,10 @@ export class CursorProviderTurnRunner {
 			// prepare dispatch below always act on the same config snapshot.
 			const resolvedConfig = resolveCursorProviderTurnConfig(cwd);
 			this.runtimeTarget = resolvedConfig.runtime.value;
-			if (resolvedConfig.runtime.value === "local") {
+			// Decided before the drain: a one-shot request (compaction summarizer) must not
+			// drain or attach to a live run of the pooled conversation it may run beside.
+			const oneShot = resolvedConfig.runtime.value === "local" && isCursorOneShotRequest(context);
+			if (resolvedConfig.runtime.value === "local" && !oneShot) {
 				// The observed local-executor closed-pipe EPIPE is contained only from this
 				// turn's pre-send live-run drain through run completion; for live runs the
 				// finalizer holds the guard until run.wait() settles. A hit marks
@@ -105,6 +109,7 @@ export class CursorProviderTurnRunner {
 				sdkEventDebug: this.sdkEventDebug,
 				throwIfAborted: () => this.throwIfAborted(),
 				resolvedConfig,
+				oneShot,
 			});
 
 			sendResult = await sendCursorProviderTurn({
