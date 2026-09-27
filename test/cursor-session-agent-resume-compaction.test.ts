@@ -58,16 +58,16 @@ describe("Cursor session resume during compaction", () => {
 		expect(appended).toEqual([[expect.any(String), expect.objectContaining({ agentId: "agent-normal" })]]);
 	});
 
-	// The summarizer runs on a one-shot agent that never persists (cursor-compaction-summary.ts),
-	// so a failed or cancelled compaction leaves nothing to suppress: the next turn persists.
-	it("persists the next normal turn after a failed compaction", () => {
+	// Only pooled sends persist a handle; the summarizer's one-shot agent never does
+	// (cursor-one-shot-request.ts), so nothing gates a pooled turn's handle.
+	it("persists a pooled turn's handle at its turn_end", () => {
 		const appended: unknown[] = [];
 		const handlers = registerHandlers(appended);
 
 		handlers.get("turn_start")?.({}, { sessionManager: createSessionManager() });
-		persistCursorSessionAgentResumeHandle(createHandle("agent-next-turn") as any);
+		persistCursorSessionAgentResumeHandle(createHandle("agent-pooled-turn") as any);
 		handlers.get("turn_end")?.({}, { sessionManager: createSessionManager() });
 
-		expect(appended).toEqual([[expect.any(String), expect.objectContaining({ agentId: "agent-next-turn" })]]);
+		expect(appended).toEqual([[expect.any(String), expect.objectContaining({ agentId: "agent-pooled-turn" })]]);
 	});
 });
