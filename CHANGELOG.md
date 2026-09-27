@@ -17,9 +17,11 @@
 
 - Cursor models whose effort control is the `reasoning_effort` parameter (Grok 4.7, Gemini 3.8 Flash) now register as reasoning models and map thinking levels onto `reasoning_effort`; previously every such request kept Cursor's catalog default effort.
 - Occupancy estimates no longer rise back to a kept pre-compaction assistant's usage (#204). The floor uses the newest same-model assistant usage that follows every history rewrite before it in the request (a compaction or branch summary's `historyRewriteAt`, a pruned tool result's `prunedAt`), the forward scan of omp's `findRequestUsageAnchor`, so auto-compaction does not re-fire on a near-empty context.
-- omp developer messages (extension custom messages, `@file` mentions) are included in Cursor prompts and force a re-bootstrap when they arrive before the latest prompt; they were silently dropped.
+- A follow-up turn on the pooled Cursor agent now carries every user and developer message appended since the last send, in omp's order (the prompt, then `@file` mentions, `before_agent_start` extension messages and queued next-turn messages, plus `!` command output). Developer messages were silently dropped before. Only a structural change (system prompt, rewritten or shortened history, compaction or branch summary, tool-result continuation without a live run) re-bootstraps a fresh agent.
 - `@fast`/`@slow` lanes without their own measurement use the measured window of the same model and context (for example `claude-opus-4-8@1m@fast` is 300K, not the 1M label).
-- After a failed or cancelled compaction, the next normal turn persists its local-resume handle again; the suppression now clears at the next `turn_start` as well as on `session_compact`.
+- omp's speculative and async compaction stay enabled. The plugin no longer registers `session_before_compact`, whose presence alone turned them off for every session in the process, Cursor or not. The compaction summarizer runs on a one-shot Cursor agent outside the session pool that never persists a resume handle, so it cannot disturb the conversation agent or leak a handle into the next turn, including after a failed or cancelled compaction.
+- The pi tool bridge attaches its `tool_call`/`tool_result` hooks on the first Cursor run that exposes omp tools, so omp's speculative local-read tool execution stays on for sessions that never use it.
+- A pi tool bridge run that fails to start is dropped and its MCP server closed instead of staying registered.
 - One boundary between two Cursor SDK assistant messages now renders as one blank line. The ported boundary (upstream a221841) appended a fixed `"\n\n"`, which became its own text block whenever a tool trace had closed the previous one, so omp print mode (one `"\n"` after every text block) printed four blank lines. The separator now counts newlines the model already emitted, stays inside the open text block (one Markdown paragraph break in the TUI), and adds no separator-only block after a trace.
 - Auth guidance now says to set `CURSOR_API_KEY` (Cursor Dashboard → API Keys) in `~/.omp/.env` or the environment and restart omp, instead of Pi's `/login -> Use an API key -> Cursor`.
 - Tests run in a throwaway agent dir (bun preload) and no longer overwrite `~/.omp/agent/cursor-sdk-*.json`.
@@ -27,9 +29,9 @@
 ### Ported from upstream (fitchmultz/pi-cursor-sdk)
 
 - Keep the abort listener until a live Cursor run settles (1502ddd).
-- Preserve `!` execution output before follow-up prompts by re-bootstrapping (9a46cbb).
+- Preserve `!` execution output before follow-up prompts (9a46cbb); it now travels in the incremental send instead of forcing a re-bootstrap.
 - Preserve Cursor assistant text boundaries (a221841).
-- Suppress compaction-summarizer resume handles (07b3138, #223 part).
+- Keep compaction-summarizer resume handles out of the next turn (07b3138, #223 part); now done by running the summarizer on a one-shot agent.
 - Refresh the fallback Cursor model snapshot and serialize the pi bridge HTTP server lifecycle (f6d5b99, bridge change hand-ported).
 
 ### Dependencies
