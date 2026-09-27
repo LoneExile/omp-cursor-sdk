@@ -119,13 +119,31 @@ function isCompatibleCursorAssistantMeasurement(assistant: AssistantMessage, mod
 	return assistant.api === model.api && assistant.provider === model.provider && assistant.model === model.id;
 }
 
+/**
+ * Latest client-side history rewrite in the request. OMP hands providers compaction and
+ * branch summaries as `user` messages carrying `historyRewriteAt` (pi-agent-core
+ * convertMessageToLlm); a kept pre-compaction assistant's usage still counts the
+ * summarized-away prefix. Same staleness rule as pi-agent-core findRequestUsageAnchor.
+ */
+function getLatestHistoryRewriteAt(context: Context): number {
+	let rewriteAt = Number.NEGATIVE_INFINITY;
+	for (const message of context.messages) {
+		if (message.role === "user" && message.historyRewriteAt !== undefined) {
+			rewriteAt = Math.max(rewriteAt, message.historyRewriteAt, message.timestamp);
+		}
+	}
+	return rewriteAt;
+}
+
 function getLastAcceptedContextOccupancy(context: Context, model: Model<Api>): number {
+	const rewriteAt = getLatestHistoryRewriteAt(context);
 	for (let index = context.messages.length - 1; index >= 0; index -= 1) {
 		const message = context.messages[index];
 		if (message.role !== "assistant" || !("usage" in message)) continue;
 		const assistant = message as AssistantMessage;
 		if (assistant.stopReason === "aborted" || assistant.stopReason === "error" || !assistant.usage) continue;
 		if (!isCompatibleCursorAssistantMeasurement(assistant, model)) continue;
+		if (assistant.timestamp <= rewriteAt) continue;
 		const { usage } = assistant;
 		const total =
 			usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
