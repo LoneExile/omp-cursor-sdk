@@ -4,6 +4,7 @@ import { convertToLlm } from "@oh-my-pi/pi-coding-agent";
 import type { AgentModeOption, SDKImage } from "@cursor/sdk";
 import { CURSOR_PI_BRIDGE_PREFERENCE_TEXT } from "./cursor-bridge-contract.js";
 import { getCursorReplayPromptLabel } from "./cursor-tool-presentation-registry.js";
+import { CURSOR_SDK_API } from "./cursor-model.js";
 
 export interface CursorPrompt {
 	text: string;
@@ -379,8 +380,13 @@ function isCursorInputMessage(message: Message): boolean {
  * start, or `undefined` when the context diverged structurally and the session agent
  * must be rebootstrapped: first send, system prompt change, shrink, edited prefix, a
  * compaction/branch summary (raw roles, or OMP's converted `user` with
- * `historyRewriteAt`), or appended messages without any new input (tool results of a
+ * `historyRewriteAt`), an assistant turn another provider answered (the user switched
+ * models and back), or appended messages without any new input (tool results of a
  * live run that no longer exists).
+ *
+ * Every appended `cursor-sdk` assistant came from the pooled agent: the pool key is the
+ * Cursor model selection, so a turn answered by a different Cursor model or effort
+ * replaced the pool entry, and the next send already bootstraps a fresh agent.
  */
 export function getCursorIncrementalSendStart(
 	sendState: { bootstrapped: boolean; contextFingerprint: string },
@@ -404,6 +410,7 @@ export function getCursorIncrementalSendStart(
 	})) return undefined;
 	const appended = normalizePiContextMessages(appendedRaw);
 	if (appended.some((message) => message.role === "user" && message.historyRewriteAt !== undefined)) return undefined;
+	if (appended.some((message) => message.role === "assistant" && message.api !== CURSOR_SDK_API)) return undefined;
 	if (appended.length > 0 && !appended.some(isCursorInputMessage)) return undefined;
 	return start;
 }

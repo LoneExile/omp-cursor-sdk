@@ -732,6 +732,36 @@ describe("cursor session prompt assembly", () => {
 		expect(prompt.indexOf("ok-output")).toBeLessThan(prompt.indexOf("User: Now inspect the result"));
 	});
 
+	it("rebootstraps after another model answered in between, carrying its turns", () => {
+		// cursor-sdk → anthropic (tool loop) → cursor-sdk: the pooled agent never saw the
+		// anthropic turns, so they must reach Cursor through a bootstrap transcript.
+		const otherModel = { ...cursorReply, api: "anthropic-messages", provider: "anthropic", model: "claude-opus-4-8" };
+		const context: Context = {
+			systemPrompt: ["Be helpful."],
+			messages: hostMessages([
+				firstPrompt,
+				cursorReply,
+				{ role: "user", content: "Now rename the module", timestamp: 3 },
+				{
+					...otherModel,
+					content: [{ type: "toolCall", id: "call-rename", name: "bash", arguments: { command: "git mv parser.ts lexer.ts" } }],
+					stopReason: "toolUse",
+					timestamp: 4,
+				},
+				{ role: "toolResult", toolCallId: "call-rename", toolName: "bash", content: [{ type: "text", text: "renamed-ok" }], isError: false, timestamp: 5 },
+				{ ...otherModel, content: [{ type: "text", text: "Module renamed to lexer.ts." }], timestamp: 6 },
+				{ role: "user", content: "Did you also update the tests?", timestamp: 7 },
+			]),
+		};
+
+		const plan = planCursorSessionSend(sendStateFor(priorContext), context);
+		expect(plan).toEqual({ mode: "bootstrap", resetAgent: true, reason: "context_divergence" });
+		const prompt = buildCursorSessionSendPrompt(context, {}, plan).text;
+		for (const text of ["Now rename the module", "git mv parser.ts lexer.ts", "renamed-ok", "Module renamed to lexer.ts.", "Did you also update the tests?"]) {
+			expect(prompt).toContain(text);
+		}
+	});
+
 	it("rebootstraps a tool-result continuation that has no new input", () => {
 		const context: Context = {
 			systemPrompt: ["Be helpful."],

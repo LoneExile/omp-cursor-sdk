@@ -227,8 +227,10 @@ The extension wires into OMP's session events:
   last send (OMP adds plan/goal context, `!` output, @file mentions,
   `before_agent_start` and nextTurn messages around the prompt); the agent is
   reset and re-bootstrapped only when the context diverges structurally
-  (system prompt change, edited or shrunk history, a summary, or tool results
-  with no live run).
+  (system prompt change, edited or shrunk history, a summary, a turn another
+  provider answered after a model switch, or tool results with no live run).
+  Switching to a different Cursor model or effort changes the pool key
+  (the model selection), so that turn already starts a fresh agent.
 - **compaction summarizer:** OMP runs it on the session side-stream, outside
   the agent loop, and with async compaction concurrently with normal turns.
   The plugin registers no `session_before_compact` handler: its presence alone
