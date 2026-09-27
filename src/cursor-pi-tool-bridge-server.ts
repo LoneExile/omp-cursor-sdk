@@ -62,7 +62,15 @@ export class CursorPiToolBridgeRegistry implements CursorPiToolBridge {
 		if (enabled) this.onEnabledRun();
 		const run = new CursorPiToolBridgeRunImpl(this, this.env, snapshot, enabled, options);
 		this.runs.add(run);
-		await run.start();
+		try {
+			await run.start();
+		} catch (error) {
+			// A run that never started must not stay visible to pending-call lookups or keep
+			// its MCP server open; dispose() closes the server and drops the route.
+			this.runs.delete(run);
+			await run.dispose().catch(() => undefined);
+			throw error;
+		}
 		run.emitStartDiagnostics(bridgeEnabled);
 		return run;
 	}
