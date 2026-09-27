@@ -50,7 +50,7 @@ If resync runs but `context.tools` is still stale (e.g. only `read` listed), the
 
 ## Auth: use `CURSOR_API_KEY` from omp
 
-omp resolves the Cursor SDK key from `CURSOR_API_KEY`, supplied by `~/.omp/.env` loaded at omp startup or by the environment. Provider turns also accept omp's resolved `options.apiKey`. There is no Pi `/login`, `--api-key` flow, or `~/.pi/agent/auth.json` for this plugin.
+omp resolves the Cursor SDK key from `CURSOR_API_KEY`, supplied by `~/.omp/.env` loaded at omp startup or by the environment. Provider turns also accept omp's resolved `options.apiKey`. There is no Pi `/login` flow or `~/.pi/agent/auth.json` for this plugin, and omp's built-in `/login` Cursor OAuth is not used.
 
 - Restart omp after changing `~/.omp/.env`; omp loads it at startup.
 - Isolated runs must provide `CURSOR_API_KEY` in their environment (or an isolated `~/.omp/.env`).
@@ -168,7 +168,7 @@ Simulate plan-mode execute stripping with the repo fixture:
 It sets active tools to `read`, `bash`, `edit`, `write` on each `turn_start`. Run pi with:
 
 ```bash
-omp --approve -e scripts/fixtures/plan-strip-shim --cursor-no-fast --model cursor-sdk/composer-2-5 \
+omp -e scripts/fixtures/plan-strip-shim --cursor-no-fast --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/plan-strip" \
   -p 'After reset, read README.md and answer PLAN_STRIP_OK=yes.'
 ```
@@ -286,7 +286,7 @@ Artifacts under `--out` (default `.debug/cursor-sdk-events/<timestamp>/` under `
 During any normal pi session you can also opt in with:
 
 ```bash
-PI_CURSOR_SDK_EVENT_DEBUG=1 omp --approve -e . --model cursor-sdk/composer-2-5
+PI_CURSOR_SDK_EVENT_DEBUG=1 omp -e . --model cursor-sdk/composer-2-5
 ```
 
 Multi-turn sessions group automatically by pi session file:
@@ -351,14 +351,14 @@ Use an isolated session dir and do not paste auth, tokens, or raw debug payloads
 
 ```bash
 SMOKE_DIR="/tmp/pi-cursor-sdk-issue40-$(date +%s)"
-mkdir -p "$SMOKE_DIR/home/.pi/agent"
-cp "$HOME/.pi/agent/auth.json" "$SMOKE_DIR/home/.pi/agent/auth.json"
-chmod 600 "$SMOKE_DIR/home/.pi/agent/auth.json"
+mkdir -p "$SMOKE_DIR/home"
 
-env -i HOME="$SMOKE_DIR/home" PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+# Reads the key from ~/.omp/.env without printing it; omp is a Bun script, so PATH needs both the omp and bun directories.
+env -i HOME="$SMOKE_DIR/home" PATH="$(dirname "$(command -v omp)"):$(dirname "$(command -v bun)"):/usr/bin:/bin" \
+  CURSOR_API_KEY="$(sed -n 's/^CURSOR_API_KEY=//p' "$HOME/.omp/.env")" \
   MISE_DISABLE=1 \
   PI_CURSOR_PI_TOOL_BRIDGE_DEBUG=1 \
-  omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
+  omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/session" \
   -p '<exact reporter prompt>'
 ```

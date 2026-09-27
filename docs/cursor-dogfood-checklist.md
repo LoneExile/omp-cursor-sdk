@@ -5,7 +5,7 @@ Short maintainer checklist for **minimal-surface** validation after prompt, brid
 ## Minimal environment
 
 - Build first after any `src/` edit: `npm run build` (the pi manifest loads compiled `dist/`)
-- Extension only: `omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5`
+- Extension only: `omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5`
 - Fresh session dir: `--session-dir /tmp/pi-cursor-dogfood-<id>`
 - Baseline surface (no ambient Cursor MCP/rules):
   - `PI_CURSOR_SETTING_SOURCES=none`, **or**
@@ -24,7 +24,7 @@ In-session debug: `/cursor-tools` prints bridge enablement, bootstrap manifest e
 
 ## CLI spot-check
 
-`omp --approve -e . --list-models cursor` should exit 0 and show a Cursor model table. On pi 0.79.x that table can land on stderr in automation, so capture both streams or redirect `2>&1` before treating empty stdout as a discovery failure.
+`omp models cursor-sdk -e .` should exit 0 and print a table of `cursor-sdk` models on stdout.
 
 ## JSONL spot-check
 

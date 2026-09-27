@@ -10,7 +10,7 @@ Use this manual checklist during development and debugging of Cursor provider/ru
 
 - Build first: `npm run build` after any `src/` edit — the pi manifest loads compiled `dist/`, so unbuilt runs validate stale code. (the cloud/steering/local-resume/provider-debug launchers rebuild automatically even when run directly with `node scripts/...`; `smoke:live`/`smoke:visual`/`smoke:isolated` build via their npm scripts; direct `pi -e .` invocations do not build.)
 - Run from a clean working tree except for the intended branch diff.
-- Use the local extension under test: `omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5`.
+- Use the local extension under test: `omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5`.
 - Use a temporary `--session-dir` for every run.
 - Do not paste or commit Cursor API keys, raw session contents with secrets, endpoint URLs, or local private paths.
 - If an inner-loop check fails, stop and fix or use [docs/platform-smoke.md](./platform-smoke.md) as the release-blocking source of truth. Do not treat this checklist as a narrower replacement for the platform gate.
@@ -22,12 +22,12 @@ Use this manual checklist during development and debugging of Cursor provider/ru
 ```bash
 export SMOKE_DIR="/tmp/pi-cursor-sdk-live-smoke-$(date +%Y%m%dT%H%M%S)"
 mkdir -p "$SMOKE_DIR"
-pi --version
-npm ls @cursor/sdk @earendil-works/pi-coding-agent @earendil-works/pi-ai @earendil-works/pi-tui
-omp --approve -e . --list-models cursor-sdk
+omp --version
+npm ls @cursor/sdk @oh-my-pi/pi-coding-agent @oh-my-pi/pi-ai @oh-my-pi/pi-tui
+omp models cursor-sdk -e .
 ```
 
-Live omp runs resolve provider auth from **`CURSOR_API_KEY`**, supplied by `~/.omp/.env` loaded at omp startup or the environment. Provider turns also accept omp's resolved `options.apiKey`; there is no Pi `/login`, `--api-key`, or `~/.pi/agent/auth.json` flow. Isolated smoke must provide the key in its environment (or an isolated `~/.omp/.env`).
+Live omp runs resolve provider auth from **`CURSOR_API_KEY`**, supplied by `~/.omp/.env` loaded at omp startup or the environment. Provider turns also accept omp's resolved `options.apiKey`; there is no Pi `/login` or `~/.pi/agent/auth.json` flow, and omp's built-in `/login` Cursor OAuth is not used. Isolated smoke must provide the key in its environment (or an isolated `~/.omp/.env`).
 
 The repo also ships partial automation for the prerequisite/basic/default-settings/non-interactive math/TUI output polling/steering/diagnostic/JSONL subset:
 
@@ -78,7 +78,7 @@ Pass criteria:
 
 ```bash
 PI_CURSOR_SETTING_SOURCES=none \
-omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
+omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/basic" \
   --no-tools \
   -p 'Live smoke. Reply exactly: PI_CURSOR_SMOKE_OK' \
@@ -96,7 +96,7 @@ Pass criteria:
 ## 2. Default setting-source startup noise check
 
 ```bash
-omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
+omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/default-settings" \
   --no-tools \
   -p 'Default settings smoke. Include PRODUCT=42 in the final answer.' \
@@ -118,7 +118,7 @@ Run a real interactive session under tmux:
 ```bash
 SESSION="pi-cursor-sdk-smoke-$(date +%s)"
 tmux new-session -d -s "$SESSION" -x 120 -y 40 -- zsh -lc \
-  "cd '$PWD' && PI_CURSOR_SETTING_SOURCES=none omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5 --session-dir '$SMOKE_DIR/tui' --session-id cursor-sdk-1016-tui --no-tools 'TUI smoke. Compute 19 + 23. Reply only with SUM=<number>.'"
+  "cd '$PWD' && PI_CURSOR_SETTING_SOURCES=none omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5 --session-dir '$SMOKE_DIR/tui' --no-tools 'TUI smoke. Compute 19 + 23. Reply only with SUM=<number>.'"
 ```
 
 Observe with `tmux capture-pane -pt "$SESSION"` or attach manually.
@@ -126,7 +126,7 @@ Observe with `tmux capture-pane -pt "$SESSION"` or attach manually.
 Pass criteria:
 
 - Footer shows `(cursor) composer-2-5`. With `--cursor-no-fast`, Cursor fast mode is off and the Cursor extension status should show `cursor:local · fast:off`; ignore unrelated status text from other extensions.
-- The run uses Pi 0.84.0 `--session-id` successfully.
+- The session JSONL is written under `$SMOKE_DIR/tui`.
 - Assistant answer appears correctly.
 - `/session` shows one user and one assistant message for the simple run.
 - Persisted JSONL has one assistant message. If the screen appears duplicated, inspect JSONL before deciding whether it is a rendering bug.
@@ -205,9 +205,8 @@ Pass criteria:
 
 ```bash
 PI_CURSOR_SETTING_SOURCES=none \
-omp --approve -e . --cursor-no-fast --cursor-mode plan --model cursor-sdk/composer-2-5 \
+omp -e . --cursor-no-fast --cursor-mode plan --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/cursor-mode-plan" \
-  --session-id cursor-sdk-1016-plan \
   --no-tools \
   -p 'Cursor mode smoke. Reply with one short implementation plan for printing hello.' \
   > "$SMOKE_DIR/cursor-mode-plan.stdout.txt" \
@@ -227,7 +226,7 @@ Pass criteria:
 PI_CURSOR_SETTING_SOURCES=none \
 PI_CURSOR_EXPOSE_BUILTIN_TOOLS=1 \
 PI_CURSOR_PI_TOOL_BRIDGE_DEBUG=1 \
-omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
+omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/bridge" \
   -p 'Bridge smoke. Do exactly two tool calls before answering: first call pi__read on ./package.json; second call pi__read on ./definitely-missing-pi-cursor-sdk-smoke-file.txt. Then answer: OK_NAME=<package name>; MISSING_RESULT=<error or success>. Do not use shell.' \
   > "$SMOKE_DIR/bridge.stdout.txt" \
@@ -248,7 +247,7 @@ Pass criteria:
 PI_CURSOR_SETTING_SOURCES=none \
 PI_CURSOR_PI_TOOL_BRIDGE=0 \
 PI_CURSOR_NATIVE_TOOL_DISPLAY=1 \
-omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
+omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/native-replay" \
   -p 'Native replay smoke. Use your Cursor file-reading capability to read ./README.md, then answer README_SEEN=yes if it contains pi-cursor-sdk.' \
   > "$SMOKE_DIR/native-replay.stdout.txt" \
@@ -322,7 +321,7 @@ Use a harmless long-running command and interrupt it after the bridge request is
 PI_CURSOR_SETTING_SOURCES=none \
 PI_CURSOR_EXPOSE_BUILTIN_TOOLS=1 \
 PI_CURSOR_PI_TOOL_BRIDGE_DEBUG=1 \
-omp --approve -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
+omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5 \
   --session-dir "$SMOKE_DIR/abort" \
   -p 'Abort smoke. Call pi__bash with command: sleep 30 && echo SHOULD_NOT_PRINT. Do not answer until the tool completes.'
 ```
