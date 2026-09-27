@@ -1,10 +1,9 @@
 # Cursor dogfood checklist
 
-Short maintainer checklist for **minimal-surface** validation after prompt, bridge, replay, or manifest changes. This is the fast path from pi-cursor-composer dogfood sessions—not a substitute for the required [platform smoke gate](./platform-smoke.md).
+Short maintainer checklist for **minimal-surface** validation after prompt, bridge, replay, or manifest changes. This is the fast path from pi-cursor-composer dogfood sessions—not a substitute for the omp-native pre-commit validation in `AGENTS.md` (the Pi-era [platform smoke gate](./platform-smoke.md) is unported).
 
 ## Minimal environment
 
-- Build first after any `src/` edit: `npm run build` (the pi manifest loads compiled `dist/`)
 - Extension only: `omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5`
 - Fresh session dir: `--session-dir /tmp/pi-cursor-dogfood-<id>`
 - Baseline surface (no ambient Cursor MCP/rules):

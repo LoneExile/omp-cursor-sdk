@@ -1,12 +1,12 @@
 # Cursor Native Tool Visual Audit Workflow
 
-> **Platform Smoke (new):** The required cross-platform release gate includes a deterministic visual card matrix across all targets. See [docs/platform-smoke.md](./platform-smoke.md) for the required cards, assertion contract, and platform-matrix budget.
+> **Unported Pi-era tooling.** `npm run smoke:visual` (`scripts/visual-tui-smoke.mjs`) and the platform visual matrix still launch the Pi CLI (`pi --approve …`), and this omp fork does not load in Pi, so this workflow does not run as-is and is not a release gate. The current gate is the omp-native validation in `AGENTS.md` (`## Pre-commit validation (maintainer)`); [docs/platform-smoke.md](./platform-smoke.md) keeps the Pi-era card matrix for porting.
 
-This workflow is the canonical repo path for verifying Cursor SDK tool replay the way a human sees it in pi's interactive TUI, without stealing macOS focus.
+This workflow was the canonical repo path for verifying Cursor SDK tool replay the way a human sees it in pi's interactive TUI, without stealing macOS focus.
 
-Use it before accepting replay-card commits or PRs, and for every Cursor provider/runtime release where TUI card/color behavior could regress. Text logs and JSONL are necessary, but they are not enough when the claim is visual parity: always keep PNGs for the exact prompt, and keep before/after PNGs when reviewing a rendering change.
+In the Pi era it was used before accepting replay-card commits or PRs, and for every Cursor provider/runtime release where TUI card/color behavior could regress. Text logs and JSONL are necessary, but they are not enough when the claim is visual parity: always keep PNGs for the exact prompt, and keep before/after PNGs when reviewing a rendering change.
 
-Current validation baseline: Pi 0.84.0 or later, exact `@cursor/sdk@1.0.23`, and local validation packages `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, and `@earendil-works/pi-tui` at exact 0.84.0. Optional published Pi core peer dependencies use `"*"` ranges per current Pi package guidance.
+Pi-era validation baseline: Pi 0.84.0 or later, exact `@cursor/sdk@1.0.23`, and local validation packages `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, and `@earendil-works/pi-tui` at exact 0.84.0. Optional published Pi core peer dependencies use `"*"` ranges per current Pi package guidance.
 
 ## Cursor SDK 1.0.17 / pi 0.79.0 cutover visual record
 

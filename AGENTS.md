@@ -118,6 +118,7 @@ This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchm
 - Typecheck src only: `npm run typecheck:src` (must pass)
 - Typecheck tests/helpers: `npm run typecheck:tests` (has pre-existing errors in Pi-bound tests; the count must not grow)
 - Package-readiness check: `npm pack --dry-run`
+- `npm run verify` (check:platform-smoke, then typecheck, then test) fails today on pre-existing problems: the vitest step of `check:platform-smoke` fails `test/smoke-tooling.test.ts`, and `npm run typecheck` includes `typecheck:tests`, which exits non-zero on its pre-existing errors. Run the individual checks above instead.
 - Local development run, requires `CURSOR_API_KEY`: `omp -e ./src/index.ts --model cursor-sdk/composer-2.5`
 - List Cursor models: `omp models cursor-sdk -e ./src/index.ts`
 - Capture provider/SDK event artifacts for one prompt, requires `CURSOR_API_KEY`: from a `/tmp` scratch dir, `PI_CURSOR_SDK_EVENT_DEBUG=1 omp -e <repo> --model cursor-sdk/composer-2.5 --no-session -p "Reply with exactly OK"`, then read `.debug/cursor-sdk-events/**` and delete it.
