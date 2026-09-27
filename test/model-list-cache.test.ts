@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { ModelListItem } from "@cursor/sdk";
+import { getAgentDir, setAgentDir } from "@oh-my-pi/pi-utils";
 import {
 	fingerprintApiKey,
 	getModelCacheTtlMs,
@@ -24,6 +25,7 @@ const MODELS: ModelListItem[] = [
 describe("model-list-cache", () => {
 	const originalEnv = process.env;
 	let tmpAgentDir: string;
+	let runAgentDir: string;
 	const fp = fingerprintApiKey("test-key");
 
 	beforeEach(() => {
@@ -31,10 +33,13 @@ describe("model-list-cache", () => {
 		delete process.env[__testUtils.DISABLE_ENV_VAR];
 		delete process.env[__testUtils.TTL_ENV_VAR];
 		tmpAgentDir = mkdtempSync(join(tmpdir(), "pi-cursor-model-cache-"));
-		process.env.PI_CODING_AGENT_DIR = tmpAgentDir;
+		// getAgentDir() ignores later PI_CODING_AGENT_DIR changes; switch the resolver.
+		runAgentDir = getAgentDir();
+		setAgentDir(tmpAgentDir);
 	});
 
 	afterEach(() => {
+		setAgentDir(runAgentDir);
 		rmSync(tmpAgentDir, { recursive: true, force: true });
 		process.env = originalEnv;
 	});
