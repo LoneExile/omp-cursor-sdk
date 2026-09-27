@@ -278,10 +278,29 @@ OMP's model-id grammar treats `model:level` as thinking-level syntax
 (`opencode-go/deepseek-v4-flash:xhigh`). Pi's `:fast`/`:slow` suffix was
 normalized away at registration and could never be selected. The port
 renamed the suffix to `@fast`/`@slow` (OMP treats `@` literally, proven by
-the `@context` variants). Select variants with `--thinking`, e.g.
-`cursor-sdk/grok-4.6@fast --thinking high`: with OMP 18.3.4,
-`--model cursor-sdk/grok-4.7@256k:low` (and `cursor-sdk/kimi-k3:low`) failed
-with `Model ... not found`.
+the `@context` variants).
+
+Where the `:<level>` suffix works for `cursor-sdk` models (omp 18.3.4, 2026-09-27):
+
+- `modelRoles` in `config.yml` (and roles saved from `/model`): yes. A
+  `--config` overlay with `default: cursor-sdk/kimi-k3:low` ran with
+  `reasoning=low`, and `default: cursor-sdk/grok-4.7@256k:xhigh` sent
+  `reasoning_effort=xhigh` (debug `metadata.json`). Roles resolve after
+  extensions register.
+- `--model`: no. `--model cursor-sdk/kimi-k3:low`,
+  `cursor-sdk/grok-4.7@256k:low` and `…@256k@slow:low` exit with
+  `Model "…" not found`, also at commit 466af27 (before the thinking-metadata
+  change). Use `--model cursor-sdk/<id> --thinking <level>` instead.
+
+Cause (host): `main.ts:1342-1374` resolves `--model` before extensions load.
+On a miss it defers to the post-extension resolution (`options.modelPattern` →
+`sdk.ts:2594-2713`, which handles `:level`) only when
+`!parsed.model.includes(":")` (`main.ts:1367`); a selector carrying a
+thinking suffix exits at `main.ts:1372-1373`. The resolver itself accepts the
+id shape: once the provider is registered, `resolveCliModel` returns
+`cursor-sdk/grok-4.7@256k@slow` with level `xhigh`. Built-in
+(`cursor/gpt-5.6-luna:low`) and `models.yml` providers exist before that
+check, so their suffixes resolve.
 
 ### 8.3 Backend flakiness
 

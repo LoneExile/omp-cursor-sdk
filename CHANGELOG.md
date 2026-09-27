@@ -4,7 +4,7 @@
 
 ### Breaking
 
-- The plugin now registers its models under the `cursor-sdk` provider instead of `cursor`. omp 18.x ships a built-in OAuth `cursor` provider; sharing the id merged both catalogs and let this plugin's Cursor-only hooks act on built-in models. Update selectors such as `cursor/grok-4.7@256k` to `cursor-sdk/grok-4.7@256k` (including `modelRoles` in `~/.omp/agent/config.yml`). Stored keys are looked up for `cursor-sdk`; the built-in provider's `/login` OAuth credential is never used.
+- The plugin now registers its models under the `cursor-sdk` provider instead of `cursor`. omp 18.x ships a built-in OAuth `cursor` provider; sharing the id merged both catalogs and let this plugin's Cursor-only hooks act on built-in models. Update selectors that named this plugin's models, such as `cursor/grok-4.7@256k`, to `cursor-sdk/grok-4.7@256k`; in `modelRoles` the `:<level>` suffix keeps working (`default: cursor-sdk/grok-4.7@256k:xhigh`). Selectors for omp's built-in provider, such as `cursor/gpt-5.6-luna:low`, are unchanged and still resolve to the built-in `cursor` provider. On the command line pass the level with `--thinking`: omp 18.3.4 resolves `--model` before plugins register and rejects `--model cursor-sdk/<id>:<level>` as "Model not found". Stored keys are looked up for `cursor-sdk`; the built-in provider's `/login` OAuth credential is never used.
 
 ### Added
 

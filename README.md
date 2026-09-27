@@ -54,7 +54,10 @@ key to disk; the catalog cache is keyed by a hash of it.
 
 ## Usage
 
-Model selector: `cursor-sdk/<model>[@<context>][@fast|@slow]`, with `--thinking <level>` for reasoning models.
+Model selector: `cursor-sdk/<model>[@<context>][@fast|@slow]`. On the command line set the level with
+`--thinking <level>`; `--model cursor-sdk/<id>:<level>` fails with "Model not found" because omp 18.3.4
+resolves `--model` before plugins register. In `modelRoles` (config.yml, `/model` role assignment) the
+`:<level>` suffix works, e.g. `default: cursor-sdk/grok-4.7@256k:xhigh`.
 
 ```bash
 omp --model cursor-sdk/composer-2.5
@@ -96,8 +99,7 @@ runs: a bundled table, refined by each completed run into `~/.omp/agent/cursor-s
 | `/cursor-local-resume-cleanup [--dry-run\|--yes]` | Delete superseded local SDK agents |
 | `/cursor-tools` | Tool-surface report (debug) |
 
-Flags: `--cursor-fast`, `--cursor-no-fast`, `--cursor-mode <agent|plan>`, `--cursor-runtime <local|cloud>`,
-plus `--cursor-cloud-*` options for the cloud runtime.
+Flags: `--cursor-fast`, `--cursor-no-fast`, `--cursor-mode <agent|plan>`, `--cursor-runtime <local|cloud>`, `--cursor-cloud-*`.
 
 ## Environment and files
 
@@ -132,9 +134,8 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
 - **Refused by account policy**: some models need an acknowledgement on the Cursor side first. Claude
   Fable selections failed with "You must acknowledge Claude Fable 5's data retention policy to use the model."
 - **Stale or missing models**: the catalog is cached for 24 h; run `/cursor-refresh-models`.
-- **Debugging a turn**: run with `PI_CURSOR_SDK_EVENT_DEBUG=1` and inspect
-  `.debug/cursor-sdk-events/**/metadata.json` (the exact model selection sent) and `wait-result.json`.
-  The files can contain prompts and tool output; delete them afterwards.
+- **Debugging a turn**: run with `PI_CURSOR_SDK_EVENT_DEBUG=1`; `.debug/cursor-sdk-events/**/metadata.json` holds the exact
+  model selection sent, `wait-result.json` the SDK result. They can contain prompts and tool output; delete them afterwards.
 
 ## Development
 
