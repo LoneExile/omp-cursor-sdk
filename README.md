@@ -66,8 +66,10 @@ omp --model cursor-sdk/gpt-5.6-sol@272k --thinking off
 - **Thinking levels** are exactly the ones Cursor exposes for the model (the `thinking` column of
   `omp models cursor-sdk`): `grok-4.7` offers `low..xhigh`, many Claude and GPT-5.6 models add `max`.
   `off` works only where Cursor has an off value (Claude `thinking=false`, GPT-5.4 and later `none`).
-- **Context variants** (`@256k`, `@1m`, …) come from Cursor's catalog. The bare id uses Cursor's
-  default variant.
+- **Context variants** (`@256k`, `@1m`, …) come from Cursor's catalog. A model with context variants
+  is registered only as `<model>@<context>` rows (there is no bare `cursor-sdk/grok-4.7`, only
+  `@256k` and `@500k`); a bare id exists only for models without a context parameter. The other
+  parameters (effort, fast) start from Cursor's default variant.
 - **Fast lanes**: `@fast` and `@slow` pin Cursor's fast parameter. Without a suffix the model's
   default applies; `/cursor-fast` toggles and saves it for that model, and `--cursor-fast` /
   `--cursor-no-fast` force it for one run.
