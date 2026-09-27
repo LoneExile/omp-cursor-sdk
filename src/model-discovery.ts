@@ -325,6 +325,22 @@ export function getCursorModelMetadataEntries(): CursorModelMetadata[] {
 	}));
 }
 
+/**
+ * The largest catalog context value of `selectionModelId` that is smaller than `context`
+ * (e.g. "256k" for grok-4.7 refused at "500k"), or undefined when there is none.
+ */
+export function getSmallerCursorContextVariant(selectionModelId: string, context: string): string | undefined {
+	const refused = parseContextWindow(context);
+	if (refused === undefined) return undefined;
+	let best: { context: string; size: number } | undefined;
+	for (const metadata of metadataByPiModelId.values()) {
+		if (metadata.selectionModelId !== selectionModelId || !metadata.context) continue;
+		const size = parseContextWindow(metadata.context);
+		if (size !== undefined && size < refused && (!best || size > best.size)) best = { context: metadata.context, size };
+	}
+	return best?.context;
+}
+
 function setParam(params: ModelParameterValue[], id: string, value: string): void {
 	const existing = params.find((param) => param.id === id);
 	if (existing) {

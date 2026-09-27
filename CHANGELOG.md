@@ -10,7 +10,7 @@
 
 - Models advertise omp-native thinking metadata (`thinking: { mode: "effort", efforts, requiresEffort }`) listing exactly the levels Cursor exposes, so `omp models cursor-sdk` shows the real levels (for example `low..xhigh` for Grok 4.7, `low..max` for Claude Opus 5) and `--thinking xhigh`/`max` are no longer clamped to `high`. The ignored Pi `thinkingLevelMap` field is no longer registered.
 - Bundled context windows measured from live SDK checkpoints on 2026-09-27.
-- A refused context variant (`AI Model Not Found Invalid parameters for registry model`, for example `grok-4.7@500k`) keeps Cursor's message and adds a hint: larger context variants can need Cursor Max mode, which the SDK cannot request; use the smaller `@<context>` variant.
+- A refused context variant (`AI Model Not Found Invalid parameters for registry model`, for example `grok-4.7@500k`) keeps Cursor's message and adds a hint: larger context variants can need Cursor Max mode, which the SDK cannot request, and names the next smaller catalog context to use instead (`use the @256k variant instead of @500k`); no hint when the model has no smaller context.
 - README rewritten for omp: install via `omp plugin link` or `omp plugin install github:LoneExile/omp-cursor-sdk`, key setup, model id grammar, commands, and troubleshooting.
 
 ### Fixed

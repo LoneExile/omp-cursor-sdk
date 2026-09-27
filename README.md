@@ -128,7 +128,7 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
   until `CURSOR_API_KEY` is set and omp restarted.
 - **`AI Model Not Found Invalid parameters for registry model`**: Cursor refused the selected
   parameters. For a larger context variant the plugin adds a hint: it can need Cursor Max mode,
-  which the SDK cannot request. Use the model's smaller `@<context>` variant.
+  which the SDK cannot request, and names the smaller variant to use (for `grok-4.7@500k`: `@256k`).
 - **Intermittent `unauthenticated` errors** with a valid key have been seen from Cursor's backend
   for some requests; retrying, or another lane (`@fast`/`@slow`), has worked.
 - **Refused by account policy**: some models need an acknowledgement on the Cursor side first. Claude

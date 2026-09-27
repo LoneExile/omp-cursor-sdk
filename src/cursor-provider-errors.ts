@@ -3,6 +3,7 @@ import type { CursorRuntime } from "./cursor-config.js";
 import { CURSOR_API_KEY_SETUP_HINT } from "./cursor-api-key.js";
 import { asRecord } from "./cursor-record-utils.js";
 import { scrubSensitiveText } from "./cursor-sensitive-text.js";
+import { getSmallerCursorContextVariant } from "./model-discovery.js";
 
 export const MISSING_CURSOR_API_KEY_MESSAGE =
 	`Cursor SDK runs require a Cursor SDK API key; Cursor Agent CLI/Desktop login is not reused. ${CURSOR_API_KEY_SETUP_HINT}`;
@@ -301,8 +302,10 @@ const REFUSED_MODEL_PARAMETERS_PATTERN = /invalid parameters for registry model/
 
 function withRefusedContextVariantHint(detail: string, model: ModelSelection | undefined): string {
 	const context = model?.params?.find((param) => param.id === "context")?.value;
-	if (!context || !REFUSED_MODEL_PARAMETERS_PATTERN.test(detail)) return detail;
-	return `${detail}\nHint: larger context variants can require Cursor Max mode, which the Cursor SDK cannot request; use the model's smaller @<context> variant instead of @${context}.`;
+	if (!model || !context || !REFUSED_MODEL_PARAMETERS_PATTERN.test(detail)) return detail;
+	const smaller = getSmallerCursorContextVariant(model.id, context);
+	if (!smaller) return detail;
+	return `${detail}\nHint: larger context variants can require Cursor Max mode, which the Cursor SDK cannot request; use the @${smaller} variant instead of @${context}.`;
 }
 
 export function formatCursorSdkRunFailureDetail(

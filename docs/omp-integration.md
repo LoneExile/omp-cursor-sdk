@@ -110,8 +110,9 @@ catalog context label (`@1m` → 1000000), the base id, and `"default"`.
 Cursor Max-mode windows are not reachable: the SDK `ModelSelection`
 (`{ id, params }`) has no max-mode field. Measured `@1m` variants run at
 200k–300k (GPT `@1m` at 272000), and `grok-4.7@500k` is refused with
-`Invalid parameters for registry model`; the provider error appends a hint to
-use the smaller `@<context>` variant (`src/cursor-provider-errors.ts`).
+`Invalid parameters for registry model`; the provider error appends a hint naming the
+next smaller catalog context (`@256k`), and none when the model has no smaller
+context (`src/cursor-provider-errors.ts`).
 
 ## 4. Authentication and key resolution
 

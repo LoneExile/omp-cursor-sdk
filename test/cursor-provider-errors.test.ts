@@ -9,6 +9,7 @@ import {
 	resolveCursorSdkAbortCause,
 	sanitizeCursorProviderError,
 } from "../src/cursor-provider-errors.js";
+import { __testUtils as modelDiscoveryTestUtils } from "../src/model-discovery.js";
 
 function makeUnauthenticatedConnectError(): Error & { rawMessage: string; code: number; metadata: Headers } {
 	const error = new Error("[unauthenticated] Error") as Error & { rawMessage: string; code: number; metadata: Headers };
@@ -235,24 +236,46 @@ describe("cursor-provider-errors", () => {
 		durationMs: 5914,
 	};
 
-	it("keeps Cursor's refusal and appends a Max-mode hint for context selections", () => {
+	// Catalog contexts for grok-4.7 as listed by live `Cursor.models.list()` (2026-09-27).
+	function registerGrokContexts() {
+		modelDiscoveryTestUtils.registerModelItems([
+			{
+				id: "grok-4.7",
+				displayName: "Grok 4.7",
+				parameters: [{ id: "context", displayName: "Context", values: [{ value: "256k" }, { value: "500k" }] }],
+			},
+		]);
+	}
+
+	it("keeps Cursor's refusal and names the smaller catalog context", () => {
+		registerGrokContexts();
 		const detail = formatCursorSdkRunFailureDetail(refusedContextResult);
 		expect(detail).toBe(
 			'AI Model Not Found Invalid parameters for registry model: "grok-4.7"\n' +
-				"Hint: larger context variants can require Cursor Max mode, which the Cursor SDK cannot request; use the model's smaller @<context> variant instead of @500k.",
+				"Hint: larger context variants can require Cursor Max mode, which the Cursor SDK cannot request; use the @256k variant instead of @500k.",
 		);
 		// The provider error path must surface it verbatim, not as auth/network/generic guidance.
 		expect(sanitizeCursorProviderError(detail, "test-key")).toBe(detail);
 	});
 
-	it("adds no Max-mode hint without a context parameter or for other failures", () => {
+	it("adds no Max-mode hint without a smaller context, a context parameter, or a refusal", () => {
+		registerGrokContexts();
+		const refusal = 'AI Model Not Found Invalid parameters for registry model: "grok-4.7"';
+		const atSmallest = {
+			...refusedContextResult,
+			model: { id: "grok-4.7", params: [{ id: "context", value: "256k" }] },
+		};
+		expect(formatCursorSdkRunFailureDetail(atSmallest)).toBe(refusal);
 		const withoutContext = {
 			...refusedContextResult,
 			model: { id: "grok-4.7", params: [{ id: "reasoning_effort", value: "high" }] },
 		};
-		expect(formatCursorSdkRunFailureDetail(withoutContext)).toBe(
-			'AI Model Not Found Invalid parameters for registry model: "grok-4.7"',
-		);
+		expect(formatCursorSdkRunFailureDetail(withoutContext)).toBe(refusal);
+		const unknownModel = {
+			...refusedContextResult,
+			model: { id: "not-in-catalog", params: [{ id: "context", value: "500k" }] },
+		};
+		expect(formatCursorSdkRunFailureDetail(unknownModel)).toBe(refusal);
 		expect(
 			formatCursorSdkRunFailureDetail({ ...refusedContextResult, error: { message: "Backend rejected the run" } }),
 		).toBe("Backend rejected the run");
