@@ -220,7 +220,7 @@ describe("extension registration and discovery", () => {
 		expect(pi.registerProvider).toHaveBeenCalledOnce();
 
 		const [call] = pi._registered;
-		expect(call.name).toBe("cursor");
+		expect(call.name).toBe("cursor-sdk");
 		// OMP's ProviderConfig has no name field.
 		expect((call.config as { name?: string }).name).toBeUndefined();
 		expect(call.config.apiKey).toBe(CURSOR_API_KEY_CONFIG_VALUE);
@@ -615,7 +615,7 @@ describe("extension registration and discovery", () => {
 			}),
 		);
 
-		expect(getApiKeyForProvider).toHaveBeenCalledWith("cursor");
+		expect(getApiKeyForProvider).toHaveBeenCalledWith("cursor-sdk");
 		expect(mockedDiscover).toHaveBeenNthCalledWith(2, expect.objectContaining({ apiKey: "registry-key", forceRefresh: true }));
 		expect(mockedDiscover).toHaveBeenCalledTimes(2);
 		expect(pi.registerProvider).toHaveBeenCalledTimes(2);
@@ -722,7 +722,7 @@ describe("extension registration and discovery", () => {
 		const notify = vi.fn();
 		await pi.runSessionStart({
 			hasUI: true,
-			model: makeHarnessModel("cursor", "cursor-sdk", "composer-2"),
+			model: makeHarnessModel("cursor-sdk", "cursor-sdk", "composer-2"),
 			ui: { notify, setStatus: vi.fn() },
 			sessionManager: { getBranch: vi.fn(() => []) },
 		});
@@ -777,7 +777,7 @@ describe("extension registration and discovery", () => {
 		});
 		expect(notify).not.toHaveBeenCalled();
 
-		await pi.runModelSelect(makeHarnessModel("cursor", "cursor-sdk", "composer-2"), {
+		await pi.runModelSelect(makeHarnessModel("cursor-sdk", "cursor-sdk", "composer-2"), {
 			hasUI: true,
 			ui: { notify, setStatus: vi.fn() },
 		});
@@ -798,7 +798,7 @@ describe("extension registration and discovery", () => {
 		await extensionFactory(pi);
 
 		const notify = vi.fn();
-		const cursorModel = makeHarnessModel("cursor", "cursor-sdk", "composer-2");
+		const cursorModel = makeHarnessModel("cursor-sdk", "cursor-sdk", "composer-2");
 		await pi.runSessionStart({
 			hasUI: true,
 			model: cursorModel,

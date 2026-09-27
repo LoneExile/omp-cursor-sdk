@@ -323,10 +323,10 @@ capture_and_require_composer_model() {
 	local models_out="$SMOKE_DIR/prereq.models.txt"
 	local models_err="$SMOKE_DIR/prereq.stderr.txt"
 	if ! "${list_cmd[@]}" >"$models_out" 2>"$models_err"; then
-		fail "pi --list-models cursor failed"
+		fail "pi --list-models cursor-sdk failed"
 	fi
 	if ! model_listed "$models_out" && ! model_listed "$models_err"; then
-		fail "cursor/composer-2-5 not listed"
+		fail "cursor-sdk/composer-2-5 not listed"
 	fi
 }
 
@@ -389,10 +389,10 @@ EOF_SELFTEST_NODE
 #!/usr/bin/env bash
 i=0
 while [[ $i -lt 20000 ]]; do
-	printf 'cursor/model-%s\n' "$i"
+	printf 'cursor-sdk/model-%s\n' "$i"
 	i=$((i + 1))
 done
-printf 'cursor/composer-2.5\n'
+printf 'cursor-sdk/composer-2.5\n'
 exit 0
 EOF_FAKE_LIST
 	chmod +x "$fake_list_pi"
@@ -428,7 +428,7 @@ fi
 PI_BASE=(
 	"$PI_BIN" --approve -e "$ROOT"
 	--cursor-no-fast
-	--model cursor/composer-2-5
+	--model cursor-sdk/composer-2-5
 )
 
 if [[ -z "${CURSOR_API_KEY:-}" ]]; then
@@ -448,7 +448,7 @@ log "partial live smoke: prereq, basic, default-settings, noninteractive-math, t
 "${BASE_ENV[@]}" "$PI_BIN" --version | tee "$SMOKE_DIR/prereq.pi-version.txt"
 "${BASE_ENV[@]}" "$NPM_BIN" --prefix "$ROOT" ls @cursor/sdk @oh-my-pi/pi-coding-agent @oh-my-pi/pi-ai @oh-my-pi/pi-tui | tee "$SMOKE_DIR/prereq.npm-ls.txt"
 
-capture_and_require_composer_model "${NONE_ENV[@]}" "${PI_BASE[@]}" --list-models cursor
+capture_and_require_composer_model "${NONE_ENV[@]}" "${PI_BASE[@]}" --list-models cursor-sdk
 log "prereq PASS"
 
 run_direct basic 600 retry-empty-output "PI_CURSOR_SMOKE_OK" "PI_CURSOR_SMOKE_OK" \

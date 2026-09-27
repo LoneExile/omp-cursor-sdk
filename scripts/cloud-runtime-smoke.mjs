@@ -50,7 +50,7 @@ import { scrubSensitiveText } from "../shared/cursor-sensitive-text.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const EVIDENCE_PATH = join(root, "docs", "evidence", "cursor-cloud-smoke-matrix-latest.json");
-const MODEL = "cursor/composer-2-5";
+const MODEL = "cursor-sdk/composer-2-5";
 const CLOUD_RUN_ID_PATTERN = /^run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const cloudSmokeShutdown = createCloudSmokeShutdownController((child) => terminateChild(child, { graceMs: 15_000 }));
 const argv = process.argv.slice(2);

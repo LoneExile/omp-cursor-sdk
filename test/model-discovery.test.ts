@@ -104,10 +104,10 @@ describe("discoverModels", () => {
 	it("ignores adversarial Pi argv forms during startup discovery", async () => {
 		process.argv = [
 			"node", "pi", "--model", "anthropic/first", "--api-key", "first-key",
-			"--MODEL", "cursor/case", "--API-KEY", "case-key",
-			"--model=cursor/unsupported", "--api-key=equals-key",
-			"--models", "cursor/list-like", "--provider", "cursor",
-			"--model", "cursor/final", "--api-key", "last-key",
+			"--MODEL", "cursor-sdk/case", "--API-KEY", "case-key",
+			"--model=cursor-sdk/unsupported", "--api-key=equals-key",
+			"--models", "cursor-sdk/list-like", "--provider", "cursor-sdk",
+			"--model", "cursor-sdk/final", "--api-key", "last-key",
 		];
 
 		const models = await discoverModels();

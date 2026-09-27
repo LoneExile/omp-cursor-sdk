@@ -214,7 +214,7 @@ describe("removePiAgentsContextFromSystemPrompt with pi project_context fixtures
 });
 
 describe("resolveCursorFacingSystemPrompt", () => {
-	const cursorModel = { provider: "cursor", id: "composer-2.5" } as ExtensionContext["model"];
+	const cursorModel = { provider: "cursor-sdk", id: "composer-2.5" } as ExtensionContext["model"];
 	const cursorSdkModel = { provider: "other", api: "cursor-sdk", id: "composer-2.5" } as ExtensionContext["model"];
 	const otherModel = { provider: "anthropic", id: "claude-sonnet-4-5" } as ExtensionContext["model"];
 
@@ -320,7 +320,7 @@ describe("resolveCursorFacingSystemPrompt", () => {
 });
 
 describe("shouldSuppressPiAgentsContext", () => {
-	const cursorModel = { provider: "cursor", id: "composer-2.5" } as ExtensionContext["model"];
+	const cursorModel = { provider: "cursor-sdk", id: "composer-2.5" } as ExtensionContext["model"];
 
 	it("is false when no Cursor layer will replace pi context", () => {
 		expect(shouldSuppressPiAgentsContext(cursorModel, [GLOBAL_FILE, PROJECT_FILE], undefined)).toBe(false);

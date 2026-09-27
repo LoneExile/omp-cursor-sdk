@@ -47,7 +47,7 @@ function createFastHarness(options: { modelId?: string; branch?: SessionEntry[] 
 	const pi = createPiHarness();
 	const ctx = createExtensionTestContext({
 		model: options.modelId
-			? { ...makeModel(options.modelId), provider: "cursor", api: "cursor-sdk" }
+			? { ...makeModel(options.modelId), provider: "cursor-sdk", api: "cursor-sdk" }
 			: undefined,
 		sessionManager: {
 			getBranch: vi.fn<ExtensionContext["sessionManager"]["getBranch"]>(() => options.branch ?? []),

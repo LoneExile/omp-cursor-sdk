@@ -11,6 +11,7 @@ import { registerCursorSessionAgentLineage } from "./cursor-session-agent-lineag
 import { registerCursorSessionAgentResume } from "./cursor-session-agent-resume.js";
 import { streamCursorLazy } from "./cursor-provider-lazy.js";
 import { CURSOR_API_KEY_CONFIG_VALUE, resolveCursorApiKey } from "./cursor-api-key.js";
+import { CURSOR_PROVIDER, CURSOR_SDK_API } from "./cursor-model.js";
 import { registerCursorFallbackIssueWarning } from "./cursor-fallback-warning.js";
 import { registerCursorAgentsContextDedup } from "./cursor-agents-context-registration.js";
 import { registerCursorSdkSessionProcessErrorGuard } from "./cursor-sdk-process-error-guard.js";
@@ -34,15 +35,19 @@ type CursorExtensionApi =
 function createCursorProviderConfig(models: ProviderModelConfig[]): ProviderConfig {
 	return {
 		baseUrl: "https://cursor.com",
+		// OMP installs a registered apiKey as the provider's config key
+		// (ModelRegistry.registerProvider -> authStorage.keys.setConfig), and
+		// KeyCascade.source() reports config keys, so the provider is listed as
+		// available without stored auth. The real key resolves at turn time.
 		apiKey: CURSOR_API_KEY_CONFIG_VALUE,
-		api: "cursor-sdk",
+		api: CURSOR_SDK_API,
 		models,
 		streamSimple: streamCursorLazy,
 	};
 }
 
 function registerCursorProvider(pi: Pick<ExtensionAPI, "registerProvider">, models: ProviderModelConfig[]): void {
-	pi.registerProvider("cursor", createCursorProviderConfig(models));
+	pi.registerProvider(CURSOR_PROVIDER, createCursorProviderConfig(models));
 }
 
 export default async function (pi: CursorExtensionApi) {
@@ -75,7 +80,9 @@ export default async function (pi: CursorExtensionApi) {
 		description: "Refresh the live Cursor model catalog without restarting pi",
 		handler: async (_args, ctx) => {
 			let refreshFallbackIssue: CursorModelFallbackIssue | undefined;
-			const apiKey = resolveCursorApiKey(await ctx.modelRegistry.getApiKeyForProvider("cursor"));
+			// Own provider id only: the built-in `cursor` provider's credential is an OMP
+			// OAuth access token, not the Cursor SDK API key.
+			const apiKey = resolveCursorApiKey(await ctx.modelRegistry.getApiKeyForProvider(CURSOR_PROVIDER));
 			const refreshedModels = await discoverModels({
 				apiKey,
 				forceRefresh: true,

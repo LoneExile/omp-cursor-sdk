@@ -20,7 +20,7 @@ function makeAssistantMessage(content: AssistantMessage["content"]): AssistantMe
 		role: "assistant",
 		content,
 		api: "cursor-sdk",
-		provider: "cursor",
+		provider: "cursor-sdk",
 		model: "test-model",
 		usage: {
 			input: 0,

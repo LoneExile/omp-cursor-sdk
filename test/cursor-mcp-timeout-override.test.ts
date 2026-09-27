@@ -220,7 +220,7 @@ describe("Cursor MCP timeout override", () => {
 		await expect(
 			prepareCursorProviderTurn({
 				params: {
-					model: { id: "cursor/composer-2.5", provider: "cursor", api: "assistant" } as never,
+					model: { id: "cursor/composer-2.5", provider: "cursor-sdk", api: "assistant" } as never,
 					context: {} as never,
 					stream: { push: vi.fn() } as never,
 					partial: { content: [] } as never,

@@ -76,7 +76,7 @@ describe("buildCursorPrompt", () => {
 		const ctx: Context = {
 			messages: [
 				{ role: "user", content: "Hello", timestamp: 1 } satisfies UserMessage,
-				{ role: "assistant", content: [{ type: "text", text: "Hi there" }], api: "cursor-sdk", provider: "cursor", model: "test", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: 2 } satisfies AssistantMessage,
+				{ role: "assistant", content: [{ type: "text", text: "Hi there" }], api: "cursor-sdk", provider: "cursor-sdk", model: "test", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: 2 } satisfies AssistantMessage,
 			],
 		};
 		const result = buildCursorPrompt(ctx);
@@ -91,7 +91,7 @@ describe("buildCursorPrompt", () => {
 					role: "assistant",
 					content: "String assistant text",
 					api: "cursor-sdk",
-					provider: "cursor",
+					provider: "cursor-sdk",
 					model: "test",
 					usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
 					stopReason: "stop",
@@ -113,7 +113,7 @@ describe("buildCursorPrompt", () => {
 						{ type: "thinking", thinking: "internal thought" },
 						{ type: "text", text: "Final answer" },
 					],
-					api: "cursor-sdk", provider: "cursor", model: "test",
+					api: "cursor-sdk", provider: "cursor-sdk", model: "test",
 					usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
 					stopReason: "stop", timestamp: 2,
 				} satisfies AssistantMessage,
@@ -171,7 +171,7 @@ describe("buildCursorPrompt", () => {
 						{ type: "toolCall", id: "write-call", name: "write", arguments: { path: "src/b.ts" } },
 					],
 					api: "cursor-sdk",
-					provider: "cursor",
+					provider: "cursor-sdk",
 					model: "test",
 					usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
 					stopReason: "toolUse",
@@ -224,7 +224,7 @@ describe("buildCursorPrompt", () => {
 						{ type: "toolCall", id: "bash-call", name: "bash", arguments: { command: "echo mcp_marker" } },
 					],
 					api: "cursor-sdk",
-					provider: "cursor",
+					provider: "cursor-sdk",
 					model: "test",
 					usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
 					stopReason: "toolUse",
@@ -260,7 +260,7 @@ describe("buildCursorPrompt", () => {
 				{ type: "toolCall", id: "tc1", name: "bash", arguments: { command: "ls" } },
 			],
 			api: "cursor-sdk",
-			provider: "cursor",
+			provider: "cursor-sdk",
 			model: "test",
 			usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
 			stopReason: "toolUse",
@@ -333,7 +333,7 @@ describe("buildCursorPrompt", () => {
 						{ type: "toolCall", id: "tc1", name: "bash", arguments: { command: "ls" } },
 					],
 					api: "cursor-sdk",
-					provider: "cursor",
+					provider: "cursor-sdk",
 					model: "test",
 					usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
 					stopReason: "toolUse",
@@ -418,7 +418,7 @@ describe("buildCursorPrompt", () => {
 					role: "assistant",
 					content: [{ type: "text", text: `old answer ${"y".repeat(200)}` }],
 					api: "cursor-sdk",
-					provider: "cursor",
+					provider: "cursor-sdk",
 					model: "test",
 					usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
 					stopReason: "stop",
@@ -636,7 +636,7 @@ describe("cursor session prompt assembly", () => {
 			systemPrompt: "Be helpful.",
 			messages: [
 				{ role: "user", content: "Hello", timestamp: 1 },
-				{ role: "assistant", content: [{ type: "text", text: "Hi" }], api: "cursor-sdk", provider: "cursor", model: "test", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: 2 },
+				{ role: "assistant", content: [{ type: "text", text: "Hi" }], api: "cursor-sdk", provider: "cursor-sdk", model: "test", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: 2 },
 			],
 		};
 		const context: Context = {
@@ -669,7 +669,7 @@ describe("cursor session prompt assembly", () => {
 			contextFingerprint: computeCursorContextFingerprint({
 				messages: [
 					{ role: "user", content: "Hello", timestamp: 1 },
-					{ role: "assistant", content: [{ type: "text", text: "Hi" }], api: "cursor-sdk", provider: "cursor", model: "test", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: 2 },
+					{ role: "assistant", content: [{ type: "text", text: "Hi" }], api: "cursor-sdk", provider: "cursor-sdk", model: "test", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: 2 },
 				],
 			}),
 			incrementalSendCount: 0,

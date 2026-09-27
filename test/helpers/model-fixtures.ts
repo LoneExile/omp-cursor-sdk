@@ -6,7 +6,7 @@ export function makeModel(id = "test-model"): Model<"cursor-sdk"> {
 		id,
 		name: "Test Model",
 		api: "cursor-sdk" as const,
-		provider: "cursor",
+		provider: "cursor-sdk",
 		baseUrl: "",
 		reasoning: false,
 		input: ["text", "image"],

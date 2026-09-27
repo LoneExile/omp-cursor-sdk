@@ -60,7 +60,7 @@ function makeAssistantMessage(): AssistantMessage {
 		role: "assistant",
 		content: [{ type: "text", text: "A" }],
 		api: "cursor-sdk",
-		provider: "cursor",
+		provider: "cursor-sdk",
 		model: "test-model",
 		usage: {
 			input: 0,

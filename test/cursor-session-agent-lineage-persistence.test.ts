@@ -26,7 +26,7 @@ function makeAssistantMessage(text: string) {
 		role: "assistant" as const,
 		content: [{ type: "text" as const, text }],
 		api: "cursor-sdk",
-		provider: "cursor",
+		provider: "cursor-sdk",
 		model: "test-model",
 		usage: {
 			input: 0,

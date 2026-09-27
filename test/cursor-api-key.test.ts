@@ -32,10 +32,10 @@ describe("cursor-api-key helpers", () => {
 	it("ignores every process argv form and resolves the runtime key from env", async () => {
 		process.argv = [
 			"node", "pi", "--model", "anthropic/first", "--api-key", "first-key",
-			"--MODEL", "cursor/case", "--API-KEY", "case-key",
-			"--model=cursor/unsupported", "--api-key=equals-key",
-			"--models", "cursor/list-like", "--provider", "cursor",
-			"--model", "cursor/final", "--api-key", "last-key",
+			"--MODEL", "cursor-sdk/case", "--API-KEY", "case-key",
+			"--model=cursor-sdk/unsupported", "--api-key=equals-key",
+			"--models", "cursor-sdk/list-like", "--provider", "cursor-sdk",
+			"--model", "cursor-sdk/final", "--api-key", "last-key",
 		];
 		expect(await resolveCursorRuntimeApiKey()).toBeUndefined();
 

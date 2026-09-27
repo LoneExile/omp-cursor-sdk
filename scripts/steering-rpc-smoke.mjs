@@ -170,7 +170,7 @@ function buildPiRpcEnv(baseEnv = process.env, nodePath = process.execPath) {
 }
 
 async function runPiRpcSmoke(sessionDir, piBin) {
-	const args = ["--approve", "-e", root, "--cursor-no-fast", "--model", "cursor/composer-2-5", "--mode", "rpc", "--session-dir", sessionDir];
+	const args = ["--approve", "-e", root, "--cursor-no-fast", "--model", "cursor-sdk/composer-2-5", "--mode", "rpc", "--session-dir", sessionDir];
 	const env = buildPiRpcEnv();
 
 	const child = spawn(piBin, args, {

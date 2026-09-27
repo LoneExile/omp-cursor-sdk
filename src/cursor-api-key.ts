@@ -52,9 +52,10 @@ export function resolveCursorStringApiKeySync(apiKey: ApiKey | undefined): strin
  * credential; that second connection's close() triggered macOS EXC_GUARD
  * kills (bun/sqlite guarded-fd close from a background thread — 9 identical
  * crash reports). The stored credential was never required: provider
- * availability comes from config (cursor removed from disabledProviders +
- * modelRoles), and keys saved through OMP's own login flows are resolved by
- * ctx.modelRegistry.getApiKeyForProvider at turn time.
+ * availability comes from the registered config key (see index.ts), and keys
+ * saved for the plugin's own provider id are resolved by
+ * ctx.modelRegistry.getApiKeyForProvider(CURSOR_PROVIDER) at turn time. The
+ * built-in OMP `cursor` provider's OAuth credential is never read.
  */
 export async function resolveCursorRuntimeApiKey(): Promise<string | undefined> {
 	return resolveCursorApiKey(process.env.CURSOR_API_KEY);

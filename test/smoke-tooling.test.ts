@@ -226,7 +226,7 @@ try {
 
 		const prompt = "first line\nsecond line: ' \\\" & | ; $() <> `";
 		const parsed = parsePiArgs([
-			"--approve", "--cursor-no-fast", "--cursor-mode", "agent", "--model", "cursor/composer-2-5",
+			"--approve", "--cursor-no-fast", "--cursor-mode", "agent", "--model", "cursor-sdk/composer-2-5",
 			"--session-dir", "C:\\smoke sessions", "--session-id", "platform-test", prompt,
 		]);
 		expect(parsed.unknownFlags.get("cursor-no-fast")).toBe(true);

@@ -108,7 +108,7 @@ function createCursorRuntimeHarness(options: {
 		model: options.modelId
 			? {
 					...makeModel(options.modelId),
-					provider: options.provider ?? "cursor",
+					provider: options.provider ?? "cursor-sdk",
 					api: (options.api ?? "cursor-sdk") as "cursor-sdk",
 				}
 			: undefined,
@@ -302,7 +302,7 @@ describe("Cursor runtime state", () => {
 			"model_select",
 			{
 				type: "model_select",
-				model: { ...makeModel("composer-2"), provider: "cursor", api: "cursor-sdk" },
+				model: { ...makeModel("composer-2"), provider: "cursor-sdk", api: "cursor-sdk" },
 				previousModel: ctx.model!,
 				source: "set",
 			},
@@ -389,7 +389,7 @@ describe("Cursor runtime state", () => {
 			"model_select",
 			{
 				type: "model_select",
-				model: { ...makeModel("gpt-5.5@1m"), provider: "cursor", api: "cursor-sdk" },
+				model: { ...makeModel("gpt-5.5@1m"), provider: "cursor-sdk", api: "cursor-sdk" },
 				previousModel: ctx.model!,
 				source: "set",
 			},

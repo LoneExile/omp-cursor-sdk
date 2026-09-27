@@ -300,7 +300,7 @@ const _smokeEnvPlan: { envEntries: Array<[string, string]> } = buildCursorSmokeE
 const _terminalHtml: string = buildTerminalHtml({
 	ansi: "ok",
 	plain: "ok",
-	options: { label: "test", model: "cursor/composer-2.5", mode: "plan", cwd: "/tmp", sessionId: "s", width: 80, height: 24, historyLines: 100 },
+	options: { label: "test", model: "cursor-sdk/composer-2.5", mode: "plan", cwd: "/tmp", sessionId: "s", width: 80, height: 24, historyLines: 100 },
 });
 const _writeTerminalScreenshot: (htmlPath: string, pngPath: string, width: number, height: number) => Promise<void> = writeTerminalScreenshot;
 const _requiredApiKey: string = requireApiKey({ apiKey: "key" }, {}, createScriptFail("test"));
@@ -313,7 +313,7 @@ const _invalidStartupNoisePatternType: readonly RegExp[] = CURSOR_SDK_STARTUP_NO
 
 const _validProviderArgs = {
 	cwd: "/tmp/work",
-	model: "cursor/composer-2.5",
+	model: "cursor-sdk/composer-2.5",
 	help: false,
 } satisfies CursorDebugProviderEventsArgs;
 
@@ -335,7 +335,7 @@ const _validRunSummary = {
 	artifacts: { summary: "/tmp/out/summary.json" },
 	counts: { errors: 0 },
 	elapsedMs: 100,
-	model: "cursor/composer-2.5",
+	model: "cursor-sdk/composer-2.5",
 	cwd: "/repo",
 	sessionDir: "/tmp/out/session",
 	extensionVersion: "0.1.20",
@@ -352,7 +352,7 @@ const _validSdkSummary = buildSummary({
 
 const _invalidProviderArgs = {
 	cwd: "/tmp/work",
-	model: "cursor/composer-2.5",
+	model: "cursor-sdk/composer-2.5",
 	// @ts-expect-error parsed probe args always include help
 } satisfies CursorDebugProviderEventsArgs;
 
@@ -365,7 +365,7 @@ const _invalidSdkArgs = {
 
 const _invalidProviderSettingSources = {
 	cwd: "/tmp/work",
-	model: "cursor/composer-2.5",
+	model: "cursor-sdk/composer-2.5",
 	help: false,
 	// @ts-expect-error settingSources is parsed as string[] | undefined
 	settingSources: "all",
@@ -376,7 +376,7 @@ const _invalidRunSummary = {
 	artifacts: { summary: "/tmp/out/summary.json" },
 	counts: { errors: 0 },
 	elapsedMs: 100,
-	model: "cursor/composer-2.5",
+	model: "cursor-sdk/composer-2.5",
 	cwd: "/repo",
 	sessionDir: "/tmp/out/session",
 	extensionVersion: "0.1.20",

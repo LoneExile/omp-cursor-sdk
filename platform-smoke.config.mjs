@@ -5,7 +5,7 @@ import { LOCAL_RESUME_SUITE_NAMES } from "./scripts/platform-smoke/local-resume-
 
 export default {
 	packageName: "pi-cursor-sdk",
-	cursorModel: "cursor/composer-2-5",
+	cursorModel: "cursor-sdk/composer-2-5",
 	artifactRoot: ".artifacts/platform-smoke",
 	artifactRetention: {
 		maxRunDirs: 18,

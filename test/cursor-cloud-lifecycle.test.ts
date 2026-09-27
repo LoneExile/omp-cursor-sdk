@@ -640,7 +640,7 @@ describe("Cursor cloud lifecycle ledger", () => {
 				modelRegistry: { getApiKeyForProvider } as never,
 				sessionManager: { getBranch: vi.fn(() => [recordEntry()]) },
 			});
-			expect(getApiKeyForProvider).toHaveBeenCalledWith("cursor");
+			expect(getApiKeyForProvider).toHaveBeenCalledWith("cursor-sdk");
 			expect(archive).toHaveBeenCalledWith(cloudAgentId(), { apiKey: "env-key" });
 		} finally {
 			if (originalKey === undefined) delete process.env.CURSOR_API_KEY;

@@ -160,7 +160,7 @@ export default async function (pi: any) {
 			...(trusted === undefined ? [] : [trusted ? "--approve" : "--no-approve"]),
 			...(projectLocalPackage ? [] : ["-e", probeExtensionPath]),
 			"--model",
-			"cursor/composer-2-5",
+			"cursor-sdk/composer-2-5",
 			"--cursor-no-fast",
 			"--no-tools",
 			"--no-session",
