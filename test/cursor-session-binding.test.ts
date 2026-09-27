@@ -3,6 +3,7 @@ import cursorExtension from "../src/index.js";
 import { getRegisteredCursorPiToolBridge } from "../src/cursor-pi-tool-bridge.js";
 import type { CursorPiToolBridgeRegistry } from "../src/cursor-pi-tool-bridge-server.js";
 import type { Context, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
+import { setActiveSkills } from "@oh-my-pi/pi-coding-agent";
 import { classifyCursorRequestRoute } from "../src/cursor-one-shot-request.js";
 import { streamCursor } from "../src/cursor-provider.js";
 import {
@@ -343,6 +344,26 @@ describe("session_switch (/new, /fork, /resume)", () => {
 		expect(isOneShotCursorAgentLease(lease)).toBe(false);
 		expect(lease.agent).toBe(resumedAgent);
 		expect(sessionAgentTestUtils.sessionAgentsByScope.get(sessionAgentEntryKey(PARENT.file, PARENT.id))?.status).toBe("ready");
+	});
+
+	it("keeps the Cursor skill activation tool active across the switch, so the next system prompt does not change", async () => {
+		setActiveSkills([{ name: "demo", description: "Demo skill", filePath: "/tmp/skills/demo/SKILL.md", baseDir: "/tmp/skills/demo", source: "test" }]);
+		try {
+			const pi = createExtensionPi([createTestToolInfo("custom_read")]);
+			await cursorExtension(pi);
+			await pi.runSessionStart(sessionContext(PARENT, "main"));
+			await prompt(pi, PARENT, "main", "Refactor the parser");
+			expect(pi._activeToolNames()).toContain("cursor_activate_skill");
+			pi.setActiveTools.mockClear();
+
+			// omp builds the next prompt's system prompt from the active tools before that
+			// prompt's before_agent_start runs.
+			await switchSession(pi, NEXT, "new", PARENT.file);
+			expect(pi._activeToolNames()).toContain("cursor_activate_skill");
+			for (const [toolNames] of pi.setActiveTools.mock.calls) expect(toolNames).toContain("cursor_activate_skill");
+		} finally {
+			setActiveSkills([]);
+		}
 	});
 });
 

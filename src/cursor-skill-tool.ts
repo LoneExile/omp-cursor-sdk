@@ -235,9 +235,25 @@ export function registerCursorSkillTool(pi: CursorSkillToolExtensionApi): void {
 		syncCursorSkillToolForModel(pi, model, runtime);
 	};
 
+	// Local Cursor runs list OMP's active skills and expose the activation tool.
+	const syncSkillsForContext = (ctx: ExtensionContext) => {
+		const cursorModel = isCursorModel(ctx.model);
+		const runtime = resolveEffectiveRuntimeForSkillLifecycle(cursorModel, ctx);
+		const activeSkills = getActiveSkills();
+		// OMP's before_agent_start carries no systemPromptOptions;
+		// source the catalog from OMP's active-skill registry instead.
+		setCurrentSkills(cursorModel && runtime === "local" ? activeSkills : []);
+		syncCursorSkillToolForModel(pi, ctx.model, runtime);
+		return { runtime, activeSkills };
+	};
+
 	registerCursorModelLifecycle(pi, {
+		// Also /new, /fork and /resume (session_switch): clearing the catalog there would
+		// drop the activation tool until the next prompt's before_agent_start, after omp
+		// built that prompt's system prompt, so the next prompt's differs and re-bootstraps
+		// the pooled Cursor agent.
 		sessionStart: (_event, ctx) => {
-			clearSkillsAndSync(ctx.model);
+			syncSkillsForContext(ctx);
 		},
 		modelSelect: (event) => {
 			clearSkillsAndSync(event.model);
@@ -249,17 +265,7 @@ export function registerCursorSkillTool(pi: CursorSkillToolExtensionApi): void {
 			syncCursorSkillToolForModel(pi, ctx.model, runtime);
 		},
 		beforeAgentStart: (event, ctx) => {
-			const cursorModel = isCursorModel(ctx.model);
-			const runtime = resolveEffectiveRuntimeForSkillLifecycle(cursorModel, ctx);
-			const activeSkills = getActiveSkills();
-			if (cursorModel && runtime === "local") {
-				// OMP's before_agent_start carries no systemPromptOptions;
-				// source the catalog from OMP's active-skill registry instead.
-				setCurrentSkills(activeSkills);
-			} else {
-				setCurrentSkills([]);
-			}
-			syncCursorSkillToolForModel(pi, ctx.model, runtime);
+			const { runtime, activeSkills } = syncSkillsForContext(ctx);
 			// Rewrite in place, preserving OMP's systemPrompt element
 			// boundaries (collapsing to one element would change block
 			// boundaries). Append a new element when no part carries the
