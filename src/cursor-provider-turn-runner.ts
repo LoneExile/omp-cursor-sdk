@@ -83,7 +83,13 @@ export class CursorProviderTurnRunner {
 			// Decided before the drain: a one-shot request (summarizer, omp side request) must
 			// not drain or attach to a live run of the pooled conversation it may run beside.
 			const oneShot = resolvedConfig.runtime.value === "local" && isCursorOneShotRequest(context, options);
-			if (resolvedConfig.runtime.value === "local" && !oneShot) {
+			if (oneShot) {
+				// A one-shot agent owns its transport: the observed closed-pipe EPIPE is
+				// contained for this turn too and closes that agent, not the pooled one.
+				sdkProcessErrorGuard.containLocalTransportClosedPipe(() => {
+					void prepared?.lifecycle.dispose().catch(() => undefined);
+				});
+			} else if (resolvedConfig.runtime.value === "local") {
 				// The observed local-executor closed-pipe EPIPE is contained only from this
 				// turn's pre-send live-run drain through run completion; for live runs the
 				// finalizer holds the guard until run.wait() settles. A hit marks
