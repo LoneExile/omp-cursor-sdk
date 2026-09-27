@@ -240,7 +240,16 @@ The extension wires into OMP's session events:
   (`session-maintenance.ts` `hasHandlers("session_before_compact")` checks in
   `maybeStartSpeculativeCompaction`, `deferThresholdCompactionToSpeculation`,
   `#claimArmedSpeculation`). Instead each request is classified by its shape
-  (`src/cursor-one-shot-request.ts`): a context whose system prompt is exactly
+  (`src/cursor-one-shot-request.ts`). Only an agent-loop turn continues the
+  pooled conversation, and the loop marks it: every loop provider call carries
+  the session's `providerSessionState` store (`pi-agent-core` `agent.ts`), the
+  store omp's own providers keep per-conversation state in. Utility requests
+  sent through `completeSimple` without it run one-shot: session titles
+  (`utils/title-generator.ts`, `TITLE_SYSTEM_PROMPT`, a random title session id,
+  and the session model when no tiny/commit/smol role resolves) and the
+  auto-thinking judge (`pi-ai` `judgment/chat.ts`), which reuses the session's
+  provider session id, so the id alone cannot tell it from a turn. Two requests
+  that do carry the store also run one-shot: a context whose system prompt is exactly
   `[SUMMARIZATION_SYSTEM_PROMPT]` (compaction and branch summaries,
   `pi-agent-core` `compaction/compaction.ts`, `compaction/branch-summarization.ts`;
   the constant is imported from the host's own `pi-agent-core`), or a provider
@@ -256,7 +265,15 @@ The extension wires into OMP's session events:
   (`#runSpeculation`), and both are recognized by the side session id. Turn
   events cannot mark these requests: the agent loop delivers
   `turn_start`/`turn_end` to extensions fire-and-forget (`pi-agent-core`
-  `agent.ts` `#emit`).
+  `agent.ts` `#emit`). The pool key includes the request's provider session id
+  (`AgentSession.sessionId`: a `/fresh` id, else `--provider-session-id`, else
+  the session file id), so an advisor loop (its own id,
+  `advisor/config.ts`) or a `/fresh` session is a different conversation. A
+  request whose pool key differs from an entry that is still being created or
+  running a turn gets a one-shot agent instead of tearing that entry down; a
+  `ready` entry with a different key is replaced (a model, effort or
+  provider-session switch between turns). The pre-send drain ignores live runs
+  of another conversation.
 - **tool bridge:** an MCP bridge can expose OMP tools to the Cursor agent. Its
   `tool_call`/`tool_result` handlers attach on the first Cursor run that
   exposes pi tools, because any such handler turns off OMP's speculative

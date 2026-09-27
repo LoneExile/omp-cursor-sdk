@@ -434,12 +434,19 @@ export async function drainExistingCursorLiveRunBeforeSend(
 	context: Context,
 	signal?: AbortSignal,
 	turnDebugRecorder?: CursorSdkEventDebugRecorder,
+	conversationId = "",
 ): Promise<LiveRunPreSendOutcome> {
 	turnDebugRecorder?.recordDrainEvent("pre_send_start", {});
 	while (true) {
 		const run = getPendingCursorLiveRun(context) ?? getActiveCursorLiveRunForCurrentScope();
 		if (!run || run.disposed) {
 			turnDebugRecorder?.recordDrainEvent("pre_send_end", { outcome: "continue_send", reason: "no_pending_run" });
+			return "continue_send";
+		}
+		// Another conversation's run (an advisor loop beside the main one): leave it to
+		// its own turns. Acquire then routes this request to a one-shot agent.
+		if (run.conversationId !== conversationId) {
+			turnDebugRecorder?.recordDrainEvent("pre_send_end", { outcome: "continue_send", reason: "other_conversation", runId: run.id });
 			return "continue_send";
 		}
 

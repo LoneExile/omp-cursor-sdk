@@ -147,6 +147,12 @@ interface SessionCursorAgentCreateParams {
 	forceCreate?: boolean;
 	createAgent?: CursorSdkModule["Agent"]["create"];
 	resumeAgent?: CursorSdkModule["Agent"]["resume"];
+	/**
+	 * omp provider session id of the conversation the agent serves (the request's
+	 * `options.sessionId`). Part of the pool key: a different id is a different
+	 * conversation, like omp's own providers key their per-session state.
+	 */
+	conversationId?: string;
 }
 
 const sessionAgentsByScope = new Map<string, SessionCursorAgentPoolEntry>();
@@ -231,6 +237,7 @@ function buildBridgePoolKeySuffix(): string {
 function buildSessionAgentPoolKey(scopeKey: string, params: SessionCursorAgentCreateParams): string {
 	return [
 		scopeKey,
+		`conversation:${params.conversationId ?? ""}`,
 		params.cwd,
 		buildModelPoolKey(params.modelSelection),
 		buildSettingSourcesPoolKey(params.settingSources),
@@ -564,7 +571,12 @@ export function invalidateSessionAgent(
 }
 
 export interface OneShotCursorAgentLease extends SessionCursorAgentLease {
+	oneShot: true;
 	dispose(): Promise<void>;
+}
+
+export function isOneShotCursorAgentLease(lease: SessionCursorAgentLease): lease is OneShotCursorAgentLease {
+	return (lease as Partial<OneShotCursorAgentLease>).oneShot === true;
 }
 
 /**
@@ -608,6 +620,7 @@ export async function createOneShotCursorAgent(params: SessionCursorAgentCreateP
 		storeIdentity: sessionStore.identity,
 		sendState: createInitialSendState(),
 		created: true,
+		oneShot: true,
 		commitSend: () => {},
 		trackRunCompletion: () => {},
 		dispose: () => {
@@ -623,7 +636,16 @@ export async function createOneShotCursorAgent(params: SessionCursorAgentCreateP
 	};
 }
 
-export async function acquireSessionCursorAgent(params: SessionCursorAgentCreateParams): Promise<SessionCursorAgentLease> {
+/**
+ * Lease the scope's pooled conversation agent. A request whose pool key differs from an
+ * entry that is still being created or running a turn gets a one-shot agent instead:
+ * tearing that entry down would kill the conversation's turn in flight (a title or
+ * advisor request racing the first prompt). A `ready` entry with a different key is
+ * replaced, which is the between-turns model, effort or provider-session switch.
+ */
+export async function acquireSessionCursorAgent(
+	params: SessionCursorAgentCreateParams,
+): Promise<SessionCursorAgentLease | OneShotCursorAgentLease> {
 	const requestedScopeKey = getCursorSessionScopeKey();
 	const scopeKey = getAcquireScopeKey(requestedScopeKey);
 	const persistentStore = getCursorSessionFile() !== undefined;
@@ -639,9 +661,12 @@ export async function acquireSessionCursorAgent(params: SessionCursorAgentCreate
 		const poolKey = buildSessionAgentPoolKey(scopeKey, params);
 		const state = getSessionCursorAgentPoolState(scopeKey);
 
-		if ((state.status === "ready" || state.status === "busy") && state.poolKey !== poolKey) {
+		if (state.status === "ready" && state.poolKey !== poolKey) {
 			await disposePoolEntryForScope(scopeKey);
 			continue;
+		}
+		if ((state.status === "busy" || state.status === "creating") && state.poolKey !== poolKey) {
+			return createOneShotCursorAgent(params);
 		}
 
 		if (state.status === "ready") {
@@ -656,10 +681,6 @@ export async function acquireSessionCursorAgent(params: SessionCursorAgentCreate
 		}
 
 		if (state.status === "creating") {
-			if (state.poolKey !== poolKey) {
-				await disposePoolEntryForScope(scopeKey);
-				continue;
-			}
 			try {
 				await state.creating;
 			} catch (error) {

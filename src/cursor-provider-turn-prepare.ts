@@ -8,6 +8,7 @@ import {
 	acquireSessionCursorAgent,
 	buildCursorSessionSendPrompt,
 	createOneShotCursorAgent,
+	isOneShotCursorAgentLease,
 	type OneShotCursorAgentLease,
 	planCursorSessionSend,
 	resetSessionCursorAgent,
@@ -74,6 +75,8 @@ export interface PrepareCursorProviderTurnParams {
 	resolvedConfig: CursorResolvedSdkConfig;
 	/** Local only: run on a one-shot agent outside the session pool (see isCursorOneShotRequest). */
 	oneShot?: boolean;
+	/** omp provider session id of the conversation (see getCursorConversationId). */
+	conversationId?: string;
 }
 
 interface PrepareCursorProviderTurnContext extends PrepareCursorProviderTurnParams {
@@ -291,6 +294,7 @@ async function prepareCursorLocalProviderTurn(
 			localResume: resolvedConfig.local.resume.value,
 			useHttp1ForAgent,
 			debugRecorder: sdkEventDebug,
+			conversationId: prepareParams.conversationId,
 			onBridgeToolRequest: (request: CursorPiBridgeToolRequest) => {
 				if (liveRunForBridgeQueue && !liveRunForBridgeQueue.disposed) {
 					cursorLiveRuns.queueEvent(liveRunForBridgeQueue, { type: "bridge-tool", request });
@@ -301,8 +305,11 @@ async function prepareCursorLocalProviderTurn(
 			createAgent: (createOptions: Parameters<typeof Agent.create>[0]) =>
 				suppressCursorSdkOutput(() => Agent.create(createOptions)),
 		};
-		oneShotLease = prepareParams.oneShot ? await createOneShotCursorAgent(sessionAgentAcquireParams) : undefined;
-		let sessionAgentLease = oneShotLease ?? (await acquireSessionCursorAgent(sessionAgentAcquireParams));
+		let sessionAgentLease = prepareParams.oneShot
+			? await createOneShotCursorAgent(sessionAgentAcquireParams)
+			: await acquireSessionCursorAgent(sessionAgentAcquireParams);
+		// Also one-shot when acquire met another pool key mid-turn (see acquireSessionCursorAgent).
+		oneShotLease = isOneShotCursorAgentLease(sessionAgentLease) ? sessionAgentLease : undefined;
 		sessionAgentScopeKey = sessionAgentLease.scopeKey;
 		throwIfAborted();
 
@@ -389,6 +396,7 @@ async function prepareCursorLocalProviderTurn(
 					bridgeRun,
 					sessionBridgeRun,
 					sessionAgentScopeKey,
+					conversationId: prepareParams.conversationId,
 					promptInputTokens,
 					textDeltas,
 					debugRecorder: sdkEventDebug,

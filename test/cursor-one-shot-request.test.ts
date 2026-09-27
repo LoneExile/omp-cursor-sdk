@@ -1,4 +1,4 @@
-import type { AssistantMessage, Context, Model } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, Context, Model, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 import { generateSummary, generateHandoffFromContext } from "@oh-my-pi/pi-agent-core/compaction/compaction";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { computeCursorContextFingerprint } from "../src/context.js";
@@ -60,9 +60,13 @@ const toolResultContinuation: Context = {
 	],
 };
 
+// Agent-loop turns carry the session's provider state store and provider session id
+// (pi-agent-core agent.ts); session-maintenance.ts hands the same pair to the summarizer.
+const sessionOptions = { sessionId: "01a0e261-2b80-7000", providerSessionState: new Map() };
+
 /** The request omp's own summarizer sends, captured at the provider boundary. */
-async function captureHostSummarizerRequest(): Promise<Context> {
-	let captured: Context | undefined;
+async function captureHostSummarizerRequest(): Promise<{ context: Context; options: SimpleStreamOptions }> {
+	let captured: { context: Context; options: SimpleStreamOptions } | undefined;
 	await generateSummary(
 		[{ role: "user", content: "Refactor the parser", timestamp: 1 }, reply("Parser refactored.")],
 		model,
@@ -72,8 +76,9 @@ async function captureHostSummarizerRequest(): Promise<Context> {
 		undefined,
 		undefined,
 		{
-			completeImpl: async (_model, ctx) => {
-				captured = ctx;
+			...sessionOptions,
+			completeImpl: async (_model, context, options) => {
+				captured = { context, options };
 				return reply("## Goal\nRefactor the parser.");
 			},
 		},
@@ -85,12 +90,15 @@ async function captureHostSummarizerRequest(): Promise<Context> {
 describe("one-shot request identification", () => {
 	it("recognizes the host summarizer request and nothing that continues the conversation", async () => {
 		const summarizer = await captureHostSummarizerRequest();
-		expect(isCursorOneShotRequest(summarizer)).toBe(true);
+		expect(summarizer.options.providerSessionState).toBe(sessionOptions.providerSessionState);
+		expect(isCursorOneShotRequest(summarizer.context, summarizer.options)).toBe(true);
 
-		expect(isCursorOneShotRequest(userTurn, { sessionId: "01a0e261-2b80-7000" })).toBe(false);
-		expect(isCursorOneShotRequest(toolResultContinuation, { sessionId: "01a0e261-2b80-7000" })).toBe(false);
+		expect(isCursorOneShotRequest(userTurn, sessionOptions)).toBe(false);
+		expect(isCursorOneShotRequest(toolResultContinuation, sessionOptions)).toBe(false);
 		// Only the exact summarizer prompt counts, not a session prompt that merely contains it.
-		expect(isCursorOneShotRequest({ systemPrompt: [...sessionSystemPrompt, ...summarizer.systemPrompt!] })).toBe(false);
+		expect(
+			isCursorOneShotRequest({ systemPrompt: [...sessionSystemPrompt, ...summarizer.context.systemPrompt!] }, sessionOptions),
+		).toBe(false);
 	});
 
 	it("recognizes omp side requests such as the handoff document by their session id", async () => {
@@ -100,16 +108,19 @@ describe("one-shot request identification", () => {
 			systemPrompt: sessionSystemPrompt,
 			messages: [...toolResultContinuation.messages, { role: "user", content: "Write a handoff document.", timestamp: 4 }],
 		};
-		let requestOptions: { sessionId?: string } | undefined;
+		let requestOptions: SimpleStreamOptions | undefined;
 		await generateHandoffFromContext(handoffContext, model, {
-			streamOptions: { sessionId: "01a0e261-2b80-7000:side:7390" },
+			streamOptions: { sessionId: "01a0e261-2b80-7000:side:7390", providerSessionState: sessionOptions.providerSessionState },
 			completeImpl: async (_model, _ctx, options) => {
 				requestOptions = options;
 				return reply("# Handoff");
 			},
 		});
 		expect(isCursorOneShotRequest(handoffContext, requestOptions)).toBe(true);
-		expect(isCursorOneShotRequest(userTurn, { sessionId: "01a0e261-2b80-7000:side:conversation:btw-1" })).toBe(true);
+		expect(requestOptions?.providerSessionState).toBe(sessionOptions.providerSessionState);
+		expect(
+			isCursorOneShotRequest(userTurn, { ...sessionOptions, sessionId: "01a0e261-2b80-7000:side:conversation:btw-1" }),
+		).toBe(true);
 	});
 });
 
@@ -139,7 +150,7 @@ describe("one-shot agent", () => {
 			modelSelection: { id: "composer-2.5" },
 			createAgent: vi.fn().mockResolvedValue(oneShotAgent) as never,
 		});
-		oneShot.commitSend(await captureHostSummarizerRequest(), true);
+		oneShot.commitSend((await captureHostSummarizerRequest()).context, true);
 
 		expect(oneShot.agent).toBe(oneShotAgent);
 		expect(oneShot.bridgeRun).toBeUndefined();

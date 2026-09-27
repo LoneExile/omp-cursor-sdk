@@ -71,6 +71,7 @@ describe("CursorRunFinalizer", () => {
 					id: "replay-1",
 					agent: { agentId: "agent-1" } as SDKAgent,
 					sessionAgentScopeKey: "scope-1",
+					conversationId: "",
 					accounting: createCursorLiveRunAccountingState(0),
 					pendingEvents: [],
 					textDeltas: [],

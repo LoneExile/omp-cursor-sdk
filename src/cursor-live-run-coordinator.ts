@@ -41,6 +41,8 @@ export interface CursorLiveRun {
 	bridgeRun?: CursorPiToolBridgeRun;
 	sessionBridgeRun?: CursorPiToolBridgeRun;
 	sessionAgentScopeKey: string;
+	/** omp provider session id of the conversation the run belongs to (see getCursorConversationId). */
+	conversationId: string;
 	sdkRun?: CursorLiveSdkRun;
 	ignoreFutureSdkTurnUsage?: boolean;
 	accounting: CursorLiveRunAccountingState;
@@ -65,6 +67,7 @@ export interface CursorLiveRunCreateParams {
 	bridgeRun?: CursorPiToolBridgeRun;
 	sessionBridgeRun?: CursorPiToolBridgeRun;
 	sessionAgentScopeKey?: string;
+	conversationId?: string;
 	promptInputTokens: number;
 	textDeltas?: string[];
 	debugRecorder?: CursorSdkEventDebugRecorder;
@@ -290,6 +293,7 @@ export function createCursorLiveRunCoordinator(deps: CursorLiveRunCoordinatorDep
 				bridgeRun: params.bridgeRun,
 				sessionBridgeRun: params.sessionBridgeRun,
 				sessionAgentScopeKey,
+				conversationId: params.conversationId ?? "",
 				accounting: createCursorLiveRunAccountingState(params.promptInputTokens),
 				pendingEvents: [],
 				textDeltas: params.textDeltas ?? [],

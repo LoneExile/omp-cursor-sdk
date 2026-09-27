@@ -1,5 +1,5 @@
 import { CursorLiveRunAbortError } from "./cursor-live-run-coordinator.js";
-import { isCursorOneShotRequest } from "./cursor-one-shot-request.js";
+import { getCursorConversationId, isCursorOneShotRequest } from "./cursor-one-shot-request.js";
 import { drainExistingCursorLiveRunBeforeSend } from "./cursor-provider-live-run-drain.js";
 import { invalidateSessionAgent } from "./cursor-session-agent.js";
 import { resolveCursorStringApiKeySync } from "./cursor-api-key.js";
@@ -83,24 +83,33 @@ export class CursorProviderTurnRunner {
 			// Decided before the drain: a one-shot request (summarizer, omp side request) must
 			// not drain or attach to a live run of the pooled conversation it may run beside.
 			const oneShot = resolvedConfig.runtime.value === "local" && isCursorOneShotRequest(context, options);
-			if (oneShot) {
-				// A one-shot agent owns its transport: the observed closed-pipe EPIPE is
-				// contained for this turn too and closes that agent, not the pooled one.
-				sdkProcessErrorGuard.containLocalTransportClosedPipe(() => {
-					void prepared?.lifecycle.dispose().catch(() => undefined);
-				});
-			} else if (resolvedConfig.runtime.value === "local") {
+			const conversationId = getCursorConversationId(options);
+			if (resolvedConfig.runtime.value === "local") {
 				// The observed local-executor closed-pipe EPIPE is contained only from this
 				// turn's pre-send live-run drain through run completion; for live runs the
-				// finalizer holds the guard until run.wait() settles. A hit marks
-				// this scope's pooled agent transport dead so the next acquire recreates it.
+				// finalizer holds the guard until run.wait() settles. A one-shot agent owns
+				// its transport, so a hit closes that agent; otherwise it marks this scope's
+				// pooled agent transport dead so the next acquire recreates it.
 				const localScopeKey = getCursorSessionScopeKey();
-				sdkProcessErrorGuard.containLocalTransportClosedPipe(() =>
-					invalidateSessionAgent(localScopeKey, { deadTransport: true }),
-				);
+				sdkProcessErrorGuard.containLocalTransportClosedPipe(() => {
+					if (oneShot || prepared?.meta.sendPlan.reason === "one_shot") {
+						void prepared?.lifecycle.dispose().catch(() => undefined);
+						return;
+					}
+					invalidateSessionAgent(localScopeKey, { deadTransport: true });
+				});
+			}
+			if (resolvedConfig.runtime.value === "local" && !oneShot) {
 				if (
-					(await drainExistingCursorLiveRunBeforeSend(stream, partial, model, context, options?.signal, this.sdkEventDebug)) ===
-					"stream_ended"
+					(await drainExistingCursorLiveRunBeforeSend(
+						stream,
+						partial,
+						model,
+						context,
+						options?.signal,
+						this.sdkEventDebug,
+						conversationId,
+					)) === "stream_ended"
 				) {
 					return;
 				}
@@ -116,6 +125,7 @@ export class CursorProviderTurnRunner {
 				throwIfAborted: () => this.throwIfAborted(),
 				resolvedConfig,
 				oneShot,
+				conversationId,
 			});
 
 			sendResult = await sendCursorProviderTurn({
