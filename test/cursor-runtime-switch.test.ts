@@ -28,6 +28,7 @@ describe("local → cloud → local runtime switch", () => {
 	afterEach(async () => {
 		delete process.env.PI_CURSOR_RUNTIME;
 		await disposeAllSessionCursorAgents();
+		cursorSessionScopeTestUtils.reset();
 	});
 
 	it("rebootstraps the local agent after a cloud turn so it sees the cloud turns", async () => {

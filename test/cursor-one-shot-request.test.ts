@@ -1,6 +1,6 @@
 import type { AssistantMessage, Context, Model, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 import { generateSummary, generateHandoffFromContext } from "@oh-my-pi/pi-agent-core/compaction/compaction";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computeCursorContextFingerprint } from "../src/context.js";
 import { isCursorOneShotRequest } from "../src/cursor-one-shot-request.js";
 import {
@@ -128,6 +128,10 @@ describe("one-shot agent", () => {
 	beforeEach(async () => {
 		await disposeAllSessionCursorAgents();
 		storeDisposals.length = 0;
+	});
+
+	afterEach(() => {
+		cursorSessionScopeTestUtils.reset();
 	});
 
 	it("is created outside the pool, leaves the pooled conversation untouched and disposes once", async () => {

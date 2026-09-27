@@ -8,7 +8,7 @@ import {
 	type Model,
 	type SimpleStreamOptions,
 } from "@oh-my-pi/pi-ai";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computeCursorContextFingerprint } from "../src/context.js";
 import { cursorLiveRuns, drainExistingCursorLiveRunBeforeSend } from "../src/cursor-provider-live-run-drain.js";
 import {
@@ -144,6 +144,10 @@ describe("session agent pool under concurrent utility requests", () => {
 		await disposeAllSessionCursorAgents();
 		cursorSessionScopeTestUtils.set("/tmp/project", SCOPE);
 		resumeTestUtils.reset();
+	});
+
+	afterEach(() => {
+		cursorSessionScopeTestUtils.reset();
 	});
 
 	const mainEntry = () => sessionAgentTestUtils.sessionAgentsByScope.get(sessionAgentEntryKey(SCOPE, MAIN_SESSION_ID));
@@ -307,6 +311,10 @@ describe("main conversation tracking", () => {
 });
 
 describe("pre-send live-run drain", () => {
+	afterEach(() => {
+		cursorSessionScopeTestUtils.reset();
+	});
+
 	it("leaves another conversation's live run alone", async () => {
 		cursorSessionScopeTestUtils.set("/tmp/project", SCOPE);
 		const run = cursorLiveRuns.start({ id: "conversation-run", agent: {} as never, conversationId: MAIN_SESSION_ID, promptInputTokens: 0 });

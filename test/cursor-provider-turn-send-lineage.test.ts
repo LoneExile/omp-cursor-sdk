@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendCursorProviderTurn } from "../src/cursor-provider-turn-send.js";
 import type { CursorProviderTurnPrepareResult } from "../src/cursor-provider-turn-types.js";
 import {
@@ -63,6 +63,7 @@ async function send(prepared: CursorProviderTurnPrepareResult) {
 
 describe("Cursor agent lineage on send", () => {
 	beforeEach(() => lineageTestUtils.reset());
+	afterEach(() => cursorSessionScopeTestUtils.reset());
 
 	it("records the main conversation's agent, not a one-shot or another loop's agent", async () => {
 		const appendEntry = registerLineage();
