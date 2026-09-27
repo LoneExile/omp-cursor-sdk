@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { request, Server } from "node:http";
+import { type IncomingMessage, request, Server, type ServerResponse } from "node:http";
 import { CursorPiToolBridgeRegistry } from "../src/cursor-pi-tool-bridge-server.js";
 import type { CursorPiToolBridgeRunImpl } from "../src/cursor-pi-tool-bridge-run.js";
 
@@ -11,7 +11,7 @@ function createRegistry(): CursorPiToolBridgeRegistry {
 
 function fakeRun(body: string): CursorPiToolBridgeRunImpl {
 	return {
-		handleHttpRequest: async (_req, res) => {
+		handleHttpRequest: async (_req: IncomingMessage, res: ServerResponse) => {
 			res.writeHead(200, { "content-type": "text/plain" });
 			res.end(body);
 		},
@@ -36,7 +36,7 @@ describe("Cursor pi tool bridge HTTP server lifecycle", () => {
 		const registry = createRegistry();
 		const originalListen = Server.prototype.listen;
 		let failed = false;
-		Server.prototype.listen = function (...args: any[]) {
+		Server.prototype.listen = function (this: Server, ...args: any[]) {
 			if (!failed) {
 				failed = true;
 				queueMicrotask(() => this.emit("error", new Error("injected listen failure")));
