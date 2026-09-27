@@ -4,10 +4,12 @@ import type { Context, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 // comparison below uses the exact string the summarizer sends.
 import { SUMMARIZATION_SYSTEM_PROMPT } from "@oh-my-pi/pi-agent-core/compaction/utils";
 import {
+	armCursorSessionBindingClaim,
 	currentCursorSessionBinding,
 	cursorSessionSlot,
 	cursorSessionSlotView,
 	learnCursorProviderSessionState,
+	type CursorRequestResolution,
 } from "./cursor-session-binding.js";
 
 /**
@@ -85,7 +87,7 @@ const conversationTracker: CursorConversationTrackerState = cursorSessionSlotVie
 
 interface CursorConversationTrackingExtensionApi {
 	on(event: "session_start", handler: (event: unknown, ctx: { sessionManager?: { getSessionId?(): string } }) => unknown): void;
-	on(event: "before_agent_start", handler: () => unknown): void;
+	on(event: "before_agent_start", handler: (event: { prompt?: string }) => unknown): void;
 }
 
 /**
@@ -117,8 +119,9 @@ export function registerCursorConversationTracking(pi: CursorConversationTrackin
 		conversationTracker.armed = false;
 		conversationTracker.otherIds.clear();
 	});
-	pi.on("before_agent_start", () => {
+	pi.on("before_agent_start", (event) => {
 		conversationTracker.armed = true;
+		armCursorSessionBindingClaim(currentCursorSessionBinding(), event?.prompt);
 		return undefined;
 	});
 }
@@ -126,9 +129,15 @@ export function registerCursorConversationTracking(pi: CursorConversationTrackin
 export function classifyCursorRequestRoute(
 	context: Pick<Context, "systemPrompt" | "tools">,
 	options?: CursorRequestRoutingOptions,
+	resolution?: CursorRequestResolution,
 ): CursorRequestRoute {
 	const conversationId = getCursorConversationId(options);
 	if (isCursorOneShotRequest(context, options)) return { oneShot: true, conversationId, mainConversation: false };
+	// No session can be told for it, or it reached the root session only by falling back
+	// while a `/tan` clone waits for its first request: it must not take a conversation.
+	if (resolution?.via === "unknown" || (resolution?.via === "fallback" && resolution.contested)) {
+		return { oneShot: true, conversationId, mainConversation: false };
+	}
 	const tracker = conversationTracker;
 	const providerState = options?.providerSessionState;
 	// Another agent session's loop (auto-learn capture keeps its own store).

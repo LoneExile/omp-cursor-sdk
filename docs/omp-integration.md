@@ -224,8 +224,13 @@ The extension wires into OMP's session events:
   factory for every in-process subagent, `/tan` clone and revived worker,
   which re-bind the parent's prepared factories to their own ExtensionAPI
   (`sdk.ts` `preloadedPreparedExtensions`, `loader.ts`
-  `bindPreparedExtensions`), then emit their own `session_start`
-  (`task/executor.ts`). Each registration therefore gets a session binding
+  `bindPreparedExtensions`). Subagents and revived workers then emit their
+  own `session_start` (`task/executor.ts`, `task/persisted-revive.ts`);
+  `/tan` clones never do (`tan-command-controller.ts` creates the clone and
+  prompts it), so a binding without `session_start` runs its
+  `session_start` handlers once with its first prompt's context, before
+  that prompt's `before_agent_start` handlers, and gets its own scope
+  (session file, cwd), resume and lineage state. Each registration therefore gets a session binding
   (`src/cursor-session-binding.ts`): session scope, pi tool bridge and its
   tracked tool executions, resume and lineage state, fast/mode/runtime/flag
   state, the session error guard, cloud ledger and replay-tool registration
@@ -238,7 +243,16 @@ The extension wires into OMP's session events:
   sources in the shared model registry (`sdk.ts` `clearSourceRegistrations`,
   `pi-ai` `api-registry.ts` keeps one entry per api), so each call resolves
   its session from its `providerSessionState` store (one per AgentSession),
-  else its provider session id, else the root session. There is no
+  else its provider session id, else the root session. A `/tan` clone's
+  requests carry neither of a known session (a fresh store and the provider
+  session id `<parent>:tan:<id>`): the clone's `before_agent_start` marks it
+  as pending until its first main-loop request, which goes to the one
+  pending clone (several at once are told apart by their prompt, the
+  request's last user message) and teaches the clone its store; a `:tan:`
+  request no pending clone matches runs one-shot and never reaches the root.
+  A request that reaches the root only by that fallback while a clone is
+  pending runs one-shot too, so it never takes the root's armed main
+  conversation. There is no
   registration-time cleanup: in one module instance a later factory call is
   always another live session, a reload is a new module instance, and a
   replaced session cleans up in its own `session_shutdown`.

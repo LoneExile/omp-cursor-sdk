@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { SimpleStreamOptions } from "@oh-my-pi/pi-ai";
+import type { Context, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 
 /**
  * One registration of this extension: the omp session its factory call serves.
@@ -13,6 +13,11 @@ import type { SimpleStreamOptions } from "@oh-my-pi/pi-ai";
  * Each bind has its own handler map and runner, so events never cross sessions, but
  * module-level state would. Per-session state therefore lives in slots of the binding,
  * and every event handler, command and tool of a registration runs inside it.
+ *
+ * Subagents and revived workers emit session_start (task/executor.ts,
+ * task/persisted-revive.ts); `/tan` clones never do (modes/controllers/
+ * tan-command-controller.ts creates the clone and prompts it). A binding without
+ * session_start starts from its first prompt instead (bindCursorExtensionApi).
  */
 export interface CursorSessionBinding {
 	readonly id: number;
@@ -21,14 +26,36 @@ export interface CursorSessionBinding {
 	sessionId?: string;
 	/** `ctx.agent.kind` from session_start: "sub" for subagents, `/tan` clones and workers. */
 	agentKind?: "main" | "sub";
+	/** The host emitted session_start for this binding's session. */
+	sawSessionStart: boolean;
+	/**
+	 * A binding without session_start that is running a prompt and has not learned its
+	 * provider state store yet: its first main-loop request is still unidentified.
+	 */
+	pendingClaim: boolean;
+	/** That prompt's text (before_agent_start), to tell two pending bindings apart. */
+	pendingPrompt?: string;
+	/** Some provider state store maps to this binding. */
+	learnedStore: boolean;
 	closed: boolean;
 }
+
+/**
+ * How a provider call found its session: by its provider state store, by its provider
+ * session id, as the first request of a `/tan` clone's pending prompt, or by falling back
+ * to the root session (`contested` when a clone is pending: the request might be the
+ * clone's). `unknown`: no session can be told, so the call runs one-shot.
+ */
+export type CursorRequestResolution =
+	| { via: "store" | "id" | "pending"; binding: CursorSessionBinding }
+	| { via: "fallback"; binding: CursorSessionBinding; contested: boolean }
+	| { via: "unknown"; binding?: undefined };
 
 const storage = new AsyncLocalStorage<CursorSessionBinding>();
 let nextBindingId = 0;
 
 function makeBinding(): CursorSessionBinding {
-	return { id: nextBindingId++, slots: new Map(), closed: false };
+	return { id: nextBindingId++, slots: new Map(), sawSessionStart: false, pendingClaim: false, learnedStore: false, closed: false };
 }
 
 /** State outside any registration: tests and module load. */
@@ -50,6 +77,11 @@ export function createCursorSessionBinding(): CursorSessionBinding {
 	return binding;
 }
 
+/** A binding outside every session, for one request that no session can be told for. */
+export function createDetachedCursorSessionBinding(): CursorSessionBinding {
+	return makeBinding();
+}
+
 export function currentCursorSessionBinding(): CursorSessionBinding {
 	return storage.getStore() ?? rootBinding ?? defaultBinding;
 }
@@ -69,9 +101,44 @@ export function markCursorSessionBindingStarted(
 	liveBindings.add(binding);
 }
 
+/**
+ * before_agent_start of a binding that never saw session_start: omp gives a `/tan` clone
+ * a provider session id of its own (`<parent>:tan:<id>`) and a fresh provider state store,
+ * so its first main-loop request matches no binding. Mark the binding as expecting it.
+ */
+export function armCursorSessionBindingClaim(binding: CursorSessionBinding, prompt: string | undefined): void {
+	if (binding.sawSessionStart || binding.learnedStore || binding.closed) return;
+	binding.pendingClaim = true;
+	binding.pendingPrompt = prompt;
+}
+
 export function markCursorSessionBindingClosed(binding: CursorSessionBinding): void {
 	binding.closed = true;
 	liveBindings.delete(binding);
+}
+
+/** tan-command-controller.ts: `providerSessionId: \`${parentSessionId}:tan:${Snowflake.next()}\``. */
+const TAN_CLONE_SESSION_MARKER = ":tan:";
+
+function lastUserMessageText(context: Pick<Context, "messages"> | undefined): string {
+	const messages = context?.messages ?? [];
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index];
+		if (message.role !== "user") continue;
+		if (typeof message.content === "string") return message.content;
+		return message.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
+	}
+	return "";
+}
+
+/** The pending `/tan` clone a clone request belongs to, if exactly one can be told. */
+function resolvePendingClaim(context: Pick<Context, "messages"> | undefined): CursorSessionBinding | undefined {
+	const pending = [...liveBindings].filter((binding) => binding.pendingClaim);
+	if (pending.length <= 1) return pending[0];
+	// Several clones prompted at once: the request's own prompt is its last user message.
+	const text = lastUserMessageText(context);
+	const matching = pending.filter((binding) => binding.pendingPrompt && text.includes(binding.pendingPrompt));
+	return matching.length === 1 ? matching[0] : undefined;
 }
 
 /**
@@ -81,32 +148,45 @@ export function markCursorSessionBindingClosed(binding: CursorSessionBinding): v
  * clearSourceRegistrations; pi-ai api-registry.ts registerCustomApi keeps one entry per
  * api), so the call itself must say which session sent it: its provider state store,
  * else its provider session id (a loop turn's `options.sessionId` is its session's id,
- * AgentSession.sessionId), else the root session (requests without either, such as the
+ * AgentSession.sessionId). A `/tan` clone's request carries neither of a known session
+ * and goes to the clone whose prompt is pending, or runs one-shot when that is ambiguous.
+ * Everything else falls back to the root session (requests without either, such as the
  * session title or the auto-learn capture of the root session).
  */
 export function resolveCursorRequestBinding(
 	options?: Pick<SimpleStreamOptions, "sessionId" | "providerSessionState">,
-): CursorSessionBinding {
+	context?: Pick<Context, "messages">,
+): CursorRequestResolution {
 	const providerState = options?.providerSessionState;
 	if (providerState) {
 		const known = bindingsByProviderState.get(providerState);
-		if (known && !known.closed) return known;
+		if (known && !known.closed) return { via: "store", binding: known };
 	}
 	const sessionId = options?.sessionId;
 	if (sessionId) {
 		for (const binding of liveBindings) {
 			if (binding.closed || binding.sessionId !== sessionId) continue;
-			if (providerState) bindingsByProviderState.set(providerState, binding);
-			return binding;
+			if (providerState) learnCursorProviderSessionState(binding, providerState);
+			return { via: "id", binding };
+		}
+		// Never the root session's own request: the clone's, or no one's.
+		if (sessionId.includes(TAN_CLONE_SESSION_MARKER)) {
+			const clone = providerState ? resolvePendingClaim(context) : undefined;
+			return clone ? { via: "pending", binding: clone } : { via: "unknown" };
 		}
 	}
-	if (rootBinding && !rootBinding.closed) return rootBinding;
-	return currentCursorSessionBinding();
+	const root = rootBinding && !rootBinding.closed ? rootBinding : currentCursorSessionBinding();
+	const contested = [...liveBindings].some((binding) => binding !== root && binding.pendingClaim);
+	return { via: "fallback", binding: root, contested };
 }
 
 /** Record the provider state store of a request the binding claimed as its own conversation. */
 export function learnCursorProviderSessionState(binding: CursorSessionBinding, providerState: object | undefined): void {
-	if (providerState) bindingsByProviderState.set(providerState, binding);
+	if (!providerState) return;
+	bindingsByProviderState.set(providerState, binding);
+	binding.learnedStore = true;
+	binding.pendingClaim = false;
+	binding.pendingPrompt = undefined;
 }
 
 export interface CursorSessionSlot<T> {
@@ -163,13 +243,47 @@ type AnyHandler = (...args: never[]) => unknown;
 /**
  * The ExtensionAPI of one registration with every callback the host invokes later (event
  * handlers, commands, shortcuts, tool executions) running inside the binding.
+ *
+ * A binding the host never sends session_start (a `/tan` clone) runs its session_start
+ * handlers once, with its first prompt's context, before that prompt's before_agent_start
+ * handlers: the clone gets its own scope (session file, cwd), resume and lineage state
+ * instead of sharing an anonymous scope with every other such binding.
  */
 export function bindCursorExtensionApi<T extends object>(pi: T, binding: CursorSessionBinding): T {
 	const inBinding = <F extends AnyHandler>(handler: F): F =>
 		((...args: Parameters<F>) => runInCursorSessionBinding(binding, () => handler(...args))) as F;
+	const sessionStartHandlers: AnyHandler[] = [];
+	let startedFromPrompt = false;
+	// The host runs before_agent_start handlers one at a time (runner.ts emitBeforeAgentStart),
+	// so the first one runs the start; a failing handler surfaces as that handler's error.
+	const startFromPrompt = async (ctx: never): Promise<void> => {
+		if (binding.sawSessionStart || startedFromPrompt) return;
+		startedFromPrompt = true;
+		for (const handler of sessionStartHandlers) await handler({ type: "session_start" } as never, ctx);
+	};
+	const onEvent = (target: Record<string, unknown>, event: string, handler: AnyHandler): void =>
+		(target.on as (event: string, handler: AnyHandler) => void)(event, handler);
 	const wrappers: Record<string, (target: Record<string, unknown>) => unknown> = {
-		on: (target) => (event: string, handler: AnyHandler) =>
-			(target.on as (event: string, handler: AnyHandler) => void)(event, inBinding(handler)),
+		on: (target) => (event: string, handler: AnyHandler) => {
+			const bound = inBinding(handler);
+			if (event === "session_start") {
+				sessionStartHandlers.push(bound);
+				onEvent(target, event, (...args: never[]) => {
+					binding.sawSessionStart = true;
+					binding.pendingClaim = false;
+					return bound(...args);
+				});
+				return;
+			}
+			if (event === "before_agent_start") {
+				onEvent(target, event, async (...args: never[]) => {
+					await startFromPrompt(args[1]);
+					return bound(...args);
+				});
+				return;
+			}
+			onEvent(target, event, bound);
+		},
 		registerCommand: (target) => (name: string, options: { handler: AnyHandler }) =>
 			(target.registerCommand as (name: string, options: unknown) => void)(name, {
 				...options,

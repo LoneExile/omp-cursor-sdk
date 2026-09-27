@@ -26,7 +26,12 @@ import { CursorProviderTurnRunner } from "./cursor-provider-turn-runner.js";
 import { getCursorSessionScopeKey } from "./cursor-session-scope.js";
 import { sessionAgentEntryKey } from "./cursor-session-agent.js";
 import { classifyCursorRequestRoute } from "./cursor-one-shot-request.js";
-import { resolveCursorRequestBinding, runInCursorSessionBinding } from "./cursor-session-binding.js";
+import {
+	createDetachedCursorSessionBinding,
+	resolveCursorRequestBinding,
+	runInCursorSessionBinding,
+	type CursorRequestResolution,
+} from "./cursor-session-binding.js";
 import { runExclusiveCursorSessionTurn, __testUtils as cursorSessionTurnQueueTestUtils } from "./cursor-session-turn-queue.js";
 
 function makeInitialMessage(model: Model<Api>): AssistantMessage {
@@ -55,14 +60,18 @@ export function streamCursor(
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream {
 	// The whole turn, including its fire-and-forget run completion, runs in the session
-	// that sent the request (see resolveCursorRequestBinding).
-	return runInCursorSessionBinding(resolveCursorRequestBinding(options), () => streamCursorInSession(model, context, options));
+	// that sent the request (see resolveCursorRequestBinding); a request no session can be
+	// told for runs one-shot outside every session.
+	const resolution = resolveCursorRequestBinding(options, context);
+	const binding = resolution.binding ?? createDetachedCursorSessionBinding();
+	return runInCursorSessionBinding(binding, () => streamCursorInSession(model, context, options, resolution));
 }
 
 function streamCursorInSession(
 	model: Model<Api>,
 	context: Context,
-	options?: SimpleStreamOptions,
+	options: SimpleStreamOptions | undefined,
+	resolution: CursorRequestResolution,
 ): AssistantMessageEventStream {
 	const stream = createAssistantMessageEventStream();
 	const sdkEventDebugRef: { current?: CursorSdkEventDebugSink } = {};
@@ -70,7 +79,7 @@ function streamCursorInSession(
 
 	(async () => {
 		const partial = makeInitialMessage(model);
-		const route = classifyCursorRequestRoute(context, options);
+		const route = classifyCursorRequestRoute(context, options, resolution);
 
 		const runner = new CursorProviderTurnRunner({
 			model,
