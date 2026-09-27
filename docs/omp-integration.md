@@ -206,10 +206,12 @@ Per-run SDK `TokenUsage` (input/output/cacheRead/cacheWrite/totalTokens) is
 applied to the assistant message so OMP's dashboard and `stats.db` see
 real usage. Context-window budget math null-guards OMP's `Model` fields
 (`contextWindow`/`maxTokens` are nullable in OMP). When the SDK reports no
-usable usage, the estimate is floored at the last same-model assistant usage,
-ignoring usage reported before the latest history rewrite (a compaction or
-branch summary's `historyRewriteAt`, or a pruned tool result's `prunedAt`),
-the rule OMP's own `findRequestUsageAnchor` applies.
+usable usage, the estimate is floored at the newest same-model assistant usage
+accepted by the forward scan of OMP's `findRequestUsageAnchor` (`pi-agent-core`
+compaction/transcript-tokens.ts): a compaction or branch summary
+(`historyRewriteAt`) or a pruned tool result (`prunedAt`) raises the rewrite
+time, and an assistant listed after it qualifies only if its timestamp is later.
+Assistants listed before the rewrite stay valid.
 
 ## 6. Session lifecycle integration
 

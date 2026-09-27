@@ -16,7 +16,7 @@
 ### Fixed
 
 - Cursor models whose effort control is the `reasoning_effort` parameter (Grok 4.7, Gemini 3.8 Flash) now register as reasoning models and map thinking levels onto `reasoning_effort`; previously every such request kept Cursor's catalog default effort.
-- Occupancy estimates no longer rise back to a kept pre-compaction assistant's usage (#204): usage reported before the latest compaction or branch summary (`historyRewriteAt`) or before a tool result was pruned (`prunedAt`) is ignored, matching omp's own usage anchor, so auto-compaction does not re-fire on a near-empty context.
+- Occupancy estimates no longer rise back to a kept pre-compaction assistant's usage (#204). The floor uses the newest same-model assistant usage that follows every history rewrite before it in the request (a compaction or branch summary's `historyRewriteAt`, a pruned tool result's `prunedAt`), the forward scan of omp's `findRequestUsageAnchor`, so auto-compaction does not re-fire on a near-empty context.
 - omp developer messages (extension custom messages, `@file` mentions) are included in Cursor prompts and force a re-bootstrap when they arrive before the latest prompt; they were silently dropped.
 - `@fast`/`@slow` lanes without their own measurement use the measured window of the same model and context (for example `claude-opus-4-8@1m@fast` is 300K, not the 1M label).
 - After a failed or cancelled compaction, the next normal turn persists its local-resume handle again; the suppression now clears at the next `turn_start` as well as on `session_compact`.

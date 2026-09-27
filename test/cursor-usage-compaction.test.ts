@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssistantMessage, Context } from "@oh-my-pi/pi-ai";
+import { findRequestUsageAnchor } from "@oh-my-pi/pi-agent-core/compaction/transcript-tokens";
 import { convertToLlm } from "@oh-my-pi/pi-coding-agent";
 import { applyCursorApproximateUsage, estimateCursorContextTotalTokens } from "../src/cursor-usage-accounting.js";
 import { makeModel } from "./helpers/model-fixtures.js";
@@ -68,10 +69,11 @@ describe("Cursor usage after OMP compaction (#204)", () => {
 		expect(partial.usage.totalTokens).toBe(42_000);
 	});
 
-	// Tool-output pruning rewrites a toolResult in place and stamps `prunedAt`
-	// (pi-agent-core compaction/pruning.ts, shake.ts); host findRequestUsageAnchor
-	// treats usage reported at or before it as stale.
-	it("does not raise occupancy to usage reported before a tool result was pruned", () => {
+	// Tool-output pruning rewrites a toolResult in place and stamps `prunedAt` (pi-agent-core
+	// compaction/pruning.ts, shake.ts). Host findRequestUsageAnchor scans forward: the
+	// assistant that issued the call precedes the pruned result, so its prefix is unchanged
+	// and it stays the anchor; the later assistant counted the pruned bytes and does not.
+	it("anchors occupancy exactly like the host's forward scan around a pruned tool result", () => {
 		const PRUNED_AT = 9_000;
 		const toolCallTurn: AssistantMessage = {
 			...cursorAssistant("", 2_000, 150_000),
@@ -87,12 +89,10 @@ describe("Cursor usage after OMP compaction (#204)", () => {
 		];
 		const context: Context = { systemPrompt: ["Be helpful."], messages: convertToLlm(agentMessages as Parameters<typeof convertToLlm>[0]) };
 		expect(context.messages[2]).toMatchObject({ role: "toolResult", prunedAt: PRUNED_AT });
+		expect(findRequestUsageAnchor(context.messages)).toMatchObject({ index: 1, tokens: 150_000 });
 
 		const partial = cursorAssistant("Nothing else.", 12_000);
 		applyCursorApproximateUsage(partial, model, context, 500);
-		expect(partial.usage.totalTokens).toBe(
-			Math.max(partial.usage.input + partial.usage.output, estimateCursorContextTotalTokens(partial, model, context)),
-		);
-		expect(partial.usage.totalTokens).toBeLessThan(10_000);
+		expect(partial.usage.totalTokens).toBe(150_000);
 	});
 });

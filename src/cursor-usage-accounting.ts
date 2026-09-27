@@ -120,39 +120,36 @@ function isCompatibleCursorAssistantMeasurement(assistant: AssistantMessage, mod
 }
 
 /**
- * Latest client-side history rewrite in the request, mirroring pi-agent-core
- * findRequestUsageAnchor. OMP hands providers compaction and branch summaries as
- * `user` messages carrying `historyRewriteAt` (pi-agent-core convertMessageToLlm), and
- * tool-output pruning stamps `prunedAt` on the rewritten toolResult. Usage reported at
- * or before either still counts the removed text.
+ * Occupancy of the newest usable same-model assistant measurement, using the staleness
+ * scan of pi-agent-core findRequestUsageAnchor (compaction/transcript-tokens.ts): walking
+ * forward, a compaction/branch summary (a `user` message with `historyRewriteAt`; its
+ * rewrite time is max(historyRewriteAt, timestamp)) or a pruned tool result (`prunedAt`)
+ * raises the rewrite time, and only assistants after the rewrites seen so far qualify.
+ * An assistant before a later pruned result stays valid; its prefix was not rewritten.
+ * On top of the host rule, a measurement must come from this model and fit its window.
  */
-function getLatestHistoryRewriteAt(context: Context): number {
+function getLastAcceptedContextOccupancy(context: Context, model: Model<Api>): number {
 	let rewriteAt = Number.NEGATIVE_INFINITY;
+	let occupancy = 0;
 	for (const message of context.messages) {
 		if (message.role === "user" && message.historyRewriteAt !== undefined) {
 			rewriteAt = Math.max(rewriteAt, message.historyRewriteAt, message.timestamp);
-		} else if (message.role === "toolResult" && message.prunedAt !== undefined) {
+			continue;
+		}
+		if (message.role === "toolResult" && message.prunedAt !== undefined) {
 			rewriteAt = Math.max(rewriteAt, message.prunedAt);
+			continue;
+		}
+		if (message.role !== "assistant" || message.timestamp <= rewriteAt) continue;
+		if (message.stopReason === "aborted" || message.stopReason === "error" || !message.usage) continue;
+		if (!isCompatibleCursorAssistantMeasurement(message, model)) continue;
+		const { usage } = message;
+		const total = usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+		if (Number.isFinite(total) && total > 0 && (model.contextWindow === null || total <= model.contextWindow)) {
+			occupancy = total;
 		}
 	}
-	return rewriteAt;
-}
-
-function getLastAcceptedContextOccupancy(context: Context, model: Model<Api>): number {
-	const rewriteAt = getLatestHistoryRewriteAt(context);
-	for (let index = context.messages.length - 1; index >= 0; index -= 1) {
-		const message = context.messages[index];
-		if (message.role !== "assistant" || !("usage" in message)) continue;
-		const assistant = message as AssistantMessage;
-		if (assistant.stopReason === "aborted" || assistant.stopReason === "error" || !assistant.usage) continue;
-		if (!isCompatibleCursorAssistantMeasurement(assistant, model)) continue;
-		if (assistant.timestamp <= rewriteAt) continue;
-		const { usage } = assistant;
-		const total =
-			usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
-		if (Number.isFinite(total) && total > 0 && (model.contextWindow === null || total <= model.contextWindow)) return total;
-	}
-	return 0;
+	return occupancy;
 }
 
 export function applyCursorApproximateUsage(partial: AssistantMessage, model: Model<Api>, context: Context, sessionInputTokens: number): void {
