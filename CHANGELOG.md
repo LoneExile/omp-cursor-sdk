@@ -1,10 +1,40 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-09-27
+
+### Breaking
+
+- The plugin now registers its models under the `cursor-sdk` provider instead of `cursor`. omp 18.x ships a built-in OAuth `cursor` provider; sharing the id merged both catalogs and let this plugin's Cursor-only hooks act on built-in models. Update selectors such as `cursor/grok-4.7@256k` to `cursor-sdk/grok-4.7@256k` (including `modelRoles` in `~/.omp/agent/config.yml`). Stored keys are looked up for `cursor-sdk`; the built-in provider's `/login` OAuth credential is never used.
+
+### Added
+
+- Models advertise omp-native thinking metadata (`thinking: { mode: "effort", efforts, requiresEffort }`) listing exactly the levels Cursor exposes, so `omp models cursor-sdk` shows the real levels (for example `low..xhigh` for Grok 4.7, `low..max` for Claude Opus 5) and `--thinking xhigh`/`max` are no longer clamped to `high`. The ignored Pi `thinkingLevelMap` field is no longer registered.
+- Bundled context windows measured from live SDK checkpoints on 2026-09-27.
+- A refused context variant (`AI Model Not Found Invalid parameters for registry model`, for example `grok-4.7@500k`) keeps Cursor's message and adds a hint: larger context variants can need Cursor Max mode, which the SDK cannot request; use the smaller `@<context>` variant.
+- README rewritten for omp: install via `omp plugin link` or `omp plugin install github:LoneExile/omp-cursor-sdk`, key setup, model id grammar, commands, and troubleshooting.
 
 ### Fixed
 
-- Cursor models whose effort control is the `reasoning_effort` parameter (Grok 4.7, Gemini 3.8 Flash) now register as reasoning models and map pi thinking levels onto `reasoning_effort`; previously every such request kept Cursor's catalog default effort.
+- Cursor models whose effort control is the `reasoning_effort` parameter (Grok 4.7, Gemini 3.8 Flash) now register as reasoning models and map thinking levels onto `reasoning_effort`; previously every such request kept Cursor's catalog default effort.
+- Occupancy estimates no longer rise back to a kept pre-compaction assistant's usage (#204): usage reported before the latest compaction or branch summary (`historyRewriteAt`) or before a tool result was pruned (`prunedAt`) is ignored, matching omp's own usage anchor, so auto-compaction does not re-fire on a near-empty context.
+- omp developer messages (extension custom messages, `@file` mentions) are included in Cursor prompts and force a re-bootstrap when they arrive before the latest prompt; they were silently dropped.
+- `@fast`/`@slow` lanes without their own measurement use the measured window of the same model and context (for example `claude-opus-4-8@1m@fast` is 300K, not the 1M label).
+- After a failed or cancelled compaction, the next normal turn persists its local-resume handle again; the suppression now clears at the next `turn_start` as well as on `session_compact`.
+- Auth guidance now says to set `CURSOR_API_KEY` (Cursor Dashboard → API Keys) in `~/.omp/.env` or the environment and restart omp, instead of Pi's `/login -> Use an API key -> Cursor`.
+- Tests run in a throwaway agent dir (bun preload) and no longer overwrite `~/.omp/agent/cursor-sdk-*.json`.
+
+### Ported from upstream (fitchmultz/pi-cursor-sdk)
+
+- Keep the abort listener until a live Cursor run settles (1502ddd).
+- Preserve `!` execution output before follow-up prompts by re-bootstrapping (9a46cbb).
+- Preserve Cursor assistant text boundaries (a221841).
+- Suppress compaction-summarizer resume handles (07b3138, #223 part).
+- Refresh the fallback Cursor model snapshot and serialize the pi bridge HTTP server lifecycle (f6d5b99, bridge change hand-ported).
+
+### Dependencies
+
+- `@cursor/sdk` 1.0.23 → 1.0.32 (upstream f6d5b99).
+- `@oh-my-pi/omptype`, `pi-ai`, `pi-coding-agent`, `pi-tui`, `pi-utils` 17.3.0 → 18.3.4 (tested host: omp 18.3.4).
 
 ## 0.3.3 - 2026-08-14
 
