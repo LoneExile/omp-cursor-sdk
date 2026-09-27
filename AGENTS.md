@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is a pi provider extension that registers Cursor SDK-backed models under the `cursor` provider. Agent work is successful when changes preserve pi-native model/thinking/session behavior, keep Cursor API keys out of repo state and logs, and pass the local validation commands below.
+This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchmultz/pi-cursor-sdk, that registers Cursor SDK-backed models under the `cursor-sdk` provider (`CURSOR_PROVIDER` in `src/cursor-model.ts`; omp 18.x owns the built-in `cursor` provider). The host baseline is omp 18.3.4 with `@oh-my-pi/*` 18.3.4 and `@cursor/sdk` 1.0.32. Agent work is successful when changes preserve omp-native model/thinking/session behavior, keep Cursor API keys out of repo state and logs, and pass the local validation commands below.
 
 ## Repository map
 
@@ -112,16 +112,14 @@ This repository is a pi provider extension that registers Cursor SDK-backed mode
 
 ## Setup and commands
 
-- Install dependencies: `npm install` (runs `prepare`, which compiles `src/` into `dist/` — the manifest entry pi loads)
-- Build after editing `src/`: `npm run build` — required before any direct `pi -e .` run, or pi loads the previous build. The cloud/steering/local-resume/provider-debug launchers rebuild automatically (even when run directly with `node scripts/...`), `smoke:live`/`smoke:visual`/`smoke:isolated` build via their npm scripts, and `smoke:platform*` builds inside its packed installs; only direct `pi -e .` runs need a manual build.
-- Run tests: `npm test`
-- Typecheck (src + tests): `npm run typecheck`
-- Typecheck src only: `npm run typecheck:src`
-- Typecheck tests/helpers: `npm run typecheck:tests`
+- Install dependencies: `npm install`. There is no build step: omp loads `./src/index.ts` directly under Bun (`pi.extensions` in `package.json`).
+- Install into omp for manual testing: `omp plugin link "$PWD"` (symlink; restart omp), remove with `omp plugin uninstall omp-cursor-sdk`.
+- Run tests: `npm test` (bun test over the scoped file list in `package.json`; `bunfig.toml` preloads `test/setup/isolated-agent-dir.ts`, so tests never write `~/.omp/agent`). Add new bun-compatible test files to that list.
+- Typecheck src only: `npm run typecheck:src` (must pass)
+- Typecheck tests/helpers: `npm run typecheck:tests` (has pre-existing errors in Pi-bound tests; the count must not grow)
 - Package-readiness check: `npm pack --dry-run`
-- Watch tests while developing: `npm run test:watch`
-- Local development run, requires a Cursor key: `CURSOR_API_KEY="your-key" pi --approve -e . --model cursor/composer-2-5`
-- List Cursor models, requires pi and usually a Cursor key: `pi --list-models cursor`
+- Local development run, requires `CURSOR_API_KEY`: `omp -e ./src/index.ts --model cursor-sdk/composer-2.5`
+- List Cursor models: `omp models cursor-sdk -e ./src/index.ts`
 - Capture provider/SDK event artifacts for one prompt, requires a Cursor key: `CURSOR_API_KEY="your-key" npm run debug:provider-events -- --prompt "hello"`
 
 There is no lint or format script in `package.json` at this time.
@@ -140,7 +138,7 @@ There is no lint or format script in `package.json` at this time.
 Done means:
 
 - The intended behavior or documentation change is complete.
-- `npm test`, `npm run typecheck`, and `npm run typecheck:tests` pass, unless the change is docs-only and the user asked for minimal validation.
+- `npm test` and `npm run typecheck:src` pass, and the `npm run typecheck:tests` error count does not grow, unless the change is docs-only and the user asked for minimal validation.
 - `npm pack --dry-run` passes when package metadata, publishable docs, dependencies, or ignored artifacts change.
 - Related README/docs/tests are updated when behavior, commands, user-visible model IDs, flags, or troubleshooting change.
 - No secrets, local API keys, or noisy local state are added.
@@ -165,7 +163,7 @@ When plans, reviews, investigations, or generated smoke/debug artifacts are no l
 - `PI_CURSOR_SDK_EVENT_DEBUG=1` and `npm run debug:provider-events` write raw local artifacts that may include prompts, tool args/results, local paths, or secrets; keep them under gitignored `.debug/`, do not print or commit them, and keep run-scoped debug state explicit rather than process-global.
 - Ambient Cursor settings/rules loading is enabled by default through `PI_CURSOR_SETTING_SOURCES=all`; keep SDK startup log filtering intact so settings/skills output does not corrupt pi's TUI. Users can narrow or disable Cursor setting sources explicitly when desired.
 - Live `pi`/Cursor smoke tests may call external services and require Cursor auth in `~/.pi/agent/auth.json` and/or `CURSOR_API_KEY`; run them for Cursor provider/runtime changes. If auth is unavailable, report live smoke as release-blocked instead of skipped-ready. See `docs/cursor-testing-lessons.md` for isolated harness auth seeding.
-- For live runtime evidence, use `cursor/composer-2-5:slow` as much as needed. If Cursor Cloud does not support that exact model variant, use `cursor/composer-2-5`.
+- For live runtime evidence, use `cursor-sdk/composer-2-5@slow` as much as needed. If Cursor Cloud does not support that exact model variant, use `cursor-sdk/composer-2-5`.
 - Live Cursor Cloud probes that create `bc-*` agents must capture agent/run IDs, verify archive/delete cleanup, and report any residual agent; do not assume cleanup from a passed smoke.
 - For Cursor provider/runtime changes, the canonical local runtime release and pre-commit gate is `npm run smoke:platform:all`; see `docs/platform-smoke.md`. That script runs doctor before the macOS/Ubuntu/Windows local-runtime matrix. Cloud runtime changes must also run the opt-in `npm run smoke:cloud` lane. The platform gate uses packed installs across macOS, Ubuntu, and Windows native with PTY/ConPTY capture, host-rendered xterm/PNG visual evidence, JSONL assertions, bridge diagnostics, usage/cache checks, abort cleanup, artifact manifests, and redaction scans. Use `docs/cursor-live-smoke-checklist.md`, `npm run smoke:visual`, `npm run smoke:live`, or direct `pi --approve -e . --cursor-no-fast --model cursor/composer-2-5` runs only for inner-loop debugging and focused visual/card audits before the full platform gate. Do not mark release-ready with optional/deferred/mostly-passing platform smoke items outstanding.
 
@@ -191,7 +189,7 @@ Before publishing any npm/GitHub release or tagging release-ready status:
 Before **every commit** that touches Cursor provider/runtime, prompt/session send policy, agents-context dedup, bridge, replay, or related extension wiring:
 
 - Run the canonical local platform gate: `npm run smoke:platform:all` (see `docs/platform-smoke.md`; it runs doctor first). Also run `npm run smoke:cloud` when the commit touches actual cloud runtime execution.
-- Use `npm run smoke:live` (`scripts/tmux-live-smoke.sh`), `npm run smoke:visual` (`scripts/visual-tui-smoke.mjs`), `npm run smoke:isolated`, or direct `pi -e . --cursor-no-fast --model cursor/composer-2-5` only as inner-loop/debug helpers when narrowing a specific failure before the platform gate. For card/color claims, capture ANSI from the offscreen TUI, render it through the canonical browser/xterm path, save PNG evidence, and inspect JSONL.
+- Use `npm run smoke:live` (`scripts/tmux-live-smoke.sh`), `npm run smoke:visual` (`scripts/visual-tui-smoke.mjs`), `npm run smoke:isolated`, or direct `omp -e ./src/index.ts --cursor-no-fast --model cursor-sdk/composer-2-5` only as inner-loop/debug helpers when narrowing a specific failure before the platform gate. For card/color claims, capture ANSI from the offscreen TUI, render it through the canonical browser/xterm path, save PNG evidence, and inspect JSONL.
 - If Cursor auth (`~/.pi/agent/auth.json` or `CURSOR_API_KEY`) or required Crabbox/platform resources are unavailable, **do not commit**—report blocked, not skipped-ready.
 - Unit tests (`npm test`, `npm run typecheck`) are necessary but not sufficient for these commits.
 
@@ -207,10 +205,10 @@ Keep this file concise and repo-specific. Update it when commands, package layou
 
 This is a `pi` provider extension (not a server/web app). "Running the app" means launching `pi` with this extension loaded. Standard commands live in `## Setup and commands`; only the non-obvious caveats are below.
 
-- Dependencies install with `npm install` (this triggers `prepare`, which compiles `src/` to `dist/`; the pi manifest loads `dist/index.js`). After editing `src/`, run `npm run build` before any `pi -e .` run or the extension loads the previous build.
+- Dependencies install with `npm install`. There is no build step; omp loads `./src/index.ts` directly under Bun.
 - Node: `engines` requires `>=22.19.0`. Prefer a compliant Node on `PATH` for tests and live `pi` (for example `nvm use 22.22.2`). Older Node may run some commands but is unsupported.
 - `CURSOR_API_KEY` is provided as a cloud-agent secret, so live Cursor runs and full live model discovery work without `/login`. `npm test`, `npm run typecheck`, and `npm pack --dry-run` need no key.
-- Run the extension locally with `./node_modules/.bin/pi -e . --model cursor/composer-2-5` (the bare `pi` is not on `PATH`). Add `--approve` for interactive sessions; print-mode smoke: `./node_modules/.bin/pi -e . --model cursor/composer-2-5 --cursor-no-fast --no-session -p "..."`.
+- Run the extension locally with `./node_modules/.bin/omp -e ./src/index.ts --model cursor-sdk/composer-2-5` (`@oh-my-pi/pi-coding-agent` 18.3.4 installs that binary). Print-mode smoke: `./node_modules/.bin/omp -e ./src/index.ts --model cursor-sdk/composer-2-5 --cursor-no-fast --no-session -p "..."`.
 - Cold-start gotcha: the *first* Cursor SDK run in a fresh VM can take several minutes (SDK/transport warm-up); subsequent runs complete in ~10s. Warm up with one throwaway run before any timing-sensitive or recorded demo, and don't treat a slow first run as a hang.
 - When capturing print-mode (`-p`) output, redirect stdout to a file rather than piping through `tail`/`head` — those pipes buffer until the process exits, hiding streaming progress.
 - Use sessionful runs (`--session-dir`/`--session-id`, not `--no-session`) when testing session ledgers, resume identity, branch/fork/clone/switch behavior, or slash commands such as `/cursor-cloud`; `--no-session` is only proof for one-shot provider behavior.

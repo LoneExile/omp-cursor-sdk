@@ -1,11 +1,11 @@
 # OMP × omp-cursor-sdk: Integration Architecture
 
 This document explains, in full detail, how the `omp-cursor-sdk` plugin works
-inside OMP (Oh My Pi, `@oh-my-pi` 17.x). It covers the loading lifecycle,
+inside OMP (Oh My Pi, `@oh-my-pi` 18.x). It covers the loading lifecycle,
 provider registration, model discovery, authentication, the turn path, the
 OMP API surfaces the port had to adapt, and the known OMP-side behaviors and
-limitations. All facts in this document were verified live against OMP
-17.3.0 (2026-08-13..16).
+limitations. The facts were first verified live against OMP 17.3.0
+(2026-08-13..16) and re-checked against OMP 18.3.4 (2026-09-27).
 
 ---
 
@@ -31,7 +31,9 @@ remapped every import and adapted every drifted surface (see §7).
 
 ## 2. How OMP loads the plugin
 
-- Install: `omp plugin install --force git:github.com/LoneExile/omp-cursor-sdk#omp-port`.
+- Install: `omp plugin link "$PWD"` from an `npm install`ed checkout (a
+  symlink under `~/.omp/plugins/node_modules/`), or
+  `omp plugin install github:LoneExile/omp-cursor-sdk`; see the README.
 - OMP stores plugins under `~/.omp/plugins/` and loads each plugin's
   extension entry (the `pi.extensions` field in `package.json` →
   `./src/index.ts`) at session start, during the `loadExtensions` startup
@@ -52,7 +54,7 @@ remapped every import and adapted every drifted surface (see §7).
 At load, the extension calls:
 
 ```
-pi.registerProvider("cursor", {
+pi.registerProvider(CURSOR_PROVIDER /* "cursor-sdk" */, {
   baseUrl: "https://cursor.com",
   apiKey: CURSOR_API_KEY_CONFIG_VALUE,   // placeholder, see §4
   api: "cursor-sdk",                     // custom transport; OMP honors provider-supplied streamSimple
@@ -66,15 +68,21 @@ has streamSimple: registers a custom API streaming function"), so the
 unknown `api: "cursor-sdk"` value is carried as a label; the custom
 `streamSimple` is what actually runs turns.
 
+The provider id is `cursor-sdk` (`src/cursor-model.ts`). OMP 18.x ships a
+built-in OAuth `cursor` provider (api `cursor-agent`); registering the plugin
+under that id merged both catalogs and let the plugin's Cursor-only hooks claim
+built-in rows. `isCursorModel()` recognizes only `provider === "cursor-sdk"` or
+`api === "cursor-sdk"`.
+
 ### 3.2 Model discovery
 
 - `discoverModels()` loads `@cursor/sdk`'s `Cursor.models.list()` with the
   resolved API key.
-- The raw SDK catalog is **35 models** (composer-2.5, claude-opus-5,
-  claude-fable-5, grok-4.6, gpt-5.6-sol/terra/luna, gemini-3.x, kimi-k3,
-  glm-5.2, `default`/Auto, ...), each with `parameters` (effort, fast,
-  thinking, context, reasoning) and `variants` (param combinations).
-- The extension expands these into **208 registered OMP model ids** via
+- The raw SDK catalog is **41 models** (2026-09-27: composer-2.5, claude-opus-5,
+  claude-fable-5, grok-4.7, gpt-5.6-sol/terra/luna, gemini-3.x, kimi-k3,
+  glm-5.2, `default`/Auto, ...), each with `parameters` (effort,
+  reasoning_effort, fast, thinking, context, reasoning) and `variants`.
+- The extension expands these into **242 registered OMP model ids** via
   `getCursorModelSelectionIdentities()`:
   - base id: `grok-4.6`
   - context variants: `gpt-5.6-sol@272k`, `@1m`
@@ -89,20 +97,21 @@ unknown `api: "cursor-sdk"` value is carried as a label; the custom
 ### 3.3 Context windows
 
 Cursor's catalog publishes **no context window** for any model. The
-extension resolves context from, in order:
+extension resolves each id's window (`getContextWindow()` in
+`src/model-discovery.ts`) from the bundled map in
+`src/bundled-context-windows.ts` (measured from SDK checkpoints on
+2026-09-27), overlaid by `~/.omp/agent/cursor-sdk-context-windows.json`
+(written automatically from each completed run's
+`checkpoint.tokenDetails.maxTokens`, used from the next registration). Keys are
+tried in order: the exact id, its canonical default-lane id, the same model and
+context without `@fast`/`@slow` (the lane does not change the window), then the
+catalog context label (`@1m` → 1000000), the base id, and `"default"`.
 
-1. `~/.omp/agent/cursor-sdk-context-windows.json` — user overrides
-   (also written automatically from real SDK run checkpoints:
-   `checkpoint.tokenDetails.maxTokens`).
-2. The bundled map in `src/bundled-context-windows.ts` (known models such
-   as `grok-4.5: 256000`).
-3. The `"default"` entry (`200000`).
-
-Example (measured from a real grok-4.6 run):
-
-```json
-{ "contextWindows": { "gpt-5-6-sol@272k": 272000, "grok-4.6@fast": 256000 } }
-```
+Cursor Max-mode windows are not reachable: the SDK `ModelSelection`
+(`{ id, params }`) has no max-mode field. Measured `@1m` variants run at
+200k–300k (GPT `@1m` at 272000), and `grok-4.7@500k` is refused with
+`Invalid parameters for registry model`; the provider error appends a hint to
+use the smaller `@<context>` variant (`src/cursor-provider-errors.ts`).
 
 ## 4. Authentication and key resolution
 
@@ -114,8 +123,8 @@ Cursor Dashboard API key (`crsr_...`), stored in `~/.omp/.env` as
 ```
 options.apiKey (from OMP's registry)  ->  resolveCursorStringApiKey()
     -> resolves ApiKeyResolver forms via OMP's resolveApiKeyOnce
-process.env.CURSOR_API_KEY   (OMP auto-loads ~/.omp/.env at module init)
-ctx.modelRegistry.getApiKeyForProvider("cursor")   (login-saved keys, OMP's own store)
+process.env.CURSOR_API_KEY   (OMP loads ~/.omp/.env once, at startup)
+ctx.modelRegistry.getApiKeyForProvider("cursor-sdk")   (OMP's store for this provider id)
 ```
 
 Implementation: `resolveCursorApiKey()` normalizes placeholders
@@ -128,25 +137,30 @@ env value; `resolveCursorStringApiKey()` resolves an `ApiKey`
 `registerProvider` uses a non-empty placeholder
 (`omp-cursor-sdk-cursor-api-key-placeholder`) so the provider registers even
 before auth exists. The real key is resolved at discovery and turn time.
-OMP's registry stores the placeholder; resolution happens through the
-extension's own key path. The legacy `pi-cursor-sdk-...` placeholder string
-is still recognised for compatibility with older saved configs.
+OMP's registry stores the placeholder as the provider's config key
+(`ModelRegistry.registerProvider` → `authStorage.keys.setConfig`), and a
+config key counts as auth in `KeyCascade.source()`, so `cursor-sdk` models are
+available in `omp models` and the `/model` picker without stored credentials.
+The legacy `pi-cursor-sdk-...` placeholder string is still recognised for
+compatibility with older saved configs.
 
 ### 4.3 Why the plugin never opens OMP's agent.db
 
 Earlier port versions opened a second sqlite connection to OMP's credential
 store (`SqliteAuthCredentialStore` on `~/.omp/agent/agent.db`) to read/write
-a stored `cursor` credential. That second connection's `close()` triggered
+a stored credential. That second connection's `close()` triggered
 nine macOS `EXC_GUARD` kills (guarded sqlite fds closed from a bun
 background thread — identical guard token across all crash reports), so the
-plugin now resolves the key env-only. Keys saved through OMP's own login
-flows are read via `ctx.modelRegistry.getApiKeyForProvider("cursor")` — by
-OMP's connection, never a second one. Do not reintroduce a direct
-`SqliteAuthCredentialStore` open from the plugin.
+plugin now resolves the key env-only. Keys stored for the `cursor-sdk`
+provider id are read via `ctx.modelRegistry.getApiKeyForProvider("cursor-sdk")`
+— by OMP's connection, never a second one. The built-in `cursor` provider's
+OAuth credential (omp `/login`) is never read: it is an OAuth access token, not
+a Cursor SDK API key. Do not reintroduce a direct `SqliteAuthCredentialStore`
+open from the plugin.
 
 ## 5. The turn path
 
-When OMP needs a model turn for a `cursor/*` model, it calls the
+When OMP needs a model turn for a `cursor-sdk/*` model, it calls the
 provider's `streamSimple`:
 
 ```
@@ -154,8 +168,9 @@ streamCursor(model, context, options)
   -> createAssistantMessageEventStream()
   -> CursorProviderTurnRunner.run()
        -> prepare: buildCursorModelSelection(model.id, reasoning, fastEnabled)
-            -> maps OMP's --thinking level through the model's thinkingLevelMap
-               to the SDK's effort/reasoning/thinking param
+            -> maps OMP's --thinking level (already clamped by OMP to the
+               model's advertised `thinking.efforts`) to the SDK's
+               effort/reasoning_effort/reasoning/thinking param
             -> fastEnabled from the model's fast override (@fast/@slow) or
                --cursor-fast/--cursor-no-fast or the model default
        -> load @cursor/sdk, Agent.create({ apiKey, model: selection, mode, local })
@@ -190,7 +205,11 @@ streamCursor(model, context, options)
 Per-run SDK `TokenUsage` (input/output/cacheRead/cacheWrite/totalTokens) is
 applied to the assistant message so OMP's dashboard and `stats.db` see
 real usage. Context-window budget math null-guards OMP's `Model` fields
-(`contextWindow`/`maxTokens` are nullable in OMP).
+(`contextWindow`/`maxTokens` are nullable in OMP). When the SDK reports no
+usable usage, the estimate is floored at the last same-model assistant usage,
+ignoring usage reported before the latest history rewrite (a compaction or
+branch summary's `historyRewriteAt`, or a pruned tool result's `prunedAt`),
+the rule OMP's own `findRequestUsageAnchor` applies.
 
 ## 6. Session lifecycle integration
 
@@ -216,9 +235,9 @@ The extension wires into OMP's session events:
 
 ## 7. OMP API surfaces the port adapted
 
-Verified drift table (OMP 17.3.0 vs Pi 0.84):
+Verified drift table (OMP 17.3.0, re-checked on 18.3.4, vs Pi 0.84):
 
-| Surface | Pi 0.84 | OMP 17.3.0 | Port action |
+| Surface | Pi 0.84 | OMP 17.3.0 / 18.3.4 | Port action |
 |---|---|---|---|
 | imports | `@earendil-works/pi-*` | `@oh-my-pi/pi-*` | remapped |
 | tool schemas | `typebox` | `@oh-my-pi/omptype/typebox` (OMP's legacy shim) | import swap |
@@ -234,7 +253,8 @@ Verified drift table (OMP 17.3.0 vs Pi 0.84):
 | `ToolDefinition` fields | `promptSnippet`, `promptGuidelines`, `executionMode` | not present | removed |
 | `renderCall` / `renderResult` | `(args, theme, context)` | `(args, options, theme)` / `(result, options, theme, args?)` | signature swap; `fg`/`bold` via Theme |
 | `Skill.disableModelInvocation` | present | absent | filter on `Skill.hide` |
-| thinking levels | `ModelThinkingLevel`/`ThinkingLevelMap` | absent from pi-ai | vendored locally (`minimal..max` + `off`; `Effort` has no `off`) |
+| thinking levels | `ModelThinkingLevel`/`ThinkingLevelMap` on the model | `ProviderModelConfig.thinking` (`{ mode, efforts, requiresEffort? }`); `thinkingLevelMap` ignored | internal level map kept for selection; each model advertises `thinking: { mode: "effort", efforts, requiresEffort }` derived from it |
+| provider id `cursor` | free | built-in OAuth provider (18.x) | plugin registers `cursor-sdk` |
 | `CONFIG_DIR_NAME` | pi-coding-agent | `@oh-my-pi/pi-utils` | import moved (value `.omp`) |
 | `readStoredCredential` | shim export | absent | env key + `modelRegistry.getApiKeyForProvider` |
 | `create*ToolDefinition` | root exports | absent | not used (shadowing dropped) |
@@ -242,40 +262,15 @@ Verified drift table (OMP 17.3.0 vs Pi 0.84):
 
 ## 8. OMP-side behaviors and limitations
 
-### 8.1 The `/model` picker does not list cursor models
+### 8.1 Availability and the `/model` picker
 
-OMP's model registry filters "available" models to providers that are
-**config-configured** (`models.yml`) **or carry stored auth**
-(`authStorage.hasAuth`). Verified mechanics:
-
-- `hasAuth(provider)` reads an **in-memory cache** (`#data`), populated by
-  `reload()`; it is not a live DB read.
-- `getEnvApiKey(provider)` only knows OMP's own provider map
-  (`serviceProviderMap`); `cursor` is not in it, so an env key alone never
-  makes the provider available.
-- The extension cannot reach OMP's `AuthStorage` instance at load
-  (ExtensionAPI has no authStorage/modelRegistry), and cannot write the
-  config set (`#c`).
-
-Consequences:
-
-- `--model cursor/...` **works** (CLI resolution uses the full model set).
-- `/model` picker and `/model <id>` only see available models → cursor is
-  absent; `/model cursor/grok-4.6@slow` returns "Unknown model".
-- A `cursor:` block in `models.yml` is **actively harmful**: it shadows the
-  extension's `api: "cursor-sdk"` transport with an `openai-completions`
-  config and breaks every turn with an API-key-exchange error. Do not add it.
-
-Workarounds: launch with `--model cursor/...`, or set the default in
-`~/.omp/agent/config.yml`:
-
-```yaml
-modelRoles:
-  default: cursor/grok-4.6@slow:high
-```
-
-The real fix (making auth-resolvable extension providers visible in the
-picker) is an OMP core change, not a plugin change.
+`omp models` and the `/model` picker both list `ModelRegistry.getAvailable()`
+(`cli/models-cli.ts`, `modes/controllers/selector-controller.ts`). A provider is
+available when `authStorage.keys.source(provider)` reports auth, and a config
+key installed by `registerProvider({ apiKey })` counts (§4.2). With OMP 18.3.4,
+`omp models cursor-sdk` lists the plugin's rows and `omp models cursor` lists
+only the built-in provider's rows. The 17.x limitation (cursor models missing
+from the picker) no longer applies.
 
 ### 8.2 The `:fast`/`:slow` id collision
 
@@ -283,8 +278,10 @@ OMP's model-id grammar treats `model:level` as thinking-level syntax
 (`opencode-go/deepseek-v4-flash:xhigh`). Pi's `:fast`/`:slow` suffix was
 normalized away at registration and could never be selected. The port
 renamed the suffix to `@fast`/`@slow` (OMP treats `@` literally, proven by
-the `@context` variants). Select fast variants as
-`cursor/grok-4.6@fast --thinking high`.
+the `@context` variants). Select variants with `--thinking`, e.g.
+`cursor-sdk/grok-4.6@fast --thinking high`: with OMP 18.3.4,
+`--model cursor-sdk/grok-4.7@256k:low` (and `cursor-sdk/kimi-k3:low`) failed
+with `Model ... not found`.
 
 ### 8.3 Backend flakiness
 
@@ -308,7 +305,7 @@ controls reasoning depth on both variants.
 ### Slash commands (in-session)
 
 - `/cursor-refresh-models` — refresh the live catalog (bypasses cache)
-- `/cursor-fast` — toggle fast mode for the current cursor model
+- `/cursor-fast` — toggle fast mode for the current Cursor model
 - `/cursor-tools` — live tool-surface debug report
 - `/cursor-mode <agent|plan>` — agent/plan mode
 
@@ -316,28 +313,29 @@ controls reasoning depth on both variants.
 
 - `--cursor-fast` / `--cursor-no-fast` — force fast mode on/off
 - `--cursor-mode <agent|plan>` — CLI mode override
-- `--thinking <level>` — maps to the SDK effort/reasoning param
-  (off/minimal/low/medium/high/xhigh/max/auto)
+- `--thinking <level>` — one of the model's advertised efforts (the
+  `thinking` column of `omp models cursor-sdk`), or `off` where Cursor has an
+  off value; mapped to the SDK effort/reasoning_effort/reasoning/thinking param
 
 ### Environment
 
-- `CURSOR_API_KEY` — API key (`.env` auto-loaded by OMP)
+- `CURSOR_API_KEY` — API key (`~/.omp/.env` is loaded once at omp startup)
 - `PI_CURSOR_RUNTIME=cloud` — opt into cloud agents
 - `PI_CURSOR_CLOUD_ACK=1` (+ `PI_CURSOR_CLOUD_REPO`, ...) — cloud ack/config
-- `PI_CURSOR_FAST_DEFAULTS`-class vars — fast defaults per model
+- `fastDefaults` in `~/.omp/agent/cursor-sdk.json` — saved per-model fast defaults
 - `PI_CURSOR_SDK_EVENT_DEBUG=1` — SDK event debug logging
 
 ### Files
 
 - `~/.omp/agent/cursor-sdk-model-list.json` — model catalog cache (fingerprint-keyed)
-- `~/.omp/agent/cursor-sdk-context-windows.json` — context-window overrides
-  (user-editable)
-- `~/.omp/agent/agent.db` — OMP credential store (provider `cursor` row)
-- `~/.omp/agent/models.yml` — must NOT contain a `cursor:` block (§8.1)
+- `~/.omp/agent/cursor-sdk-context-windows.json` — measured context windows
+  (written from run checkpoints; user-editable)
+- `~/.omp/agent/cursor-sdk.json`, `<cwd>/.omp/cursor-sdk.json` — user and
+  project config
 
 ### Verification
 
-- `npx tsc --noEmit` — typecheck against OMP 17.3.0 types.
+- `npm run typecheck:src` — typecheck against OMP 18.3.4 types.
 - `bun test` — the port-relevant unit suite, run in the **Bun runtime** (the
   runtime OMP loads the plugin in). The upstream 126-file suite was written
   for Pi and is partially OMP-incompatible (imports of Pi-only exports such
@@ -345,8 +343,9 @@ controls reasoning depth on both variants.
   port-relevant files and `npm run test:full` runs the rest, which still has
   known Pi-bound failures. Do not run the suite under Node — the `@oh-my-pi`
   packages are Bun-targeted (`import.meta.dir`, `Bun.env`).
-- `omp --model cursor/composer-2.5 --no-session --mode text "hi"` — smoke turn
-- `omp --model cursor/grok-4.6@fast --thinking high ...` — variant turn
+- `omp -e ./src/index.ts --model cursor-sdk/composer-2.5 --no-session -p "Reply with exactly OK"` — smoke turn
+- `omp -e ./src/index.ts --model cursor-sdk/grok-4.7@256k --thinking xhigh ...` — variant turn
+- `omp models cursor-sdk -e ./src/index.ts` — registered rows, windows, thinking levels
 - `omp plugin list` — plugin enabled
 - `bun -e 'import("./src/index.ts").then(m=>console.log(typeof m.default==="function"))'`
   — load-under-Bun proof (mirrors OMP's loader)
