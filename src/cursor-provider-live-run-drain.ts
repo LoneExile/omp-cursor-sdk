@@ -21,7 +21,7 @@ import {
 import { type CursorPiBridgeToolRequest } from "./cursor-pi-tool-bridge.js";
 import { resetSessionCursorAgent } from "./cursor-session-agent.js";
 import { applyCursorUsage } from "./cursor-usage-accounting.js";
-import { CURSOR_TEXT_MESSAGE_SEPARATOR, CursorPartialContentEmitter } from "./cursor-partial-content-emitter.js";
+import { CursorPartialContentEmitter, cursorTextMessageSeparator } from "./cursor-partial-content-emitter.js";
 import { emitDisplayOnlyTraceBlock } from "./cursor-display-only-trace.js";
 import { trimCurrentTurnAlreadyEmittedCursorText } from "./cursor-run-final-text.js";
 import { formatCursorSdkAbortMessage, resolveCursorSdkAbortCause } from "./cursor-provider-errors.js";
@@ -159,8 +159,8 @@ function emitCursorLiveQueuedEvent(
 		turn.emitter.completeTextMessage();
 		// Logical separators also keep suffix/prefix dedup aware of SDK messages,
 		// including boundaries queued across Pi tool-use turns.
-		if (turn.emittedText) turn.emittedText += CURSOR_TEXT_MESSAGE_SEPARATOR;
-		if (run?.emittedText) run.emittedText += CURSOR_TEXT_MESSAGE_SEPARATOR;
+		if (turn.emittedText) turn.emittedText += cursorTextMessageSeparator([turn.emittedText]);
+		if (run?.emittedText) run.emittedText += cursorTextMessageSeparator([run.emittedText]);
 	} else if (event.type === "text-delta") {
 		turn.emittedText += event.text;
 		if (run) run.emittedText += event.text;

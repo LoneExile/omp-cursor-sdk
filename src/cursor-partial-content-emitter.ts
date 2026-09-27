@@ -1,7 +1,25 @@
 import type { AssistantMessage, AssistantMessageEventStream } from "@oh-my-pi/pi-ai";
 
 const DEFAULT_THINKING_TRACE_MAX_CHARS = 50000;
-export const CURSOR_TEXT_MESSAGE_SEPARATOR = "\n\n";
+
+/**
+ * Newlines that make the text so far end in exactly one blank line before the next SDK
+ * assistant message. Newlines the model already emitted count toward it and are never
+ * removed. `parts` is the text in order (token deltas or whole strings).
+ */
+export function cursorTextMessageSeparator(parts: readonly string[]): string {
+	let trailing = 0;
+	for (let index = parts.length - 1; index >= 0 && trailing < 2; index -= 1) {
+		const part = parts[index];
+		let charIndex = part.length - 1;
+		while (charIndex >= 0 && trailing < 2 && part[charIndex] === "\n") {
+			trailing += 1;
+			charIndex -= 1;
+		}
+		if (charIndex >= 0) break;
+	}
+	return "\n".repeat(2 - trailing);
+}
 
 export interface CursorPartialContentEmitterOptions {
 	stream: AssistantMessageEventStream;
@@ -94,8 +112,7 @@ export class CursorPartialContentEmitter {
 		if (!delta) return;
 		if (this.textMessageCompleted) {
 			this.textMessageCompleted = false;
-			this.appendTextDelta(CURSOR_TEXT_MESSAGE_SEPARATOR, { closeThinking: false });
-			this.closeText();
+			delta = this.textMessageBoundaryPrefix() + delta;
 		}
 		if (this.textContentIndex < 0) {
 			this.textContentIndex = this.partial.content.length;
@@ -111,6 +128,24 @@ export class CursorPartialContentEmitter {
 			delta,
 			partial: this.partial,
 		});
+	}
+
+	/**
+	 * omp renders one text block as one Markdown run in the TUI and writes each text block
+	 * followed by "\n" in print mode (pi-coding-agent modes/print-mode.ts), while the TUI
+	 * trims blocks and puts no space between adjacent text blocks. So a boundary inside
+	 * the still-open block gets the full separator and stays in that block; after a block
+	 * that a trace closed, print mode's own newline already counts and no
+	 * separator-only block is created.
+	 */
+	private textMessageBoundaryPrefix(): string {
+		const open = this.textContentIndex >= 0 ? this.partial.content[this.textContentIndex] : undefined;
+		if (open?.type === "text") return cursorTextMessageSeparator([open.text]);
+		for (let index = this.partial.content.length - 1; index >= 0; index -= 1) {
+			const block = this.partial.content[index];
+			if (block.type === "text") return cursorTextMessageSeparator([block.text, "\n"]);
+		}
+		return "";
 	}
 
 	completeTextMessage(): void {

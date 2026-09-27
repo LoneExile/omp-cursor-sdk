@@ -20,6 +20,7 @@
 - omp developer messages (extension custom messages, `@file` mentions) are included in Cursor prompts and force a re-bootstrap when they arrive before the latest prompt; they were silently dropped.
 - `@fast`/`@slow` lanes without their own measurement use the measured window of the same model and context (for example `claude-opus-4-8@1m@fast` is 300K, not the 1M label).
 - After a failed or cancelled compaction, the next normal turn persists its local-resume handle again; the suppression now clears at the next `turn_start` as well as on `session_compact`.
+- One boundary between two Cursor SDK assistant messages now renders as one blank line. The ported boundary (upstream a221841) appended a fixed `"\n\n"`, which became its own text block whenever a tool trace had closed the previous one, so omp print mode (one `"\n"` after every text block) printed four blank lines. The separator now counts newlines the model already emitted, stays inside the open text block (one Markdown paragraph break in the TUI), and adds no separator-only block after a trace.
 - Auth guidance now says to set `CURSOR_API_KEY` (Cursor Dashboard → API Keys) in `~/.omp/.env` or the environment and restart omp, instead of Pi's `/login -> Use an API key -> Cursor`.
 - Tests run in a throwaway agent dir (bun preload) and no longer overwrite `~/.omp/agent/cursor-sdk-*.json`.
 
