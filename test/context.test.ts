@@ -672,31 +672,92 @@ describe("cursor session prompt assembly", () => {
 		return { bootstrapped: true, contextFingerprint: computeCursorContextFingerprint(priorContext), incrementalSendCount: 1 };
 	}
 
-	it("rebootstraps when bash execution output precedes the latest prompt", () => {
-		const priorContext: Context = { messages: hostMessages([{ role: "user", content: "Run the command", timestamp: 1 }]) };
+	const firstPrompt = { role: "user", content: "Refactor the parser", timestamp: 1 };
+	const cursorReply = {
+		role: "assistant",
+		content: [{ type: "text", text: "Parser refactored." }],
+		api: "cursor-sdk",
+		provider: "cursor-sdk",
+		model: "composer-2.5",
+		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+		stopReason: "stop",
+		timestamp: 2,
+	};
+	// The send commits the context it was sent with, before Cursor's reply exists.
+	const priorContext: Context = { systemPrompt: ["Be helpful."], messages: hostMessages([firstPrompt]) };
+
+	it("sends appended developer messages incrementally in the host's order, without an agent reset", () => {
+		// agent-session.ts: the prompt, then @file mentions, then before_agent_start extension messages.
 		const context: Context = {
+			systemPrompt: ["Be helpful."],
 			messages: hostMessages([
-				{ role: "user", content: "Run the command", timestamp: 1 },
-				{ role: "bashExecution", command: "printf ok", output: "ok", exitCode: 0, timestamp: 2 },
-				{ role: "user", content: "Now inspect the result", timestamp: 3 },
+				firstPrompt,
+				cursorReply,
+				{ role: "user", content: "Now add tests", timestamp: 3 },
+				{ role: "fileMention", files: [{ path: "notes.md", content: "Use bun test." }], timestamp: 3 },
+				{ role: "custom", customType: "memory-recall", content: "Recalled: tests live in test/.", display: false, timestamp: 3 },
 			]),
 		};
-		expect(context.messages.map((message) => message.role)).toEqual(["user", "user", "user"]);
+		expect(context.messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "developer", "developer"]);
 
-		expect(shouldBootstrapCursorContext(sendStateFor(priorContext), context)).toBe(true);
+		const plan = planCursorSessionSend(sendStateFor(priorContext), context);
+		expect(plan).toEqual({ mode: "incremental", resetAgent: false, reason: "incremental", appendedFrom: 1 });
+		const prompt = buildCursorSessionSendPrompt(context, {}, plan).text;
+		const sections = ["User: Now add tests", 'Developer: <file path="notes.md">\nUse bun test.\n</file>', "Developer: Recalled: tests live in test/."];
+		for (const section of sections) expect(prompt).toContain(section);
+		expect(sections.map((section) => prompt.indexOf(section))).toEqual(
+			[...sections.map((section) => prompt.indexOf(section))].sort((a, b) => a - b),
+		);
+		expect(prompt).not.toContain("Parser refactored.");
+		expect(prompt).not.toContain("Refactor the parser");
 	});
 
-	it("rebootstraps when an OMP developer message precedes the latest prompt", () => {
-		const priorContext: Context = { messages: hostMessages([{ role: "user", content: "Run the command", timestamp: 1 }]) };
+	it("sends `!` output that precedes the prompt incrementally", () => {
 		const context: Context = {
+			systemPrompt: ["Be helpful."],
 			messages: hostMessages([
-				{ role: "user", content: "Run the command", timestamp: 1 },
-				{ role: "custom", customType: "project-notes", content: "Use pnpm, not npm.", display: true, timestamp: 2 },
-				{ role: "user", content: "Install the deps", timestamp: 3 },
+				firstPrompt,
+				cursorReply,
+				{ role: "bashExecution", command: "printf ok", output: "ok-output", exitCode: 0, timestamp: 3 },
+				{ role: "user", content: "Now inspect the result", timestamp: 4 },
 			]),
 		};
-		expect(context.messages.map((message) => message.role)).toEqual(["user", "developer", "user"]);
+		expect(context.messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "user"]);
 
+		const plan = planCursorSessionSend(sendStateFor(priorContext), context);
+		expect(plan).toMatchObject({ mode: "incremental", resetAgent: false });
+		const prompt = buildCursorSessionSendPrompt(context, {}, plan).text;
+		expect(prompt).toContain("printf ok");
+		expect(prompt).toContain("ok-output");
+		expect(prompt.indexOf("ok-output")).toBeLessThan(prompt.indexOf("User: Now inspect the result"));
+	});
+
+	it("rebootstraps a tool-result continuation that has no new input", () => {
+		const context: Context = {
+			systemPrompt: ["Be helpful."],
+			messages: hostMessages([
+				firstPrompt,
+				{ ...cursorReply, content: [{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "a.ts" } }], stopReason: "toolUse" },
+				{ role: "toolResult", toolCallId: "call-1", toolName: "read", content: [{ type: "text", text: "x" }], isError: false, timestamp: 3 },
+			]),
+		};
+		expect(planCursorSessionSend(sendStateFor(priorContext), context)).toEqual({
+			mode: "bootstrap",
+			resetAgent: true,
+			reason: "context_divergence",
+		});
+	});
+
+	it("rebootstraps when OMP appends a converted summary (historyRewriteAt)", () => {
+		const context: Context = {
+			systemPrompt: ["Be helpful."],
+			messages: hostMessages([
+				firstPrompt,
+				{ role: "branchSummary", summary: "Tried approach A.", fromId: "entry-a", timestamp: 3 },
+				{ role: "user", content: "Continue on approach B", timestamp: 4 },
+			]),
+		};
+		expect(context.messages[1]).toMatchObject({ role: "user", historyRewriteAt: 3 });
 		expect(shouldBootstrapCursorContext(sendStateFor(priorContext), context)).toBe(true);
 	});
 
@@ -704,15 +765,15 @@ describe("cursor session prompt assembly", () => {
 		const context: Context = {
 			systemPrompt: ["Be helpful."],
 			messages: hostMessages([
+				{ role: "user", content: "When do we deploy?", timestamp: 1 },
 				{ role: "fileMention", files: [{ path: "notes.md", content: "Deploy on Fridays only." }], timestamp: 1 },
-				{ role: "user", content: "When do we deploy?", timestamp: 2 },
 			]),
 		};
-		expect(context.messages.map((message) => message.role)).toEqual(["developer", "user"]);
+		expect(context.messages.map((message) => message.role)).toEqual(["user", "developer"]);
 
 		const prompt = buildCursorPrompt(context);
 		expect(prompt.text).toContain('Developer: <file path="notes.md">\nDeploy on Fridays only.\n</file>');
-		expect(prompt.text.indexOf("Developer:")).toBeLessThan(prompt.text.indexOf("User: When do we deploy?"));
+		expect(prompt.text.indexOf("User: When do we deploy?")).toBeLessThan(prompt.text.indexOf("Developer:"));
 	});
 
 	it("keeps a plain follow-up incremental", () => {

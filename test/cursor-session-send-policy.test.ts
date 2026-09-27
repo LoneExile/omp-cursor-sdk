@@ -41,6 +41,7 @@ describe("cursor-session-send-policy", () => {
 			mode: "incremental",
 			resetAgent: false,
 			reason: "incremental",
+			appendedFrom: 1,
 		});
 	});
 

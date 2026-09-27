@@ -2,7 +2,7 @@ import type { Context } from "@oh-my-pi/pi-ai";
 import {
 	buildCursorIncrementalPrompt,
 	buildCursorPrompt,
-	shouldBootstrapCursorContext,
+	getCursorIncrementalSendStart,
 	type CursorPrompt,
 	type CursorPromptOptions,
 } from "./context.js";
@@ -19,6 +19,8 @@ export interface CursorSessionSendPlan {
 	mode: CursorSessionSendMode;
 	resetAgent: boolean;
 	reason: CursorSessionSendReason;
+	/** Incremental only: index in context.messages of the first message appended since the last send. */
+	appendedFrom?: number;
 }
 
 export function planCursorSessionSend(sendState: SessionCursorAgentSendState, context: Context): CursorSessionSendPlan {
@@ -28,10 +30,11 @@ export function planCursorSessionSend(sendState: SessionCursorAgentSendState, co
 	if (sendState.incrementalSendCount >= MAX_COMPLETED_INCREMENTAL_SENDS_BEFORE_REBOOTSTRAP) {
 		return { mode: "bootstrap", resetAgent: true, reason: "incremental_threshold" };
 	}
-	if (shouldBootstrapCursorContext(sendState, context)) {
+	const appendedFrom = getCursorIncrementalSendStart(sendState, context);
+	if (appendedFrom === undefined) {
 		return { mode: "bootstrap", resetAgent: true, reason: "context_divergence" };
 	}
-	return { mode: "incremental", resetAgent: false, reason: "incremental" };
+	return { mode: "incremental", resetAgent: false, reason: "incremental", appendedFrom };
 }
 
 export function buildCursorSessionSendPrompt(
@@ -39,5 +42,7 @@ export function buildCursorSessionSendPrompt(
 	options: CursorPromptOptions,
 	plan: CursorSessionSendPlan,
 ): CursorPrompt {
-	return plan.mode === "bootstrap" ? buildCursorPrompt(context, options) : buildCursorIncrementalPrompt(context, options);
+	return plan.mode === "bootstrap"
+		? buildCursorPrompt(context, options)
+		: buildCursorIncrementalPrompt(context, options, plan.appendedFrom);
 }

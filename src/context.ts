@@ -369,53 +369,77 @@ export function computeCursorContextFingerprint(context: Context): string {
 	return JSON.stringify(payload);
 }
 
+/** Inputs a Cursor session agent has not seen: user prompts (incl. `!` output) and OMP developer messages. */
+function isCursorInputMessage(message: Message): boolean {
+	return message.role === "user" || message.role === "developer";
+}
+
+/**
+ * Index in `context.messages` where messages appended since the last committed send
+ * start, or `undefined` when the context diverged structurally and the session agent
+ * must be rebootstrapped: first send, system prompt change, shrink, edited prefix, a
+ * compaction/branch summary (raw roles, or OMP's converted `user` with
+ * `historyRewriteAt`), or appended messages without any new input (tool results of a
+ * live run that no longer exists).
+ */
+export function getCursorIncrementalSendStart(
+	sendState: { bootstrapped: boolean; contextFingerprint: string },
+	context: Context,
+): number | undefined {
+	if (!sendState.bootstrapped) return undefined;
+	const previous = parseCursorContextFingerprint(sendState.contextFingerprint);
+	if (!previous) return undefined;
+	const current = parseCursorContextFingerprint(computeCursorContextFingerprint(context));
+	if (!current) return undefined;
+	if (current.systemHash !== previous.systemHash) return undefined;
+	const start = previous.messageHashes.length;
+	if (current.messageHashes.length < start) return undefined;
+	for (let index = 0; index < start; index += 1) {
+		if (current.messageHashes[index] !== previous.messageHashes[index]) return undefined;
+	}
+	const appendedRaw = context.messages.slice(start);
+	if (appendedRaw.some((message) => {
+		const role: string = message.role;
+		return role === "branchSummary" || role === "compactionSummary";
+	})) return undefined;
+	const appended = normalizePiContextMessages(appendedRaw);
+	if (appended.some((message) => message.role === "user" && message.historyRewriteAt !== undefined)) return undefined;
+	if (appended.length > 0 && !appended.some(isCursorInputMessage)) return undefined;
+	return start;
+}
+
 export function shouldBootstrapCursorContext(
 	sendState: { bootstrapped: boolean; contextFingerprint: string },
 	context: Context,
 ): boolean {
-	if (!sendState.bootstrapped) return true;
-	const previous = parseCursorContextFingerprint(sendState.contextFingerprint);
-	if (!previous) return true;
-	const current = parseCursorContextFingerprint(computeCursorContextFingerprint(context));
-	if (!current) return true;
-	if (current.systemHash !== previous.systemHash) return true;
-	if (current.messageHashes.length < previous.messageHashes.length) return true;
-	if (current.messageHashes.length > previous.messageHashes.length) {
-		for (let index = previous.messageHashes.length; index < context.messages.length; index += 1) {
-			const role = (context.messages[index] as { role?: string }).role;
-			if (role === "branchSummary" || role === "compactionSummary") return true;
-		}
-	}
-	for (let index = 0; index < previous.messageHashes.length; index += 1) {
-		if (current.messageHashes[index] !== previous.messageHashes[index]) return true;
-	}
-	// An incremental prompt carries only the latest new user message. Rebootstrap
-	// if additional model-visible input (! shell output as `user`, OMP extension
-	// messages and @file mentions as `developer`) would be lost.
-	const appended = normalizePiContextMessages(context.messages.slice(previous.messageHashes.length));
-	const appendedInputs = appended.filter((message) => message.role === "user" || message.role === "developer");
-	return appended.length > 0 && (appendedInputs.length !== 1 || appended.at(-1)?.role !== "user");
+	return getCursorIncrementalSendStart(sendState, context) === undefined;
 }
 
-/** @deprecated Use planCursorSessionSend() for send mode and shouldBootstrapCursorContext() for context-only checks. */
-export function shouldBootstrapCursorSend(
-	sendState: { bootstrapped: boolean; contextFingerprint: string },
+/**
+ * Incremental prompt for a pooled session agent. With `appendedFrom`, it carries every
+ * user and developer message appended since the last send, in order (OMP adds plan/goal
+ * context, `!` output, @file mentions, before_agent_start and nextTurn messages around
+ * the prompt). Assistant and tool-result messages in that slice are the agent's own
+ * output and are not repeated. Without new inputs it repeats the latest user message.
+ */
+export function buildCursorIncrementalPrompt(
 	context: Context,
-): boolean {
-	return shouldBootstrapCursorContext(sendState, context);
-}
-
-export function buildCursorIncrementalPrompt(context: Context, options: CursorPromptOptions = {}): CursorPrompt {
+	options: CursorPromptOptions = {},
+	appendedFrom?: number,
+): CursorPrompt {
 	// Incremental sends omit Pi system instructions and the full tool boundary; the session agent retains both from bootstrap.
-	const messages = normalizePiContextMessages(context.messages);
+	const appended = appendedFrom === undefined ? [] : normalizePiContextMessages(context.messages.slice(appendedFrom));
+	const hasAppendedInputs = appended.some(isCursorInputMessage);
+	const messages = hasAppendedInputs ? appended : normalizePiContextMessages(context.messages);
 	const latestUserMessageIndex = getLatestUserMessageIndex(messages);
-	const latestUserMessage = latestUserMessageIndex >= 0 ? messages[latestUserMessageIndex] : undefined;
-	const latestUserText = latestUserMessage ? formatMessage(latestUserMessage) : undefined;
+	const inputSections = messages.flatMap((message, index) => {
+		if (hasAppendedInputs ? !isCursorInputMessage(message) : index !== latestUserMessageIndex) return [];
+		const text = formatMessage(message);
+		return text ? [{ index, text }] : [];
+	});
 	const sectionsBeforeMessages = [
 		"Continue the conversation using Cursor SDK capabilities only. Do not list, promise, or call pi-only tools from earlier context as if they were available.",
 	];
-	const latestUserMessageSections =
-		latestUserText && latestUserMessageIndex >= 0 ? [{ index: latestUserMessageIndex, text: latestUserText }] : [];
 	const images = extractLatestImages(messages);
 	const imageTokenReserve = images.length * (options.imageTokenEstimate ?? 0);
 	const budgetOptions =
@@ -424,9 +448,9 @@ export function buildCursorIncrementalPrompt(context: Context, options: CursorPr
 			: { ...options, maxInputTokens: Math.max(1, options.maxInputTokens - imageTokenReserve) };
 	const parts = applyPromptBudget(
 		sectionsBeforeMessages,
-		latestUserMessageSections,
+		inputSections,
 		[getCursorToolTailGuardText(options)],
-		latestUserMessageIndex,
+		latestUserMessageIndex >= 0 ? latestUserMessageIndex : (inputSections.at(-1)?.index ?? -1),
 		budgetOptions,
 	);
 	return { text: parts.join(SECTION_SEPARATOR), images };
