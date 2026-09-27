@@ -271,6 +271,13 @@ The extension wires into OMP's session events:
 - **session scope:** cwd/session-file tracking via `session_start`
   (OMP's event carries no project-trust or session-info payload — Pi's
   `project_trust` and `session_info_changed` events do not exist in OMP).
+  `/new`, `/fork` and `/resume` replace the session in place and emit
+  `session_switch` after the switch (`agent-session.ts` `newSession`,
+  `fork`, `switchSession`) where Pi emitted `session_start` again, so every
+  `session_start` handler also runs on `session_switch`: the previous
+  scope's pooled agents are disposed, resume, lineage, fast/mode/runtime
+  state are restored from the new session, and the main conversation moves
+  to the new session id.
 - **agent pooling & resume:** session-scoped Cursor SDK agents are pooled
   and resumed across turns within a session. A follow-up turn is sent
   incrementally with every user and developer message appended since the

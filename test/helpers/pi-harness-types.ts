@@ -14,6 +14,7 @@ import type {
 	SessionInfoChangedEvent,
 	SessionShutdownEvent,
 	SessionStartEvent,
+	SessionSwitchEvent,
 	SessionTreeEvent,
 	ToolCallEvent,
 	ToolCallEventResult,
@@ -46,6 +47,7 @@ export type HarnessOn = ExtensionAPI["on"];
 
 export type HarnessEventName =
 	| "session_start"
+	| "session_switch"
 	| "session_info_changed"
 	| "model_select"
 	| "before_agent_start"
@@ -69,6 +71,7 @@ export type HarnessModelSelectEvent = {
 
 export type HarnessEventMap = {
 	session_start: SessionStartEvent;
+	session_switch: SessionSwitchEvent;
 	session_info_changed: SessionInfoChangedEvent;
 	model_select: HarnessModelSelectEvent;
 	before_agent_start: BeforeAgentStartEvent;

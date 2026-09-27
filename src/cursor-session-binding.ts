@@ -294,6 +294,10 @@ type AnyHandler = (...args: never[]) => unknown;
  * The ExtensionAPI of one registration with every callback the host invokes later (event
  * handlers, commands, shortcuts, tool executions) running inside the binding.
  *
+ * session_start handlers also run on session_switch: omp replaces the session in place for
+ * /new, /fork and /resume and emits session_switch after the switch (agent-session.ts
+ * newSession, fork, switchSession), where Pi emitted session_start again.
+ *
  * A binding the host never sends session_start (a `/tan` clone) runs its session_start
  * handlers once, with its first prompt's context, before that prompt's before_agent_start
  * handlers: the clone gets its own scope (session file, cwd), resume and lineage state
@@ -318,11 +322,13 @@ export function bindCursorExtensionApi<T extends object>(pi: T, binding: CursorS
 			const bound = inBinding(handler);
 			if (event === "session_start") {
 				sessionStartHandlers.push(bound);
-				onEvent(target, event, (...args: never[]) => {
+				const onSessionStart = (...args: never[]) => {
 					binding.sawSessionStart = true;
 					binding.pendingClaim = false;
 					return bound(...args);
-				});
+				};
+				onEvent(target, "session_start", onSessionStart);
+				onEvent(target, "session_switch", onSessionStart);
 				return;
 			}
 			if (event === "before_agent_start") {

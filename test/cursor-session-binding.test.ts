@@ -17,6 +17,7 @@ import {
 	sessionAgentEntryKey,
 	__testUtils as sessionAgentTestUtils,
 } from "../src/cursor-session-agent.js";
+import { __testUtils as resumeTestUtils } from "../src/cursor-session-agent-resume.js";
 import { getCursorSessionScopeKey } from "../src/cursor-session-scope.js";
 import { __testUtils as sessionStoreTestUtils } from "../src/cursor-session-store.js";
 import { createExtensionTestContext } from "./helpers/context-fixtures.js";
@@ -274,5 +275,71 @@ describe("/tan clones (no session_start)", () => {
 
 		const rootTurn = classifyIn(undefined, loopTurn("Refactor the parser"), { sessionId: PARENT.id, providerSessionState: root.providerSessionState });
 		expect(rootTurn.route.mainConversation).toBe(true);
+	});
+});
+
+describe("session_switch (/new, /fork, /resume)", () => {
+	const NEXT = { id: "01a0e2f0-0000-7000-8000-00000000e001", file: "/tmp/sessions/next.jsonl" };
+
+	beforeEach(async () => {
+		await disposeAllSessionCursorAgents();
+		bindingTestUtils.reset();
+		await resetIndexExtensionTestState();
+	});
+
+	afterEach(async () => {
+		await disposeAllSessionCursorAgents();
+		bindingTestUtils.reset();
+	});
+
+	/** agent-session.ts newSession / switchSession: emitted after the session manager switched. */
+	async function switchSession(pi: Awaited<ReturnType<typeof registerClone>>, session: { id: string; file: string }, reason: "new" | "resume", previousSessionFile: string) {
+		await pi.invokeEventWithContext(
+			"session_switch",
+			{ type: "session_switch", reason, previousSessionFile },
+			createExtensionTestContext(sessionContext(session, "main")),
+		);
+	}
+
+	function acquireFor(conversationId: string, agent: ReturnType<typeof createAgentMock>) {
+		return acquireSessionCursorAgent({
+			apiKey: "test-key",
+			agentMode: "agent",
+			cwd: "/tmp/project",
+			modelSelection: { id: "composer-2.5" },
+			conversationId,
+			createAgent: vi.fn().mockResolvedValue(agent) as never,
+		});
+	}
+
+	it("moves scope, pool, resume state and the main conversation to the new session, and back on /resume", async () => {
+		const root = await registerSession(PARENT, "main");
+		expect(classifyIn(undefined, loopTurn("Refactor the parser"), { sessionId: PARENT.id, providerSessionState: root.providerSessionState }).route.mainConversation).toBe(true);
+		const parentAgent = createAgentMock("agent-parent");
+		await root.inSession(() => acquireFor(PARENT.id, parentAgent));
+		expect(sessionAgentTestUtils.sessionAgentsByScope.get(sessionAgentEntryKey(PARENT.file, PARENT.id))?.status).toBe("ready");
+
+		await switchSession(root.pi, NEXT, "new", PARENT.file);
+		expect(root.inSession(() => getCursorSessionScopeKey())).toBe(NEXT.file);
+		expect(root.inSession(() => resumeTestUtils.state.sessionFile)).toBe(NEXT.file);
+		expect(root.binding.sessionId).toBe(NEXT.id);
+		// The previous session's pooled agent is torn down with its scope.
+		expect(sessionAgentTestUtils.sessionAgentsByScope.get(sessionAgentEntryKey(PARENT.file, PARENT.id))).toBeUndefined();
+		expect(parentAgent[Symbol.asyncDispose]).toHaveBeenCalled();
+		// The new session's turn (same AgentSession, same store) is the main conversation.
+		const next = classifyIn(undefined, loopTurn("Write the tests"), { sessionId: NEXT.id, providerSessionState: root.providerSessionState });
+		expect(next.resolution).toEqual({ via: "store", binding: root.binding });
+		expect(next.route).toEqual({ oneShot: false, conversationId: NEXT.id, mainConversation: true });
+		expect(resolveCursorRequestBinding({ sessionId: NEXT.id }).binding).toBe(root.binding);
+
+		await switchSession(root.pi, PARENT, "resume", NEXT.file);
+		expect(root.inSession(() => getCursorSessionScopeKey())).toBe(PARENT.file);
+		expect(root.inSession(() => resumeTestUtils.state.sessionFile)).toBe(PARENT.file);
+		expect(classifyIn(undefined, loopTurn("Refactor the parser"), { sessionId: PARENT.id, providerSessionState: root.providerSessionState }).route.mainConversation).toBe(true);
+		const resumedAgent = createAgentMock("agent-resumed");
+		const lease = await root.inSession(() => acquireFor(PARENT.id, resumedAgent));
+		expect(isOneShotCursorAgentLease(lease)).toBe(false);
+		expect(lease.agent).toBe(resumedAgent);
+		expect(sessionAgentTestUtils.sessionAgentsByScope.get(sessionAgentEntryKey(PARENT.file, PARENT.id))?.status).toBe("ready");
 	});
 });
