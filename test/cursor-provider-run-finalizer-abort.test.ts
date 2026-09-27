@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CursorRunFinalizer } from "../src/cursor-provider-run-finalizer.js";
 
 describe("Cursor live-run abort listener lifetime", () => {
-	it("keeps the abort listener until a pending live run settles", async () => {
+	it("removes the abort listener only after a pending live run settles", async () => {
 		const controller = new AbortController();
-		let cancelCount = 0;
-		const listener = () => { cancelCount += 1; };
+		const removeEventListener = vi.spyOn(controller.signal, "removeEventListener");
+		const listener = () => {};
 		controller.signal.addEventListener("abort", listener);
 		let settle!: () => void;
 		const waitCompletion = new Promise<void>((resolve) => { settle = resolve; });
@@ -16,15 +16,14 @@ describe("Cursor live-run abort listener lifetime", () => {
 			resolvedApiKey: () => undefined,
 			runtimeTarget: () => "local",
 		} as any);
+
 		await finalizer.cleanup(undefined, { abortRegistration: { signal: controller.signal, listener } } as any, { waitCompletion } as any);
-		controller.abort();
-		expect(cancelCount).toBe(1);
+		expect(removeEventListener).not.toHaveBeenCalled();
+
 		settle();
 		await waitCompletion;
-		await Promise.resolve();
-		await Promise.resolve();
-		const countAfterSettlement = cancelCount;
-		controller.abort();
-		expect(cancelCount).toBe(countAfterSettlement);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(removeEventListener).toHaveBeenCalledWith("abort", listener);
+		expect(removeEventListener).toHaveBeenCalledTimes(1);
 	});
 });
