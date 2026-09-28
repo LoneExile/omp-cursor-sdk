@@ -83,8 +83,40 @@ Cursor's catalog does not publish context windows. The plugin uses windows measu
 runs: a bundled table, refined by each completed run into `~/.omp/agent/cursor-sdk-context-windows.json`
 (used from the next session). Default runs stay on the non-Max window, so most `@1m` variants measure
 200k–300k (GPT `@1m` at 272k, Claude `@1m` at 300k or less). Wider catalog variants such as
-`grok-4.7@500k` run at the full window only with the opt-in Max Mode patch and toggle below; without
-them Cursor refuses the selection (see Troubleshooting).
+`grok-4.7@500k` reach their full window only with [Cursor Max Mode](#cursor-max-mode); without it
+Cursor refuses the selection (see Troubleshooting).
+
+## Cursor Max Mode
+
+Cursor's `RequestedModel` carries a `max_mode` boolean, and `@cursor/sdk` never sets it. Without that
+flag Cursor refuses catalog variants such as `grok-4.7@500k` (`AI Model Not Found Invalid parameters
+for registry model`) and the wide `@1m` rows keep their non-Max window. Max Mode is opt-in and needs
+both halves:
+
+1. **Patch the SDK the plugin imports** — once per install:
+
+   ```bash
+   npm run patch:cursor-sdk                 # this checkout's node_modules/@cursor/sdk
+   node scripts/patch-cursor-sdk.mjs --all  # ...and the hoisted ~/.omp/plugins copy, when present
+   npm run check:cursor-sdk-patch           # per-file status; fails on drift
+   ```
+
+   The patch (marker `omp-cursor-sdk:max-mode-patch`) makes the SDK set `RequestedModel.maxMode` when
+   the selection carries `{id:"max_mode", value:"true"}`, and strips that sentinel before the request
+   leaves. It is local `node_modules` state and never ships in the published tarball.
+
+2. **Turn it on** — `--cursor-max-mode`, `PI_CURSOR_MAX_MODE=1`, or `/cursor-max-mode on`
+   (`--save-user` persists to `~/.omp/agent/cursor-sdk.json`; project config is never read).
+   Precedence: `--cursor-no-max-mode` > `--cursor-max-mode` > `PI_CURSOR_MAX_MODE` > session toggle >
+   user config > off. The status line shows `max:on` while it is active.
+
+Restart omp after patching: a running process keeps the SDK module it already loaded, so the guard
+reports `was patched after this process started` until you restart. Re-apply the patch after every
+`omp plugin install` or reinstall. With Max Mode on and an unpatched (or stale) SDK, the turn fails
+before the request and names the resolved path instead of silently sending the old selection.
+
+Max Mode and long context bill at Cursor's higher long-context rates; the surcharge depends on your
+plan and model, so check Cursor's pricing page. The default is off.
 
 ## Commands and flags
 
@@ -111,6 +143,7 @@ Full lists: [docs/omp-integration.md](docs/omp-integration.md), [docs/cursor-mod
 |---|---|
 | `CURSOR_API_KEY` | Cursor API key (required) |
 | `PI_CURSOR_MAX_MODE` | `1`/`true`/`on` or `0`/`false`/`off`. Forces Max Mode for the process. Below CLI flags, above the session toggle |
+| `PI_CURSOR_RUNTIME` | `local` (default) or `cloud` |
 | `PI_CURSOR_SETTING_SOURCES` | Cursor settings/rules the SDK loads: `all` (default), a comma list, or `none` |
 | `PI_CURSOR_SDK_MODEL_CACHE_TTL_MS` | Catalog cache TTL (default 24 h); `PI_CURSOR_SDK_DISABLE_MODEL_CACHE=1` disables it |
 | `PI_CURSOR_SDK_EVENT_DEBUG=1` | Write raw SDK event artifacts to `.debug/cursor-sdk-events/` in the cwd |
@@ -129,19 +162,12 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
   the plugin still lists a bundled fallback catalog and warns when you select a model; turns fail
   until `CURSOR_API_KEY` is set and omp restarted.
 - **`AI Model Not Found Invalid parameters for registry model`**: Cursor refused the selected
-  parameters. A larger context variant needs Cursor Max Mode. Patch the SDK the process actually
-  imports, then pass `--cursor-max-mode` (or `/cursor-max-mode on`). The hint still names the smaller
-  variant to use without Max Mode (for `grok-4.7@500k`: `@256k`).
-- **Max Mode is on but the turn fails before the request**: the resolved `@cursor/sdk` is unpatched.
-  The error names that path. From this checkout run `npm run patch:cursor-sdk`. An omp install resolves
-  the hoisted copy, not this repo's `node_modules`: `node scripts/patch-cursor-sdk.mjs --sdk ~/.omp/plugins/node_modules/@cursor/sdk`.
-  Restart omp after patching: a running process keeps the module it already loaded, so the guard reports
-  `was patched after this process started` until you restart. Re-apply after `omp plugin install` or any
-  reinstall. `--check` (`npm run check:cursor-sdk-patch`) prints
-  per-file status and fails if a build file drifted. Max Mode and long context bill higher; the
-  surcharge depends on the plan and model, so check Cursor's pricing page. The default stays off. An already installed
-  `omp-cursor-sdk` is loaded in addition to `omp -e <repo>` and can handle the turn; use
-  `--no-extensions -e <repo>` to exercise the checkout.
+  parameters. For a larger context variant that means Max Mode is not active — see
+  [Cursor Max Mode](#cursor-max-mode). The hint names the smaller variant that works without it
+  (for `grok-4.7@500k`: `@256k`).
+- **Max Mode turn fails before the request**, or the guard says the SDK is unpatched / was patched
+  after this process started: patch the copy the error names, then restart omp — see
+  [Cursor Max Mode](#cursor-max-mode).
 - **Intermittent `unauthenticated` errors** with a valid key have been seen from Cursor's backend
   for some requests; retrying, or another lane (`@fast`/`@slow`), has worked.
 - **Refused by account policy**: some models need an acknowledgement on the Cursor side first. Claude
@@ -154,23 +180,28 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
 
 ```bash
 npm install
-npm test                 # bun test over the port-relevant suites
+npm test                                                # bun test over the port-relevant suites
 npm run typecheck:src
 omp -e ./src/index.ts --model cursor-sdk/composer-2.5   # run from a checkout without linking
 npm run patch:cursor-sdk                                # patch this checkout's @cursor/sdk; required for Max Mode
 npm run check:cursor-sdk-patch                          # fail if that copy is missing or drifted
-npm run refresh:cursor-snapshots                          # dry run; add --write to update snapshots
+npm run refresh:cursor-snapshots                        # dry run; add --write to update snapshots
 ```
+
+An installed `omp-cursor-sdk` loads alongside `omp -e <repo>`, and either copy can serve a turn; add
+`--no-extensions -e <repo>` to exercise the checkout in isolation.
 
 ### Releasing
 
-1. Fold the user-visible changes into `CHANGELOG.md`, set the same `version` in `package.json`, commit, tag `v<version>`, and push the tag.
-2. Bootstrap once, ever — npm needs the package to exist before Trusted Publishing can be configured: `npm login && npm publish --access public`, then add the trusted publisher on npmjs.com (`omp-cursor-sdk` → Settings → Publishing access → GitHub Actions: repo `LoneExile/omp-cursor-sdk`, workflow `release.yml`, action `npm publish`).
-3. Publish a GitHub Release for the tag. `.github/workflows/release.yml` then publishes that version with OIDC (no token secret, provenance automatic) unless the version is already on npm; `workflow_dispatch` re-fires a failed publish.
+1. Fold the user-visible changes into `CHANGELOG.md`, set the same `version` in `package.json`, commit,
+   tag `v<version>`, and push the tag.
+2. Publish a GitHub Release for the tag. `.github/workflows/release.yml` then publishes that version to
+   npm with OIDC (no token secret, provenance automatic) unless the registry already has it;
+   `workflow_dispatch` re-fires a failed publish.
 
-So the bootstrapped version ships by hand and every later version through CI, one path per version; the already-published check keeps the bootstrap release's job green.
-
-Max Mode's SDK patch is local `node_modules` state and never ships in the tarball; users patch their own copy after install.
+The first version, `0.4.0`, was published by hand — that is what created the package and made the
+trusted publisher configurable on npmjs.com. Later versions go through CI only; the
+already-published check keeps a hand-made release idempotent if both paths are ever used.
 
 ## Credits and license
 
