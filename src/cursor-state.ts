@@ -31,13 +31,16 @@ import { getCursorSessionScopeKey } from "./cursor-session-scope.js";
 import { refreshSessionCursorAgentConfig } from "./cursor-session-agent.js";
 import { getCursorModelMetadata } from "./model-discovery.js";
 import {
+	CURSOR_MAX_MODE_ENV,
 	cursorFastDefaultsFromConfig,
 	getCursorSdkUserConfigPath,
 	loadCursorSdkUserConfig,
 	mergeCursorSdkConfigForUpdate,
 	resolveCursorFastDefault,
+	resolveCursorMaxMode,
 	updateCursorSdkConfig,
 } from "./cursor-config.js";
+import { parseOptionalEnvBoolean } from "./cursor-env-boolean.js";
 import {
 	consumeCursorLocalForceOverride,
 	CURSOR_RUNTIME_ENTRY_TYPE,
@@ -60,6 +63,7 @@ export {
 import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 
 const FAST_ENTRY_TYPE = "cursor-fast-state";
+const MAX_MODE_ENTRY_TYPE = "cursor-max-mode-state";
 const MODE_ENTRY_TYPE = "cursor-mode-state";
 
 export type CursorAgentMode = AgentModeOption;
@@ -74,6 +78,10 @@ interface CursorFastEntryData {
 
 interface CursorModeEntryData {
 	mode: AgentModeOption;
+}
+
+interface CursorMaxModeEntryData {
+	enabled: boolean;
 }
 
 type CursorRuntimeControlsExtensionApi = Pick<
@@ -92,6 +100,10 @@ interface CursorSessionState {
 	globalFastPreferences: Map<string, boolean>;
 	cliForceFast: boolean;
 	cliForceNoFast: boolean;
+	sessionMaxMode: boolean | undefined;
+	userMaxMode: boolean | undefined;
+	cliForceMaxMode: boolean;
+	cliForceNoMaxMode: boolean;
 	sessionCursorAgentMode: AgentModeOption | undefined;
 	cliCursorModeState: CursorCliModeState;
 	invalidCursorModeNotifiedSessionScopeKeys: Set<string>;
@@ -106,6 +118,10 @@ const cursorState: CursorSessionState = cursorSessionSlotView(cursorSessionSlot<
 	globalFastPreferences: new Map(),
 	cliForceFast: false,
 	cliForceNoFast: false,
+	sessionMaxMode: undefined,
+	userMaxMode: undefined,
+	cliForceMaxMode: false,
+	cliForceNoMaxMode: false,
 	sessionCursorAgentMode: undefined,
 	cliCursorModeState: { kind: "unset" },
 	invalidCursorModeNotifiedSessionScopeKeys: new Set(),
@@ -196,6 +212,7 @@ function restoreSessionCursorPreferences(ctx: { sessionManager: Pick<ExtensionCo
 	restoreSessionFastPreferences(branch);
 	restoreSessionCursorMode(branch);
 	restoreSessionCursorHttp1(branch);
+	restoreSessionMaxMode(branch);
 }
 
 function restoreSessionCursorHttp1(branch: readonly SessionEntry[]): void {
@@ -206,6 +223,30 @@ function restoreSessionCursorHttp1(branch: readonly SessionEntry[]): void {
 			setStoredCursorHttp1Enabled(entry.data.enabled);
 		}
 	}
+}
+
+function isCursorMaxModeEntryData(value: unknown): value is CursorMaxModeEntryData {
+	return typeof asRecord(value)?.enabled === "boolean";
+}
+
+function restoreSessionMaxMode(branch: readonly SessionEntry[]): void {
+	cursorState.sessionMaxMode = undefined;
+	for (const entry of branch) {
+		if (entry.type !== "custom" || entry.customType !== MAX_MODE_ENTRY_TYPE) continue;
+		if (isCursorMaxModeEntryData(entry.data)) cursorState.sessionMaxMode = entry.data.enabled;
+	}
+}
+
+function loadUserMaxMode(): boolean | undefined {
+	return loadCursorSdkUserConfig().maxMode;
+}
+
+function saveUserMaxMode(enabled: boolean): void {
+	updateCursorSdkConfig(
+		getConfigPath(),
+		(current) => mergeCursorSdkConfigForUpdate(current, { maxMode: enabled }),
+		{ newFileMode: 0o600 },
+	);
 }
 
 function getFastPreferenceModelId(metadata: NonNullable<ReturnType<typeof getCursorModelMetadata>>): string {
@@ -280,14 +321,14 @@ function updateCursorStatus(ctx: CursorStatusContext & Pick<ExtensionContext, "m
 	const modeResolution = resolveCursorAgentMode();
 	const mode = modeResolution.kind === "invalid" ? "invalid" : modeResolution.mode;
 	if (resolution.kind === "invalid") {
-		ctx.ui.setStatus("cursor", formatCursorStatus("invalid", undefined, mode));
+		ctx.ui.setStatus("cursor", formatCursorStatus("invalid", undefined, mode, false, getEffectiveCursorMaxMode()));
 		return;
 	}
 	const runtime = resolution.runtime.value;
 	const fast = runtime === "cloud" ? undefined : metadata?.supportsFast ? getEffectiveFast(model.id) : undefined;
 	ctx.ui.setStatus(
 		"cursor",
-		formatCursorStatus(runtime, fast, mode, resolution.useHttp1ForAgent.value),
+		formatCursorStatus(runtime, fast, mode, resolution.useHttp1ForAgent.value, getEffectiveCursorMaxMode()),
 	);
 }
 
@@ -436,6 +477,16 @@ export function getEffectiveFastForModelId(modelId: string): boolean | undefined
 	return getEffectiveFast(modelId);
 }
 
+export function getEffectiveCursorMaxMode(): boolean {
+	return resolveCursorMaxMode({
+		cliForceNoMaxMode: cursorState.cliForceNoMaxMode,
+		cliForceMaxMode: cursorState.cliForceMaxMode,
+		envValue: parseOptionalEnvBoolean(process.env[CURSOR_MAX_MODE_ENV]),
+		sessionValue: cursorState.sessionMaxMode,
+		userValue: cursorState.userMaxMode,
+	}).value;
+}
+
 export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtensionApi): void {
 	registerCursorCloudRuntimeControls(pi, { refreshStatus: updateCursorStatus });
 
@@ -447,6 +498,18 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 
 	pi.registerFlag("cursor-no-fast", {
 		description: "Force Cursor fast mode off for this run when the selected Cursor model supports it",
+		type: "boolean",
+		default: false,
+	});
+
+	pi.registerFlag("cursor-max-mode", {
+		description: "Force Cursor Max Mode for this run. Bills higher; requires the patched @cursor/sdk.",
+		type: "boolean",
+		default: false,
+	});
+
+	pi.registerFlag("cursor-no-max-mode", {
+		description: "Force Cursor Max Mode off for this run",
 		type: "boolean",
 		default: false,
 	});
@@ -503,6 +566,81 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 				return;
 			}
 			ctx.ui.notify(`Cursor fast ${next ? "enabled" : "disabled"}`, "info");
+		},
+	});
+
+	pi.registerCommand("cursor-max-mode", {
+		description: "Set Cursor Max Mode for this session: on, off, or toggle. Optional --save-user persists to user config. Bills higher.",
+		handler: async (args, ctx) => {
+			const usage = "Usage: /cursor-max-mode [on|off|toggle] [--save-user]";
+			const tokens = args.trim().split(/\s+/).filter(Boolean);
+			const saveUser = tokens.includes("--save-user");
+			const modeTokens = tokens.filter((token) => token !== "--save-user");
+			if (modeTokens.length > 1) {
+				ctx.ui.notify(`Invalid Cursor Max Mode arguments. ${usage}`, "error");
+				return;
+			}
+			const requested = modeTokens[0]?.toLowerCase();
+			if (requested !== undefined && requested !== "on" && requested !== "off" && requested !== "toggle") {
+				ctx.ui.notify(`Invalid Cursor Max Mode "${modeTokens[0]}". ${usage}`, "error");
+				return;
+			}
+			if (cursorState.cliForceNoMaxMode) {
+				ctx.ui.notify("Cursor Max Mode is forced off by --cursor-no-max-mode", "info");
+				return;
+			}
+			if (cursorState.cliForceMaxMode) {
+				ctx.ui.notify("Cursor Max Mode is forced by --cursor-max-mode", "info");
+				return;
+			}
+			if (parseOptionalEnvBoolean(process.env[CURSOR_MAX_MODE_ENV]) !== undefined) {
+				ctx.ui.notify("Cursor Max Mode is forced by PI_CURSOR_MAX_MODE", "info");
+				return;
+			}
+			const current = getEffectiveCursorMaxMode();
+			if (!requested) {
+				ctx.ui.notify(
+					`Cursor Max Mode is ${current ? "on" : "off"}. Long context bills higher. ${usage}`,
+					"info",
+				);
+				return;
+			}
+			const next = requested === "on" ? true : requested === "off" ? false : !current;
+			const previousSession = cursorState.sessionMaxMode;
+			const previousUser = cursorState.userMaxMode;
+			cursorState.sessionMaxMode = next;
+			if (saveUser) cursorState.userMaxMode = next;
+			if (saveUser) {
+				try {
+					saveUserMaxMode(next);
+				} catch (error) {
+					cursorState.sessionMaxMode = previousSession;
+					cursorState.userMaxMode = previousUser;
+					updateCursorStatus(ctx);
+					ctx.ui.notify(`Failed to save Cursor Max Mode preference: ${error instanceof Error ? error.message : String(error)}`, "error");
+					return;
+				}
+			}
+			let appendError: unknown;
+			try {
+				pi.appendEntry<CursorMaxModeEntryData>(MAX_MODE_ENTRY_TYPE, { enabled: next });
+			} catch (error) {
+				appendError = error;
+			}
+			updateCursorStatus(ctx);
+			if (appendError !== undefined) {
+				ctx.ui.notify(
+					`Cursor Max Mode ${next ? "enabled" : "disabled"} was ${saveUser ? "saved to user config, but persisting the session entry failed" : "not persisted"}: ${appendError instanceof Error ? appendError.message : String(appendError)}`,
+					"error",
+				);
+				return;
+			}
+			ctx.ui.notify(
+				next
+					? `Cursor Max Mode enabled. Long context bills higher.${saveUser ? " Saved to user config." : ""}`
+					: `Cursor Max Mode disabled.${saveUser ? " Saved to user config." : ""}`,
+				"info",
+			);
 		},
 	});
 
@@ -653,6 +791,9 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 			cursorState.globalFastPreferences = loadGlobalFastPreferences();
 			cursorState.cliForceFast = pi.getFlag("cursor-fast") === true;
 			cursorState.cliForceNoFast = pi.getFlag("cursor-no-fast") === true;
+			cursorState.cliForceMaxMode = pi.getFlag("cursor-max-mode") === true;
+			cursorState.cliForceNoMaxMode = pi.getFlag("cursor-no-max-mode") === true;
+			cursorState.userMaxMode = loadUserMaxMode();
 			restoreCursorCliState(pi);
 			restoreSessionCursorPreferences(ctx);
 			restoreCliCursorMode(pi.getFlag("cursor-mode"));
@@ -666,6 +807,10 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 
 function resetCursorModeStateForTests(): void {
 	cursorState.sessionCursorAgentMode = undefined;
+	cursorState.sessionMaxMode = undefined;
+	cursorState.userMaxMode = undefined;
+	cursorState.cliForceMaxMode = false;
+	cursorState.cliForceNoMaxMode = false;
 	setCursorHttp1GlobalPreferenceAuthoritative(false);
 	setStoredCursorHttp1Enabled(undefined);
 	cursorState.cliCursorModeState = { kind: "unset" };
@@ -676,6 +821,7 @@ function resetCursorModeStateForTests(): void {
 
 export const __testUtils = {
 	FAST_ENTRY_TYPE,
+	MAX_MODE_ENTRY_TYPE,
 	MODE_ENTRY_TYPE,
 	CURSOR_HTTP1_ENTRY_TYPE,
 	RUNTIME_ENTRY_TYPE: CURSOR_RUNTIME_ENTRY_TYPE,

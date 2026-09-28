@@ -171,8 +171,10 @@ export function formatCursorStatus(
 	fast: boolean | undefined,
 	mode: "agent" | "plan" | "invalid",
 	useHttp1ForAgent = false,
+	maxMode = false,
 ): string {
 	const parts = [`cursor:${runtime}`, fast === true ? "fast:on" : fast === false ? "fast:off" : "fast:n/a"];
+	if (maxMode) parts.push("max:on");
 	if (runtime === "local" && useHttp1ForAgent) parts.push("http1");
 	if (mode === "invalid") parts.push("mode invalid");
 	else if (mode === "plan") parts.push("plan");

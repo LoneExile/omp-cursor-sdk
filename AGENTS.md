@@ -106,8 +106,8 @@ This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchm
 - Contract-test external behavior before relying on it: when code depends on Cursor SDK/pi runtime payloads, timing, lifecycle, errors, usage accounting, or tool/event shapes, add or update a focused test that asserts the observed installed-package/docs/captured-fixture contract and fails if that contract drifts. Do not replace this with mocks based on guesses.
 - CODE IS TRUTH: claims about behavior must be backed by current source code, installed dependency code/types, contract tests, or captured command output. If evidence is missing, say `unknown`; do not infer, soften, or fill gaps with assumptions.
 - Before every commit and before every push, run a thermo-nuclear/deep maintainability review on the exact diff being committed or pushed. Remediate every material finding and repeat the review until there are no remaining material findings. Do not commit or push without this review evidence.
-- Keep pi-native abstractions first: context is a model variant, thinking uses pi thinking metadata, and Cursor-only `fast` is extension state/status.
-- Preserve the default pi footer; use extension status only for Cursor-only state such as `cursor:local · fast:on`, `cursor:local · fast:off`, and `cursor:cloud · fast:n/a`.
+- Keep pi-native abstractions first: context is a model variant, thinking uses pi thinking metadata, and Cursor-only `fast` and opt-in Max Mode are extension state/status.
+- Preserve the default pi footer; use extension status only for Cursor-only state such as `cursor:local · fast:on`, `cursor:local · fast:off`, `cursor:local · fast:on · max:on`, and `cursor:cloud · fast:n/a`. Max Mode stays off unless the SDK patch and toggle are both on.
 - Stop discovery once package scripts, README, config files, tests, and the relevant `src/` modules explain the task. Do not broad-search `node_modules` unless debugging a dependency API.
 - Ask the user before changing public UX, published package metadata, dependency families, or behavior that requires a migration. Otherwise proceed and verify locally.
 

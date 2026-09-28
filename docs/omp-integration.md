@@ -107,12 +107,28 @@ tried in order: the exact id, its canonical default-lane id, the same model and
 context without `@fast`/`@slow` (the lane does not change the window), then the
 catalog context label (`@1m` → 1000000), the base id, and `"default"`.
 
-Cursor Max-mode windows are not reachable: the SDK `ModelSelection`
-(`{ id, params }`) has no max-mode field. Measured `@1m` variants run at
-200k–300k (GPT `@1m` at 272000), and `grok-4.7@500k` is refused with
-`Invalid parameters for registry model`; the provider error appends a hint naming the
-next smaller catalog context (`@256k`), and none when the model has no smaller
-context (`src/cursor-provider-errors.ts`).
+Cursor Max Mode windows are reachable only with the opt-in patch and toggle.
+`@cursor/sdk` `ModelSelection` is still `{ id, params }`; the plugin appends
+`{ id: "max_mode", value: "true" }` when Max Mode is on, and
+`scripts/patch-cursor-sdk.mjs` makes the SDK set `RequestedModel.maxMode` and
+drop that sentinel. Without both, measured `@1m` variants stay at 200k–300k
+(GPT `@1m` at 272000) and `grok-4.7@500k` is refused with
+`Invalid parameters for registry model`. The provider error names the patch
+command and the next smaller catalog context (`@256k`).
+
+Precedence, highest first: `--cursor-max-mode` / `--cursor-no-max-mode` (no-max
+wins if both are set), `PI_CURSOR_MAX_MODE`, the session entry from
+`/cursor-max-mode [on|off|toggle]`, then `maxMode` in
+`~/.omp/agent/cursor-sdk.json` when saved with `--save-user`, then off.
+Project config is never read. Before a Max Mode turn the plugin resolves
+`import.meta.resolve("@cursor/sdk")`, walks to that package root, and requires
+the patch marker in every existing build file (`dist/esm/34.js`,
+`dist/cjs/342.js`, `dist/bundled/index.js`). Bun loads the bundled file; Node
+loads the ESM chunk. An unpatched copy fails the turn and names the resolved
+path. Patch this checkout with `npm run patch:cursor-sdk`. An omp install
+hoists `@cursor/sdk` to `~/.omp/plugins/node_modules/@cursor/sdk` and must be
+patched with `node scripts/patch-cursor-sdk.mjs --sdk` that path; re-apply
+after `omp plugin install`. Long context bills higher.
 
 ## 4. Authentication and key resolution
 
@@ -174,6 +190,8 @@ streamCursor(model, context, options)
                effort/reasoning_effort/reasoning/thinking param
             -> fastEnabled from the model's fast override (@fast/@slow) or
                --cursor-fast/--cursor-no-fast or the model default
+            -> when Max Mode is on, append max_mode=true and refuse the turn
+               if the resolved @cursor/sdk build files are unpatched
        -> load @cursor/sdk, Agent.create({ apiKey, model: selection, mode, local })
             -> local agent loop (session, tools, thinking) runs on the machine
        -> agent.send(payload, { mode, model, onDelta, onStep })
@@ -458,12 +476,15 @@ controls reasoning depth on both variants.
 
 - `/cursor-refresh-models` — refresh the live catalog (bypasses cache)
 - `/cursor-fast` — toggle fast mode for the current Cursor model
+- `/cursor-max-mode [on|off|toggle] [--save-user]` — opt into Cursor Max Mode.
+  `--save-user` writes user `cursor-sdk.json` only, never project config
 - `/cursor-tools` — live tool-surface debug report
 - `/cursor-mode <agent|plan>` — agent/plan mode
 
 ### Flags
 
 - `--cursor-fast` / `--cursor-no-fast` — force fast mode on/off
+- `--cursor-max-mode` / `--cursor-no-max-mode` — force Max Mode on/off for this run
 - `--cursor-mode <agent|plan>` — CLI mode override
 - `--thinking <level>` — one of the model's advertised efforts (the
   `thinking` column of `omp models cursor-sdk`), or `off` where Cursor has an
@@ -479,9 +500,10 @@ entries and `~/.omp/agent/cursor-sdk.json` defaults.
 ### Environment
 
 - `CURSOR_API_KEY` — API key (`~/.omp/.env` is loaded once at omp startup)
+- `PI_CURSOR_MAX_MODE` — `1`/`true`/`on` or `0`/`false`/`off`; forces Max Mode below the CLI flags
 - `PI_CURSOR_RUNTIME=cloud` — opt into cloud agents
 - `PI_CURSOR_CLOUD_ACK=1` (+ `PI_CURSOR_CLOUD_REPO`, ...) — cloud ack/config
-- `fastDefaults` in `~/.omp/agent/cursor-sdk.json` — saved per-model fast defaults
+- `fastDefaults` and `maxMode` in `~/.omp/agent/cursor-sdk.json` — saved fast defaults and the optional Max Mode user preference. `maxMode` is never read from project config
 - `PI_CURSOR_SDK_EVENT_DEBUG=1` — SDK event debug logging
 
 ### Files

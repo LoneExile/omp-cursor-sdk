@@ -252,7 +252,7 @@ describe("cursor-provider-errors", () => {
 		const detail = formatCursorSdkRunFailureDetail(refusedContextResult);
 		expect(detail).toBe(
 			'AI Model Not Found Invalid parameters for registry model: "grok-4.7"\n' +
-				"Hint: larger context variants can require Cursor Max mode, which the Cursor SDK cannot request; use the @256k variant instead of @500k.",
+				"Hint: larger context variants require Cursor Max Mode (`--cursor-max-mode` or `/cursor-max-mode` after `npm run patch:cursor-sdk`); otherwise use the @256k variant instead of @500k.",
 		);
 		// The provider error path must surface it verbatim, not as auth/network/generic guidance.
 		expect(sanitizeCursorProviderError(detail, "test-key")).toBe(detail);

@@ -81,9 +81,10 @@ omp --model cursor-sdk/gpt-5.6-sol@272k --thinking off
 
 Cursor's catalog does not publish context windows. The plugin uses windows measured from real SDK
 runs: a bundled table, refined by each completed run into `~/.omp/agent/cursor-sdk-context-windows.json`
-(used from the next session). Cursor Max-mode windows are not available through the SDK, so most
-`@1m` variants measure 200k–300k (GPT `@1m` runs at 272k, Claude `@1m` at 300k or less), and
-`grok-4.7@500k` is refused by Cursor (see Troubleshooting).
+(used from the next session). Default runs stay on the non-Max window, so most `@1m` variants measure
+200k–300k (GPT `@1m` at 272k, Claude `@1m` at 300k or less). Wider catalog variants such as
+`grok-4.7@500k` run at the full window only with the opt-in Max Mode patch and toggle below; without
+them Cursor refuses the selection (see Troubleshooting).
 
 ## Commands and flags
 
@@ -91,6 +92,7 @@ runs: a bundled table, refined by each completed run into `~/.omp/agent/cursor-s
 |---|---|
 | `/cursor-refresh-models` | Fetch the live catalog now and re-register models |
 | `/cursor-fast` | Toggle fast mode for the selected model |
+| `/cursor-max-mode [on\|off\|toggle] [--save-user]` | Opt into Cursor Max Mode for this session. `--save-user` writes `~/.omp/agent/cursor-sdk.json` only |
 | `/cursor-mode agent\|plan` | Cursor conversation mode |
 | `/cursor-runtime local\|cloud [--save-user\|--save-project]` | Local or Cursor Cloud runtime |
 | `/cursor-cloud list \| archive <id> \| delete <id> --yes` | Manage recorded Cloud agents |
@@ -99,7 +101,7 @@ runs: a bundled table, refined by each completed run into `~/.omp/agent/cursor-s
 | `/cursor-local-resume-cleanup [--dry-run\|--yes]` | Delete superseded local SDK agents |
 | `/cursor-tools` | Tool-surface report (debug) |
 
-Flags: `--cursor-fast`, `--cursor-no-fast`, `--cursor-mode <agent|plan>`, `--cursor-runtime <local|cloud>`, `--cursor-cloud-*`.
+Flags: `--cursor-fast`, `--cursor-no-fast`, `--cursor-max-mode`, `--cursor-no-max-mode`, `--cursor-mode <agent|plan>`, `--cursor-runtime <local|cloud>`, `--cursor-cloud-*`.
 
 ## Environment and files
 
@@ -108,7 +110,7 @@ Full lists: [docs/omp-integration.md](docs/omp-integration.md), [docs/cursor-mod
 | Name | Meaning |
 |---|---|
 | `CURSOR_API_KEY` | Cursor API key (required) |
-| `PI_CURSOR_RUNTIME` | `local` (default) or `cloud` |
+| `PI_CURSOR_MAX_MODE` | `1`/`true`/`on` or `0`/`false`/`off`. Forces Max Mode for the process. Below CLI flags, above the session toggle |
 | `PI_CURSOR_SETTING_SOURCES` | Cursor settings/rules the SDK loads: `all` (default), a comma list, or `none` |
 | `PI_CURSOR_SDK_MODEL_CACHE_TTL_MS` | Catalog cache TTL (default 24 h); `PI_CURSOR_SDK_DISABLE_MODEL_CACHE=1` disables it |
 | `PI_CURSOR_SDK_EVENT_DEBUG=1` | Write raw SDK event artifacts to `.debug/cursor-sdk-events/` in the cwd |
@@ -127,8 +129,17 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
   the plugin still lists a bundled fallback catalog and warns when you select a model; turns fail
   until `CURSOR_API_KEY` is set and omp restarted.
 - **`AI Model Not Found Invalid parameters for registry model`**: Cursor refused the selected
-  parameters. For a larger context variant the plugin adds a hint: it can need Cursor Max mode,
-  which the SDK cannot request, and names the smaller variant to use (for `grok-4.7@500k`: `@256k`).
+  parameters. A larger context variant needs Cursor Max Mode. Patch the SDK the process actually
+  imports, then pass `--cursor-max-mode` (or `/cursor-max-mode on`). The hint still names the smaller
+  variant to use without Max Mode (for `grok-4.7@500k`: `@256k`).
+- **Max Mode is on but the turn fails before the request**: the resolved `@cursor/sdk` is unpatched.
+  The error names that path. From this checkout run `npm run patch:cursor-sdk`. An omp install resolves
+  the hoisted copy, not this repo's `node_modules`: `node scripts/patch-cursor-sdk.mjs --sdk ~/.omp/plugins/node_modules/@cursor/sdk`.
+  Re-apply after `omp plugin install` or any reinstall. `--check` (`npm run check:cursor-sdk-patch`) prints
+  per-file status and fails if a build file drifted. Max Mode and long context bill higher; the
+  surcharge depends on the plan and model, so check Cursor's pricing page. The default stays off. An already installed
+  `omp-cursor-sdk` is loaded in addition to `omp -e <repo>` and can handle the turn; use
+  `--no-extensions -e <repo>` to exercise the checkout.
 - **Intermittent `unauthenticated` errors** with a valid key have been seen from Cursor's backend
   for some requests; retrying, or another lane (`@fast`/`@slow`), has worked.
 - **Refused by account policy**: some models need an acknowledgement on the Cursor side first. Claude
@@ -144,6 +155,8 @@ npm install
 npm test                 # bun test over the port-relevant suites
 npm run typecheck:src
 omp -e ./src/index.ts --model cursor-sdk/composer-2.5   # run from a checkout without linking
+npm run patch:cursor-sdk                                # patch this checkout's @cursor/sdk; required for Max Mode
+npm run check:cursor-sdk-patch                          # fail if that copy is missing or drifted
 npm run refresh:cursor-snapshots                          # dry run; add --write to update snapshots
 ```
 

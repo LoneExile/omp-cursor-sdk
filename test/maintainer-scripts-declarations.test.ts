@@ -149,6 +149,9 @@ const DECLARATION_TYPE_ONLY_EXPORTS: Record<string, readonly string[]> = {
 		"CursorCliValueFlagSpec",
 		"ParsedCursorCliArgs",
 	],
+	"scripts/patch-cursor-sdk.d.mts": [
+		"PatchCursorSdkTarget",
+	],
 };
 
 describe("maintainer script declaration contracts", () => {

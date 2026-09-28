@@ -29,8 +29,10 @@ import {
 } from "./cursor-provider-live-run-drain.js";
 import {
 	getCursorProviderAgentModeOrThrow,
+	getEffectiveCursorMaxMode,
 	getEffectiveFastForModelId,
 } from "./cursor-state.js";
+import { assertImportedCursorSdkMaxModePatched, applyCursorMaxModeSelection } from "./cursor-max-mode.js";
 import { resolveEffectiveCursorConfig } from "./cursor-runtime-state.js";
 import type { CursorResolvedSdkConfig } from "./cursor-config.js";
 import { buildCursorModelSelection } from "./model-discovery.js";
@@ -485,8 +487,13 @@ export async function prepareCursorProviderTurn(
 	const { model, options } = params;
 
 	const agentMode = getCursorProviderAgentModeOrThrow();
+	const maxMode = getEffectiveCursorMaxMode();
+	if (maxMode) assertImportedCursorSdkMaxModePatched();
 	const fastEnabled = resolvedConfig.runtime.value === "cloud" ? undefined : getEffectiveFastForModelId(model.id);
-	const selection = buildCursorModelSelection(model.id, options?.reasoning ?? "off", fastEnabled);
+	const selection = applyCursorMaxModeSelection(
+		buildCursorModelSelection(model.id, options?.reasoning ?? "off", fastEnabled),
+		maxMode,
+	);
 	const context: PrepareCursorProviderTurnContext = { ...prepareParams, agentMode, selection, fastEnabled };
 
 	if (resolvedConfig.runtime.value === "cloud") {

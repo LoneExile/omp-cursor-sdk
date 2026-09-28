@@ -37,6 +37,7 @@ export const CURSOR_SANDBOX_ENV = "PI_CURSOR_SANDBOX";
 export const CURSOR_LOCAL_FORCE_ENV = "PI_CURSOR_LOCAL_FORCE";
 export const CURSOR_LOCAL_RESUME_ENV = "PI_CURSOR_LOCAL_RESUME";
 export const CURSOR_HTTP1_ENV = "PI_CURSOR_HTTP_1_1";
+export const CURSOR_MAX_MODE_ENV = "PI_CURSOR_MAX_MODE";
 
 export type CursorConfigSource = "cli" | "environment" | "project" | "user" | "session" | "model-alias" | "builtin";
 export type CursorConfigTrustLevel = "one-shot" | "environment" | "trusted-project" | "user" | "session" | "model-catalog" | "builtin";
@@ -51,6 +52,8 @@ export interface CursorCloudEnvironmentConfig {
 
 export interface CursorSdkConfig {
 	fastDefaults?: Record<string, boolean>;
+	/** User-config only. Project config is never read for this field. */
+	maxMode?: boolean;
 	runtime?: CursorRuntime;
 	cloud?: {
 		repo?: string;
@@ -244,6 +247,7 @@ export function parseCursorSdkConfig(value: unknown): CursorSdkConfig | undefine
 	const config: CursorSdkConfig = {};
 
 	if (isCursorRuntime(record.runtime)) config.runtime = record.runtime;
+	if (typeof record.maxMode === "boolean") config.maxMode = record.maxMode;
 
 	const fastDefaults = asRecord(record.fastDefaults);
 	if (fastDefaults) {
@@ -803,4 +807,19 @@ export function resolveCursorFastDefault(options: {
 	if (options.sessionValue !== undefined) return resolved("session", options.sessionValue);
 	if (options.userValue !== undefined) return resolved("user", options.userValue);
 	return resolved("builtin", options.modelDefault);
+}
+
+export function resolveCursorMaxMode(options: {
+	cliForceMaxMode?: boolean;
+	cliForceNoMaxMode?: boolean;
+	envValue?: boolean;
+	sessionValue?: boolean;
+	userValue?: boolean;
+}): CursorResolvedSetting<boolean> {
+	if (options.cliForceNoMaxMode) return resolved("cli", false);
+	if (options.cliForceMaxMode) return resolved("cli", true);
+	if (options.envValue !== undefined) return resolved("environment", options.envValue);
+	if (options.sessionValue !== undefined) return resolved("session", options.sessionValue);
+	if (options.userValue !== undefined) return resolved("user", options.userValue);
+	return resolved("builtin", false);
 }

@@ -2,8 +2,9 @@
 // Refresh with: npm run refresh:cursor-snapshots -- --write --context-windows ~/.omp/agent/cursor-sdk-context-windows.json
 // Keys are current selectable model IDs. Equivalent default :fast/:slow selections
 // collapse to one key; stale and ambiguous aliases are omitted. Values are observed
-// or conservative default/non-Max-mode limits and may override a catalog context
-// label when the completed SDK checkpoint reports a different effective limit.
+// or conservative default/non-Max-mode limits. Max Mode windows are reachable only
+// with scripts/patch-cursor-sdk.mjs plus the Max Mode toggle; they are not in this
+// table. A completed SDK checkpoint may override a catalog context label.
 export const BUNDLED_CONTEXT_WINDOWS = {
 	"default": 200000,
 	"claude-fable-5@300k": 300000,

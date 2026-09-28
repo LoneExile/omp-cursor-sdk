@@ -294,10 +294,10 @@ function withRunErrorCode(message: string, code: string | undefined): string {
 	return code ? `${message} (code: ${code})` : message;
 }
 
-// Cursor's catalog lists some larger context variants that its backend refuses for SDK
-// selections (observed: grok-4.7 context=500k on @cursor/sdk 1.0.23 and 1.0.32, every
-// effort/fast combination). The official Cursor CLI sends `maxMode: true` for those;
-// the SDK ModelSelection `{ id, params }` has no max-mode field.
+// Cursor's catalog lists some larger context variants that its backend refuses unless
+// RequestedModel.maxMode is set (observed: grok-4.7 context=500k on @cursor/sdk 1.0.32).
+// The public ModelSelection type has no maxMode field; the opt-in patch reads a
+// max_mode=true param and sets that field. Without the patch and toggle, the variant is refused.
 const REFUSED_MODEL_PARAMETERS_PATTERN = /invalid parameters for registry model/i;
 
 function withRefusedContextVariantHint(detail: string, model: ModelSelection | undefined): string {
@@ -305,7 +305,7 @@ function withRefusedContextVariantHint(detail: string, model: ModelSelection | u
 	if (!model || !context || !REFUSED_MODEL_PARAMETERS_PATTERN.test(detail)) return detail;
 	const smaller = getSmallerCursorContextVariant(model.id, context);
 	if (!smaller) return detail;
-	return `${detail}\nHint: larger context variants can require Cursor Max mode, which the Cursor SDK cannot request; use the @${smaller} variant instead of @${context}.`;
+	return `${detail}\nHint: larger context variants require Cursor Max Mode (\`--cursor-max-mode\` or \`/cursor-max-mode\` after \`npm run patch:cursor-sdk\`); otherwise use the @${smaller} variant instead of @${context}.`;
 }
 
 export function formatCursorSdkRunFailureDetail(
