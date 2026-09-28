@@ -19,24 +19,31 @@ the two share no models, credentials, or ids.
 
 ## Install
 
-From a local checkout (`link` symlinks it, so edits apply on the next omp start), or from GitHub:
+From npm:
+
+```bash
+omp plugin install omp-cursor-sdk
+```
+
+From a local checkout, for development (`link` symlinks it, so edits apply on the next omp start):
 
 ```bash
 git clone https://github.com/LoneExile/omp-cursor-sdk && cd omp-cursor-sdk
 npm install
 omp plugin link "$PWD"
-
-omp plugin install github:LoneExile/omp-cursor-sdk    # alternative: install from GitHub
 ```
+
+The `github:` shorthand and raw git-URL specs are resolved differently by installer versions, so the
+npm form above is the portable one; use it if either of those fails (see Troubleshooting).
 
 Manage it (restart omp after any change):
 
 ```bash
-omp plugin list                                              # shows omp-cursor-sdk@<version>
-omp plugin install github:LoneExile/omp-cursor-sdk --force   # update a GitHub install
-omp plugin disable omp-cursor-sdk                            # keep installed, stop loading
+omp plugin list                                        # shows omp-cursor-sdk@<version>
+omp plugin install omp-cursor-sdk --force              # update an npm install
+omp plugin disable omp-cursor-sdk                      # keep installed, stop loading
 omp plugin enable omp-cursor-sdk
-omp plugin uninstall omp-cursor-sdk                          # also removes a link, not your checkout
+omp plugin uninstall omp-cursor-sdk                    # also removes a link, not your checkout
 ```
 
 ## API key
@@ -161,6 +168,11 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
 - **No `cursor-sdk` rows**: the plugin is not loaded (`omp plugin list`) or is disabled. Without a key
   the plugin still lists a bundled fallback catalog and warns when you select a model; turns fail
   until `CURSOR_API_KEY` is set and omp restarted.
+- **`Package installed but package.json not found at …/node_modules/github:LoneExile/omp-cursor-sdk/package.json`**:
+  that omp installer resolved the `github:` shorthand to the literal spec string instead of the
+  installed package name. Run `omp plugin install omp-cursor-sdk` instead, or update omp. If the failed
+  attempt recorded a dependency in `~/.omp/plugins/package.json`, remove it (`omp plugin uninstall` or
+  edit the file) before retrying.
 - **`AI Model Not Found Invalid parameters for registry model`**: Cursor refused the selected
   parameters. For a larger context variant that means Max Mode is not active — see
   [Cursor Max Mode](#cursor-max-mode). The hint names the smaller variant that works without it

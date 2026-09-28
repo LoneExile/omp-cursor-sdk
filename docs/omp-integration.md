@@ -31,9 +31,9 @@ remapped every import and adapted every drifted surface (see §7).
 
 ## 2. How OMP loads the plugin
 
-- Install: `omp plugin link "$PWD"` from an `npm install`ed checkout (a
-  symlink under `~/.omp/plugins/node_modules/`), or
-  `omp plugin install github:LoneExile/omp-cursor-sdk`; see the README.
+- Install: `omp plugin install omp-cursor-sdk` (npm release), or
+  `omp plugin link "$PWD"` from an `npm install`ed checkout (a
+  symlink under `~/.omp/plugins/node_modules/`); see the README.
 - OMP stores plugins under `~/.omp/plugins/` and loads each plugin's
   extension entry (the `pi.extensions` field in `package.json` →
   `./src/index.ts`) at session start, during the `loadExtensions` startup
