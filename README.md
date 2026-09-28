@@ -98,7 +98,7 @@ both halves:
    ```bash
    npm run patch:cursor-sdk                 # this checkout's node_modules/@cursor/sdk
    node scripts/patch-cursor-sdk.mjs --all  # ...and the hoisted ~/.omp/plugins copy, when present
-   npm run check:cursor-sdk-patch           # per-file status; fails on drift
+   node scripts/patch-cursor-sdk.mjs --check --all   # per-file status for both copies; fails on drift
    ```
 
    The patch (marker `omp-cursor-sdk:max-mode-patch`) makes the SDK set `RequestedModel.maxMode` when
