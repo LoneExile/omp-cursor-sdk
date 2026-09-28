@@ -162,6 +162,15 @@ npm run check:cursor-sdk-patch                          # fail if that copy is m
 npm run refresh:cursor-snapshots                          # dry run; add --write to update snapshots
 ```
 
+### Releasing
+
+1. Fold the user-visible changes into `CHANGELOG.md` and set the same `version` in `package.json`.
+2. Commit, then tag `v<version>` and push the tag.
+3. First release only: `npm login && npm publish --access public`, then add the npm trusted publisher for this repo (`release.yml`, action `npm publish`) on npmjs.com.
+4. Publish a GitHub Release for the tag. `.github/workflows/release.yml` publishes to npm via OIDC (no token secret) on every published release; `workflow_dispatch` re-fires a failed publish.
+
+Max Mode's SDK patch is local `node_modules` state and never ships in the tarball; users patch their own copy after install.
+
 ## Credits and license
 
 Port of [fitchmultz/pi-cursor-sdk](https://github.com/fitchmultz/pi-cursor-sdk) by Mitch Fultz, adapted

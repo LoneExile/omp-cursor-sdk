@@ -1,0 +1,40 @@
+name: Release
+
+# Publishes to npm when a GitHub Release is published (tag the release with the
+# version, e.g. v0.4.0, after the matching "version" is in package.json). Can
+# also be run manually via workflow_dispatch to re-fire a flaked publish.
+#
+# Tokenless: authentication uses npm Trusted Publishing (OIDC) — no NPM_TOKEN.
+# The package must exist on npm once before this workflow can publish it, so the
+# first release is manual:
+#   npm login && npm publish --access public
+# then, on npmjs.com (package "omp-cursor-sdk" → Settings → Publishing access),
+# add a GitHub Actions trusted publisher for repo LoneExile/omp-cursor-sdk,
+# workflow filename "release.yml", allowed action "npm publish". Provenance is
+# generated automatically.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for npm Trusted Publishing (OIDC) + provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Upgrade npm (Trusted Publishing needs npm >= 11.5.1)
+        run: npm install -g npm@latest
+
+      - name: Publish to npm
+        run: npm publish --access public
