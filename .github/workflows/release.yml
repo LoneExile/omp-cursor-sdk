@@ -61,6 +61,13 @@ jobs:
       - name: Upgrade npm (Trusted Publishing needs npm >= 11.5.1)
         run: npm install -g npm@latest
 
+      # package.json declares bundledDependencies (@hono/node-server,
+      # @modelcontextprotocol/sdk). npm bundles those from node_modules, and
+      # silently packs nothing when node_modules is absent, so the plugin's
+      # bridge would break for npm installs without this step.
+      - name: Install dependencies so bundled dependencies ship
+        run: npm ci
+
       - name: Publish to npm
         if: steps.published.outputs.skip != 'true'
         run: npm publish --access public

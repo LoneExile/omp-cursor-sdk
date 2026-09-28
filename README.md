@@ -209,7 +209,9 @@ An installed `omp-cursor-sdk` loads alongside `omp -e <repo>`, and either copy c
    tag `v<version>`, and push the tag.
 2. Publish a GitHub Release for the tag. `.github/workflows/release.yml` then publishes that version to
    npm with OIDC (no token secret, provenance automatic) unless the registry already has it;
-   `workflow_dispatch` re-fires a failed publish.
+   `workflow_dispatch` re-fires a failed publish. The workflow installs dependencies first, because npm
+   bundles the declared `bundledDependencies` (`@hono/node-server`, `@modelcontextprotocol/sdk` — the
+   tool bridge) out of `node_modules` and packs none of them when it is absent.
 
 The first version, `0.4.0`, was published by hand — that is what created the package and made the
 trusted publisher configurable on npmjs.com. Later versions go through CI only; the
