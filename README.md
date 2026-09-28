@@ -174,15 +174,19 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
   `bun` never installed anything. Check `cat ~/.omp/plugins/package.json`: a failed `github:` attempt
   can leave a git spec or an empty version (`"omp-cursor-sdk": ""`) in `dependencies`, and the matching
   `bun.lock` entry can survive as a duplicate key that makes `bun add` exit instantly without installing
-  (`warn: Duplicate key … at bun.lock`). Fix with a real range, then regenerate the lock:
+  (`warn: Duplicate key … at bun.lock`). Install with an explicit version after clearing that state:
 
   ```bash
   cd ~/.omp/plugins
-  node -e 'const fs=require("node:fs");const p="package.json";const j=JSON.parse(fs.readFileSync(p,"utf8"));j.dependencies["omp-cursor-sdk"]="^0.4.0";fs.writeFileSync(p,JSON.stringify(j,null,2)+"\n")'
-  rm -f bun.lock          # holds the failed resolution; bun regenerates it
-  bun install
-  ls -l node_modules/omp-cursor-sdk/package.json
+  rm -f bun.lock                 # holds the failed resolution; bun regenerates it
+  bun add omp-cursor-sdk@0.4.0   # writes a real range and installs the plugin's own dependencies
+  ls node_modules/omp-cursor-sdk/package.json node_modules/@cursor/sdk/package.json
+  omp plugin list
   ```
+
+  Restart omp afterwards — plugins load at startup, so a session that was already running still sees the
+  old module graph. Keep one source per plugin: with the npm version pinned in `~/.omp/plugins/package.json`,
+  installing the `github:` form on top fails with `Package "omp-cursor-sdk@0.4.0" has a dependency loop`.
 - **`AI Model Not Found Invalid parameters for registry model`**: Cursor refused the selected
   parameters. For a larger context variant that means Max Mode is not active — see
   [Cursor Max Mode](#cursor-max-mode). The hint names the smaller variant that works without it
