@@ -121,6 +121,9 @@ Restart omp after patching: a running process keeps the SDK module it already lo
 reports `was patched after this process started` until you restart. Re-apply the patch after every
 `omp plugin install` or reinstall. With Max Mode on and an unpatched (or stale) SDK, the turn fails
 before the request and names the resolved path instead of silently sending the old selection.
+The guard locates that copy by walking the `node_modules` chain from its own file, so it still finds
+the SDK inside the single-file `omp` binary, where `import.meta.resolve` cannot resolve a bare
+specifier for a plugin file.
 
 Max Mode and long context bill at Cursor's higher long-context rates; the surcharge depends on your
 plan and model, so check Cursor's pricing page. The default is off.

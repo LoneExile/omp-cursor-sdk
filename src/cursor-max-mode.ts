@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ModelSelection } from "@cursor/sdk";
+import { findCursorSdkPackageDir } from "./cursor-sdk-runtime.js";
 
 export const CURSOR_MAX_MODE_PATCH_MARKER = "/* omp-cursor-sdk:max-mode-patch */";
 export const CURSOR_MAX_MODE_PARAM = { id: "max_mode", value: "true" } as const;
@@ -82,12 +83,32 @@ export function assertCursorSdkMaxModePatched(
 	);
 }
 
-export function assertImportedCursorSdkMaxModePatched(): void {
-	const meta = import.meta as ImportMeta & { resolve?: (specifier: string) => string };
-	if (typeof meta.resolve !== "function") {
+/**
+ * Resolve the `@cursor/sdk` path this process imports, falling back to the on-disk `node_modules`
+ * chain when the runtime cannot resolve a bare specifier for this file.
+ *
+ * `import.meta.resolve` throws for an extension file inside a Bun single-file compiled binary (the
+ * shipping `omp`); `findCursorSdkPackageDir` supplies the package the real import resolves to.
+ */
+export function resolveImportedCursorSdkPath(
+	moduleUrl: string | URL = import.meta.url,
+	resolveBareSpecifier?: (specifier: string) => string,
+): string {
+	try {
+		const resolve =
+			resolveBareSpecifier ??
+			((specifier: string) =>
+				(import.meta as ImportMeta & { resolve: (specifier: string) => string }).resolve(specifier));
+		return resolve("@cursor/sdk");
+	} catch {
+		const packageDir = findCursorSdkPackageDir(moduleUrl);
+		if (packageDir) return pathToFileURL(join(packageDir, "package.json")).href;
 		throw new Error(
-			"Cursor Max Mode is enabled, but import.meta.resolve is unavailable, so the @cursor/sdk patch could not be verified. Run `npm run patch:cursor-sdk` and use a runtime that supports import.meta.resolve.",
+			`Cursor Max Mode is enabled, but @cursor/sdk could not be located from ${String(moduleUrl)}. Run \`npm run patch:cursor-sdk\` against the SDK this process imports.`,
 		);
 	}
-	assertCursorSdkMaxModePatched(meta.resolve("@cursor/sdk"));
+}
+
+export function assertImportedCursorSdkMaxModePatched(): void {
+	assertCursorSdkMaxModePatched(resolveImportedCursorSdkPath());
 }
