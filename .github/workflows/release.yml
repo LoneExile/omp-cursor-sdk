@@ -6,12 +6,17 @@ name: Release
 #
 # Tokenless: authentication uses npm Trusted Publishing (OIDC) — no NPM_TOKEN.
 # The package must exist on npm once before this workflow can publish it, so the
-# first release is manual:
+# first version is published by hand:
 #   npm login && npm publish --access public
 # then, on npmjs.com (package "omp-cursor-sdk" → Settings → Publishing access),
 # add a GitHub Actions trusted publisher for repo LoneExile/omp-cursor-sdk,
 # workflow filename "release.yml", allowed action "npm publish". Provenance is
 # generated automatically.
+#
+# A version already on npm — including that hand-published first one — is
+# skipped, so publishing its GitHub Release stays green. Publish each later
+# version either by hand or through this workflow, never both ways for the same
+# version.
 
 on:
   release:
@@ -36,5 +41,18 @@ jobs:
       - name: Upgrade npm (Trusted Publishing needs npm >= 11.5.1)
         run: npm install -g npm@latest
 
+      - name: Check whether this version is already on npm
+        id: published
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$name@$version is already published; nothing to publish."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to npm
+        if: steps.published.outputs.skip != 'true'
         run: npm publish --access public

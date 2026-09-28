@@ -164,10 +164,11 @@ npm run refresh:cursor-snapshots                          # dry run; add --write
 
 ### Releasing
 
-1. Fold the user-visible changes into `CHANGELOG.md` and set the same `version` in `package.json`.
-2. Commit, then tag `v<version>` and push the tag.
-3. First release only: `npm login && npm publish --access public`, then add the npm trusted publisher for this repo (`release.yml`, action `npm publish`) on npmjs.com.
-4. Publish a GitHub Release for the tag. `.github/workflows/release.yml` publishes to npm via OIDC (no token secret) on every published release; `workflow_dispatch` re-fires a failed publish.
+1. Fold the user-visible changes into `CHANGELOG.md`, set the same `version` in `package.json`, commit, tag `v<version>`, and push the tag.
+2. Bootstrap once, ever — npm needs the package to exist before Trusted Publishing can be configured: `npm login && npm publish --access public`, then add the trusted publisher on npmjs.com (`omp-cursor-sdk` → Settings → Publishing access → GitHub Actions: repo `LoneExile/omp-cursor-sdk`, workflow `release.yml`, action `npm publish`).
+3. Publish a GitHub Release for the tag. `.github/workflows/release.yml` then publishes that version with OIDC (no token secret, provenance automatic) unless the version is already on npm; `workflow_dispatch` re-fires a failed publish.
+
+So the bootstrapped version ships by hand and every later version through CI, one path per version; the already-published check keeps the bootstrap release's job green.
 
 Max Mode's SDK patch is local `node_modules` state and never ships in the tarball; users patch their own copy after install.
 
