@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.1 - 2026-09-28
+
+### Fixed
+
+- Cursor Max Mode works inside the shipping compiled `omp` binary. `import.meta.resolve("@cursor/sdk")` and `createRequire().resolve("@cursor/sdk")` throw there (`Cannot find package '@cursor/sdk'`): a Bun single-file binary resolves a bare specifier for an on-disk extension file against its embedded root, while the real `import("@cursor/sdk")` still resolves. The Max Mode guard catches that failure and walks the on-disk `node_modules` chain from the extension file to the `@cursor/sdk` package that import uses, then checks the patch marker on that copy. A runtime that can resolve the bare specifier still uses that result first.
+- The bundled Cursor ripgrep path uses the same walk when `createRequire().resolve("@cursor/sdk")` throws, instead of leaving the path unset. It checks `@cursor/sdk-<platform>-<arch>` nested under the SDK package and the sibling package next to `@cursor/sdk`.
+- The npm publish job installs dependencies before `npm publish`. `bundledDependencies` (`@hono/node-server`, `@modelcontextprotocol/sdk`) are packed from `node_modules`; a checkout with no install packs none of them, so the pi tool bridge would be missing from that tarball. A registry error is no longer treated as "not published".
+
+### Changed
+
+- The README install recovery pins `omp-cursor-sdk@0.4.1`. Install that npm package from `~/.omp/plugins` (`bun add omp-cursor-sdk@0.4.1`). A `github:` spec can leave an empty dependency and a duplicate `bun.lock` key, and installing it on top of the npm pin fails with a dependency loop. Max Mode patch instructions name the hoisted `~/.omp/plugins/node_modules/@cursor/sdk` copy as well as a copy nested under the plugin. Restart omp after upgrading; plugins load at startup.
+
 ## 0.4.0 - 2026-09-27
 
 ### Breaking
