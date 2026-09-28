@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { getAgentDir, setAgentDir } from "@oh-my-pi/pi-utils";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ModelListItem, ModelSelection } from "@cursor/sdk";
@@ -11,6 +12,7 @@ import {
 	assertCursorSdkMaxModePatched,
 	CURSOR_MAX_MODE_PATCH_MARKER,
 	CURSOR_MAX_MODE_PARAM,
+	resolveImportedCursorSdkPath,
 } from "../src/cursor-max-mode.js";
 import {
 	getEffectiveCursorMaxMode,
@@ -311,5 +313,33 @@ describe("Cursor Max Mode SDK patch guard", () => {
 			expect((error as Error).message).toMatch(/restart omp/i);
 			expect((error as Error).message).toContain("dist/esm/34.js");
 		}
+	});
+
+	it("locates the SDK on disk when the runtime cannot resolve the bare specifier", () => {
+		// Mirrors a Bun single-file compiled binary (the shipping omp): the resolver API throws,
+		// while the on-disk node_modules chain the real import uses is intact.
+		const sdkRoot = join(root, "node_modules", "@cursor", "sdk");
+		writeSdkFixture(sdkRoot, {
+			"dist/esm/34.js": `new x.G4({maxMode:true${CURSOR_MAX_MODE_PATCH_MARKER}})`,
+		});
+		const moduleUrl = pathToFileURL(join(root, "consumer", "src", "cursor-max-mode.js")).href;
+		const unresolvable = () => {
+			throw new Error(`Cannot find package '@cursor/sdk' imported from ${moduleUrl}`);
+		};
+
+		const resolved = resolveImportedCursorSdkPath(moduleUrl, unresolvable);
+
+		expect(resolved).toBe(pathToFileURL(join(sdkRoot, "package.json")).href);
+		expect(() => assertCursorSdkMaxModePatched(resolved, { processStartedAtMs: Date.now() + 60_000 })).not.toThrow();
+	});
+
+	it("fails loud when the runtime cannot resolve the SDK and no on-disk package exists", () => {
+		const moduleUrl = pathToFileURL(join(root, "consumer", "src", "cursor-max-mode.js")).href;
+
+		expect(() =>
+			resolveImportedCursorSdkPath(moduleUrl, () => {
+				throw new Error("Cannot find package '@cursor/sdk'");
+			}),
+		).toThrow(/could not be located/);
 	});
 });

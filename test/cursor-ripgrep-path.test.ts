@@ -70,6 +70,33 @@ describe("Cursor ripgrep path", () => {
 		}
 	});
 
+	it("falls back to the on-disk node_modules chain when the runtime cannot resolve the SDK", () => {
+		const root = mkdtempSync(join(tmpdir(), "pi-cursor-ripgrep-fallback-"));
+		try {
+			const consumerDir = join(root, "consumer");
+			const consumerModule = join(consumerDir, "index.js");
+			const sdkDir = join(consumerDir, "node_modules", "@cursor", "sdk");
+			const platformDir = join(consumerDir, "node_modules", platformPackage);
+			const platformBinDir = join(platformDir, "bin");
+			const platformRg = join(platformBinDir, rgBinaryName);
+
+			mkdirSync(platformBinDir, { recursive: true });
+			mkdirSync(sdkDir, { recursive: true });
+			// No entry point: require.resolve("@cursor/sdk") fails, as it does in a compiled binary.
+			writeFileSync(join(sdkDir, "package.json"), JSON.stringify({ name: "@cursor/sdk", version: "1.0.32" }));
+			writeFileSync(join(platformDir, "package.json"), JSON.stringify({ name: platformPackage, version: "1.0.32" }));
+			writeFileSync(platformRg, "#!/bin/sh\nexit 0\n");
+			chmodSync(platformRg, 0o755);
+			writeFileSync(consumerModule, "export {};\n");
+
+			expect(() => createRequire(consumerModule).resolve("@cursor/sdk")).toThrow();
+
+			expect(resolveBundledCursorRipgrepPath(pathToFileURL(consumerModule))).toBe(realpathSync(platformRg));
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	it("locks installed @cursor/sdk 1.0.23 Agent.create ripgrep contract", () => {
 		const require = createRequire(import.meta.url);
 		const sdkEntry = require.resolve("@cursor/sdk");
