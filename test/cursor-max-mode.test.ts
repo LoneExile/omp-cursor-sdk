@@ -281,9 +281,10 @@ describe("Cursor Max Mode SDK patch guard", () => {
 			"dist/esm/34.js": UNPATCHED_ESM,
 			"dist/bundled/index.js": "new d5({modelId:m.model.id,parameters:(m.model.params??[]).map((G1)=>new U$({id:G1.id,value:G1.value}))})",
 		});
-		expect(() => assertCursorSdkMaxModePatched(resolved)).toThrow(resolved);
+		const startedBeforeFixture = Date.now() + 60_000;
+		expect(() => assertCursorSdkMaxModePatched(resolved, { processStartedAtMs: startedBeforeFixture })).toThrow(resolved);
 		try {
-			assertCursorSdkMaxModePatched(resolved);
+			assertCursorSdkMaxModePatched(resolved, { processStartedAtMs: startedBeforeFixture });
 		} catch (error) {
 			expect(error).toBeInstanceOf(Error);
 			expect((error as Error).message).toContain("npm run patch:cursor-sdk");
@@ -297,6 +298,18 @@ describe("Cursor Max Mode SDK patch guard", () => {
 			"dist/esm/34.js": `new x.G4({maxMode:true${CURSOR_MAX_MODE_PATCH_MARKER}})`,
 			"dist/cjs/342.js": CURSOR_MAX_MODE_PATCH_MARKER,
 		});
-		expect(() => assertCursorSdkMaxModePatched(resolved)).not.toThrow();
+		// The fixture is written now, so a process that started later than that loaded the patched file.
+		expect(() => assertCursorSdkMaxModePatched(resolved, { processStartedAtMs: Date.now() + 60_000 })).not.toThrow();
+	});
+
+	it("fails loud when a patched build file is newer than this process", () => {
+		const resolved = writeSdkFixture(root, { "dist/esm/34.js": `new x.G4({maxMode:true${CURSOR_MAX_MODE_PATCH_MARKER}})` });
+		try {
+			assertCursorSdkMaxModePatched(resolved, { processStartedAtMs: Date.now() - 60_000 });
+			throw new Error("expected the stale patch to fail the guard");
+		} catch (error) {
+			expect((error as Error).message).toMatch(/restart omp/i);
+			expect((error as Error).message).toContain("dist/esm/34.js");
+		}
 	});
 });

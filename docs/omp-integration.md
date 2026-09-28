@@ -125,10 +125,12 @@ Project config is never read. Before a Max Mode turn the plugin resolves
 the patch marker in every existing build file (`dist/esm/34.js`,
 `dist/cjs/342.js`, `dist/bundled/index.js`). Bun loads the bundled file; Node
 loads the ESM chunk. An unpatched copy fails the turn and names the resolved
-path. Patch this checkout with `npm run patch:cursor-sdk`. An omp install
+path; a copy patched after the process started also fails, because the loaded
+module is the older one, and asks for a restart. Patch this checkout with
+`npm run patch:cursor-sdk`, then restart omp. An omp install
 hoists `@cursor/sdk` to `~/.omp/plugins/node_modules/@cursor/sdk` and must be
 patched with `node scripts/patch-cursor-sdk.mjs --sdk` that path; re-apply
-after `omp plugin install`. Long context bills higher.
+after `omp plugin install` and restart. Long context bills higher.
 
 ## 4. Authentication and key resolution
 

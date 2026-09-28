@@ -135,7 +135,9 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
 - **Max Mode is on but the turn fails before the request**: the resolved `@cursor/sdk` is unpatched.
   The error names that path. From this checkout run `npm run patch:cursor-sdk`. An omp install resolves
   the hoisted copy, not this repo's `node_modules`: `node scripts/patch-cursor-sdk.mjs --sdk ~/.omp/plugins/node_modules/@cursor/sdk`.
-  Re-apply after `omp plugin install` or any reinstall. `--check` (`npm run check:cursor-sdk-patch`) prints
+  Restart omp after patching: a running process keeps the module it already loaded, so the guard reports
+  `was patched after this process started` until you restart. Re-apply after `omp plugin install` or any
+  reinstall. `--check` (`npm run check:cursor-sdk-patch`) prints
   per-file status and fails if a build file drifted. Max Mode and long context bill higher; the
   surcharge depends on the plan and model, so check Cursor's pricing page. The default stays off. An already installed
   `omp-cursor-sdk` is loaded in addition to `omp -e <repo>` and can handle the turn; use
