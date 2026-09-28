@@ -168,11 +168,21 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
 - **No `cursor-sdk` rows**: the plugin is not loaded (`omp plugin list`) or is disabled. Without a key
   the plugin still lists a bundled fallback catalog and warns when you select a model; turns fail
   until `CURSOR_API_KEY` is set and omp restarted.
-- **`Package installed but package.json not found at …/node_modules/github:LoneExile/omp-cursor-sdk/package.json`**:
-  that omp installer resolved the `github:` shorthand to the literal spec string instead of the
-  installed package name. Run `omp plugin install omp-cursor-sdk` instead, or update omp. If the failed
-  attempt recorded a dependency in `~/.omp/plugins/package.json`, remove it (`omp plugin uninstall` or
-  edit the file) before retrying.
+- **`Package installed but package.json not found at …/node_modules/omp-cursor-sdk/package.json`** (or
+  at `…/node_modules/github:LoneExile/omp-cursor-sdk/package.json`): the installer resolves the spec to
+  a directory name (`github:` and raw URLs are not mapped to the package name on every omp version), or
+  `bun` never installed anything. Check `cat ~/.omp/plugins/package.json`: a failed `github:` attempt
+  can leave a git spec or an empty version (`"omp-cursor-sdk": ""`) in `dependencies`, and the matching
+  `bun.lock` entry can survive as a duplicate key that makes `bun add` exit instantly without installing
+  (`warn: Duplicate key … at bun.lock`). Fix with a real range, then regenerate the lock:
+
+  ```bash
+  cd ~/.omp/plugins
+  node -e 'const fs=require("node:fs");const p="package.json";const j=JSON.parse(fs.readFileSync(p,"utf8"));j.dependencies["omp-cursor-sdk"]="^0.4.0";fs.writeFileSync(p,JSON.stringify(j,null,2)+"\n")'
+  rm -f bun.lock          # holds the failed resolution; bun regenerates it
+  bun install
+  ls -l node_modules/omp-cursor-sdk/package.json
+  ```
 - **`AI Model Not Found Invalid parameters for registry model`**: Cursor refused the selected
   parameters. For a larger context variant that means Max Mode is not active — see
   [Cursor Max Mode](#cursor-max-mode). The hint names the smaller variant that works without it
