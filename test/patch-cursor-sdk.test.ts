@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -47,6 +47,10 @@ function writeFixture(root: string, files: Record<string, string> = FIXTURES): v
 function runPatch(args: string[]) {
 	return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
 }
+
+// The script's shebang and every documented command run it under Node, and only Node leaves symlinks
+// in process.argv[1] while resolving them in import.meta.url (Bun resolves both).
+const nodeAvailable = spawnSync("node", ["--version"], { stdio: "ignore" }).status === 0;
 
 describe("patch-cursor-sdk", () => {
 	const roots: string[] = [];
@@ -118,6 +122,33 @@ describe("patch-cursor-sdk", () => {
 		expect(readFileSync(join(first, "dist/bundled/index.js"), "utf8")).toContain(MARKER);
 		expect(readFileSync(join(second, "dist/esm/479.js"), "utf8")).toContain(MARKER);
 		expect(runPatch(["--check", "--sdk", first, "--sdk", second]).status).toBe(0);
+	});
+
+	// macOS /tmp is a symlink, so a script path under it reaches Node as a symlinked path.
+	function runThroughSymlink(nodeFlags: string[]): void {
+		const root = tempSdk();
+		writeFixture(root);
+		const linkParent = tempSdk();
+		const scriptsLink = join(linkParent, "scripts-link");
+		symlinkSync(dirname(SCRIPT), scriptsLink);
+		const viaLink = (args: string[]) =>
+			spawnSync("node", [...nodeFlags, join(scriptsLink, "patch-cursor-sdk.mjs"), ...args], { encoding: "utf8" });
+
+		const before = viaLink(["--check", "--sdk", root]);
+		expect(before.stdout).toContain("unpatched");
+		expect(before.status).toBe(1);
+
+		expect(viaLink(["--sdk", root]).status).toBe(0);
+		expect(readFileSync(join(root, "dist/bundled/index.js"), "utf8")).toContain(MARKER);
+		expect(viaLink(["--check", "--sdk", root]).status).toBe(0);
+	}
+
+	it.skipIf(!nodeAvailable)("runs, instead of silently doing nothing, when Node starts it through a symlinked path", () => {
+		runThroughSymlink([]);
+	});
+
+	it.skipIf(!nodeAvailable)("runs through a symlinked path under --preserve-symlinks-main too", () => {
+		runThroughSymlink(["--preserve-symlinks-main"]);
 	});
 });
 
