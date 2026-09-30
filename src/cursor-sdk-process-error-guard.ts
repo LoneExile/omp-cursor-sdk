@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import { logger, postmortem } from "@oh-my-pi/pi-utils";
 import { classifyCursorConnectError, isCursorSdkAbortConnectError, isCursorSdkConnectionStalledError } from "./cursor-provider-errors.js";
 import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 
@@ -33,7 +34,7 @@ const lifecycleGuards = cursorSessionSlotView(
 );
 let originalProcessEmit: GenericProcessEmit | undefined;
 let cursorProcessEmit: GenericProcessEmit | undefined;
-let bunUnhandledRejectionListenerInstalled = false;
+let unregisterHostRejectionInterceptor: (() => void) | undefined;
 
 function hasActiveGuard(): boolean {
 	return activeProviderTurns.size > 0 || activeSessions.size > 0;
@@ -50,12 +51,14 @@ function isCursorProvenance(source: string): boolean {
 	return source === "cursor-sdk-stack" || source === "cursor-extension-connect-stack" || source === "cursor-backend-details";
 }
 
+const CURSOR_SDK_DIST_STACK_FRAME = /(?:^|[\\/])node_modules[\\/]@cursor[\\/]sdk[\\/]dist[\\/]/;
+
 function isCursorSdkWriteIterableClosedError(error: unknown): boolean {
 	return (
 		error instanceof Error &&
 		error.name === "WriteIterableClosedError" &&
 		error.message === "WritableIterable is closed" &&
-		/(?:^|[\\/])node_modules[\\/]@cursor[\\/]sdk[\\/]dist[\\/]/.test(error.stack ?? "")
+		CURSOR_SDK_DIST_STACK_FRAME.test(error.stack ?? "")
 	);
 }
 
@@ -73,7 +76,7 @@ function isCursorSdkAbortError(error: unknown): boolean {
 	return (
 		name === "AbortError" &&
 		typeof stack === "string" &&
-		/(?:^|[\\/])node_modules[\\/]@cursor[\\/]sdk[\\/]dist[\\/]/.test(stack)
+		CURSOR_SDK_DIST_STACK_FRAME.test(stack)
 	);
 }
 
@@ -93,6 +96,23 @@ function isObservedLocalTransportClosedPipeWriteError(error: unknown): boolean {
 	if (code !== "EPIPE" || syscall !== "write" || !error.message.startsWith("write EPIPE")) return false;
 	const frames = (error.stack ?? "").split("\n").filter((line) => /^\s+at /.test(line));
 	return frames.length === 1 && OBSERVED_CLOSED_PIPE_STACK_FRAME.test(frames[0] ?? "");
+}
+
+// The Cursor SDK 1.0.32 local shell tool reaches its executor through an exec replay cache
+// (`mD0` in dist/bundled/index.js) that starts draining the shell stream from its constructor
+// without observing the promise, and ends its readers normally when the stream throws. A shell
+// that fails to start therefore surfaces only as an unhandled rejection carrying the
+// child_process spawn error, whose stack is the SDK's spawn call site. Bun reports a missing
+// working directory as ENOENT on the shell binary (`posix_spawn '/bin/zsh'`).
+function isCursorSdkSpawnFailure(error: unknown): error is NodeJS.ErrnoException {
+	if (!(error instanceof Error)) return false;
+	const { code, syscall } = error as NodeJS.ErrnoException;
+	return (
+		typeof code === "string" &&
+		typeof syscall === "string" &&
+		/^spawn(?: |$)/.test(syscall) &&
+		CURSOR_SDK_DIST_STACK_FRAME.test(error.stack ?? "")
+	);
 }
 
 // Contained only while a provider turn that declared a local transport is active;
@@ -121,6 +141,7 @@ function shouldSuppressProcessError(event: string | symbol, args: readonly unkno
 	// SDK stall timers and inter-turn teardown aborts never call suppressAbortErrors();
 	// any active provider turn or session is enough — stack provenance already gates SDK-only AbortErrors.
 	if (isCursorSdkAbortError(error)) return hasActiveGuard();
+	if (isCursorSdkSpawnFailure(error)) return hasActiveGuard();
 	// RetriableError "Connection stalled" / "Connection stalled repeatedly" is not a ConnectError; suppress during active turns only.
 	if (isCursorSdkConnectionStalledError(error)) return activeProviderTurns.size > 0;
 	const classification = classifyCursorConnectError(error);
@@ -147,31 +168,42 @@ function installProcessEmitPatch(): void {
 	process.emit = cursorProcessEmit as typeof process.emit;
 }
 
-function isBunRuntime(): boolean {
-	return typeof (process.versions as { bun?: string }).bun === "string";
+function reportContainedCursorSdkSpawnFailure(error: NodeJS.ErrnoException): void {
+	logger.warn("Cursor SDK shell failed to start; contained its unhandled rejection", {
+		error: error.message,
+		code: error.code,
+		syscall: error.syscall,
+		path: error.path,
+		...(error.code === "ENOENT"
+			? { hint: "one possible cause: the working directory does not exist (Bun reports that as ENOENT on the shell binary)" }
+			: {}),
+	});
 }
 
-function handleBunUnhandledRejection(error: unknown): void {
-	if (shouldSuppressProcessError("unhandledRejection", [error])) return;
-	// Without another rejection listener, retain Bun's default fatal behavior.
-	if (process.listenerCount("unhandledRejection") === 1) throw error;
+// omp's postmortem owns the process `unhandledRejection` listener and exits on any rejection no
+// interceptor claims. Bun calls process error listeners directly instead of through
+// `process.emit`, so under omp the emit patch never sees a rejection; this interceptor is what
+// keeps the host alive.
+function interceptHostUnhandledRejection(reason: unknown): boolean {
+	if (!shouldSuppressProcessError("unhandledRejection", [reason])) return false;
+	if (isCursorSdkSpawnFailure(reason)) reportContainedCursorSdkSpawnFailure(reason);
+	return true;
 }
 
-function installBunUnhandledRejectionListener(): void {
-	if (!isBunRuntime() || bunUnhandledRejectionListenerInstalled) return;
-	process.prependListener("unhandledRejection", handleBunUnhandledRejection);
-	bunUnhandledRejectionListenerInstalled = true;
+function installHostRejectionInterceptor(): void {
+	if (unregisterHostRejectionInterceptor) return;
+	unregisterHostRejectionInterceptor = postmortem.interceptUnhandledRejections(interceptHostUnhandledRejection);
 }
 
-function uninstallBunUnhandledRejectionListenerIfIdle(): void {
-	if (hasActiveGuard() || !bunUnhandledRejectionListenerInstalled) return;
-	process.off("unhandledRejection", handleBunUnhandledRejection);
-	bunUnhandledRejectionListenerInstalled = false;
+function uninstallHostRejectionInterceptorIfIdle(): void {
+	if (hasActiveGuard() || !unregisterHostRejectionInterceptor) return;
+	unregisterHostRejectionInterceptor();
+	unregisterHostRejectionInterceptor = undefined;
 }
 
 function uninstallProcessHooksIfIdle(): void {
 	if (hasActiveGuard()) return;
-	uninstallBunUnhandledRejectionListenerIfIdle();
+	uninstallHostRejectionInterceptorIfIdle();
 	if (!originalProcessEmit || !cursorProcessEmit || process.emit !== cursorProcessEmit) return;
 	process.emit = originalProcessEmit as typeof process.emit;
 	originalProcessEmit = undefined;
@@ -180,7 +212,7 @@ function uninstallProcessHooksIfIdle(): void {
 
 function installProcessHooks(): void {
 	installProcessEmitPatch();
-	installBunUnhandledRejectionListener();
+	installHostRejectionInterceptor();
 }
 
 export const __testUtils = {

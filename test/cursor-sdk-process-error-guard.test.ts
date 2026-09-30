@@ -433,32 +433,6 @@ setTimeout(() => console.log("survived"), 20);
 		expect(result.stdout).toContain("survived");
 	});
 
-	bunIt("keeps unrelated Bun rejections fatal after a prior listener is removed", () => {
-		const result = runBunProcessErrorProbe(`
-const priorListener = () => {};
-process.on("unhandledRejection", priorListener);
-installCursorSdkProcessErrorGuard();
-process.off("unhandledRejection", priorListener);
-Promise.reject(new Error("unrelated listener-removal failure"));
-setTimeout(() => console.log("SURVIVED_UNEXPECTEDLY"), 20);
-`);
-		expect(result.status).not.toBe(0);
-		expect(result.stderr).toContain("unrelated listener-removal failure");
-		expect(result.stdout).not.toContain("SURVIVED_UNEXPECTEDLY");
-	});
-
-	bunIt("preserves a pre-existing Bun once rejection listener", () => {
-		const result = runBunProcessErrorProbe(`
-process.once("unhandledRejection", (error) => console.log("handled: " + error.message));
-installCursorSdkProcessErrorGuard();
-Promise.reject(new Error("owned by prior once listener"));
-setTimeout(() => console.log("survived"), 20);
-`);
-		expect(result.status, result.stderr).toBe(0);
-		expect(result.stdout).toContain("handled: owned by prior once listener");
-		expect(result.stdout).toContain("survived");
-	});
-
 	it("suppresses the exact closed-writable error for the session after the provider turn ends", () => {
 		const sessionGuard = installCursorSdkSessionProcessErrorGuard();
 		const turnGuard = installCursorSdkProcessErrorGuard();
