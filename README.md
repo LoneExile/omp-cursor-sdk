@@ -108,6 +108,14 @@ both halves:
    node scripts/patch-cursor-sdk.mjs --check --all   # per-file status for both copies; fails on drift
    ```
 
+   An npm plugin install has no `node_modules/@cursor/sdk` of its own (the SDK is hoisted), so `--all`
+   exits 1 there. Patch the hoisted copy by path, from the installed package directory:
+
+   ```bash
+   cd ~/.omp/plugins/node_modules/omp-cursor-sdk
+   node scripts/patch-cursor-sdk.mjs --sdk ~/.omp/plugins/node_modules/@cursor/sdk
+   ```
+
    The patch (marker `omp-cursor-sdk:max-mode-patch`) makes the SDK set `RequestedModel.maxMode` when
    the selection carries `{id:"max_mode", value:"true"}`, and strips that sentinel before the request
    leaves. It is local `node_modules` state and never ships in the published tarball.
@@ -219,10 +227,19 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
   `ENOTDIR …`). The model receives `Command failed to spawn: …` and omp stays up.
 - **`Cursor's ripgrep failed to start` in the omp log**: Cursor's ripgrep binary could not be started, most often
   because `CURSOR_RIPGREP_PATH` names a file that does not exist (`ENOENT … posix_spawn '<path>'`) or is not
-  executable (`EACCES`). Cursor runs ripgrep at startup in any git checkout or `.cursor/rules` workspace (its
-  workspace walk for ignore files, rules, skills and nested AGENTS.md) and for Grep and Glob. omp stays up, the SDK skips the
-  failed walk, and Grep and Glob return the error to the model. Fix the path or unset `CURSOR_RIPGREP_PATH`,
-  and the plugin uses the SDK's bundled ripgrep.
+  executable (`EACCES`). Cursor runs ripgrep for its Grep and Glob tools and for walks it starts itself, for
+  example at startup in any git checkout and in any workspace with a `.cursor/rules` directory in it or an
+  ancestor (ignore files, rules, skills and nested AGENTS.md) and behind its `ls` tool. omp stays up, the SDK
+  skips a failed startup walk, and Grep and Glob return the error to the model. The log's `hint` says what to
+  fix. Three errors say the binary is not the problem: `EAGAIN`, `EMFILE` or `ENFILE` mean a process or
+  open-file limit, `ENOENT` for a file that exists means the working directory Cursor spawned it in may be
+  gone, or the file is a script whose `#!` interpreter is missing, and `EACCES` for an executable regular file
+  means the working directory may not be accessible, or the script's interpreter may not be executable. For any
+  other error, if the hint says `CURSOR_RIPGREP_PATH` overrides the ripgrep (the variable names a file other
+  than the SDK's bundled `bin/rg`), fix the path, or unset the variable so the plugin uses the SDK's bundled
+  ripgrep, then restart omp. Otherwise the file is the SDK's bundled ripgrep (the plugin writes its path into
+  the variable when you have not set one) or one found on `PATH`: make sure it exists and is executable, or
+  reinstall `@cursor/sdk`, then restart omp.
 - **Debugging a turn**: run with `PI_CURSOR_SDK_EVENT_DEBUG=1`; `.debug/cursor-sdk-events/**/metadata.json` holds the exact
   model selection sent, `wait-result.json` the SDK result. They can contain prompts and tool output; delete them afterwards.
 
