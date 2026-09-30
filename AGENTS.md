@@ -11,7 +11,8 @@ This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchm
 - `shared/cursor-model-selection-identities.mjs` owns canonical selectable model/context/fast identities and context-window key normalization shared by runtime discovery and the snapshot generator; its `.d.mts` file owns the TypeScript contract.
 - `src/cursor-provider.ts` is a thin `streamCursor()` wrapper that delegates turn execution to the turn runner.
 - `src/cursor-provider-turn-runner.ts` orchestrates provider turns (pre-send drain, prepare, send, finalize, emit, cleanup).
-- `src/cursor-provider-turn-prepare.ts` owns turn prepare (auth, MCP timeout install, effective local HTTP transport configuration, session agent, live-run setup, coordinator).
+- `src/cursor-provider-turn-prepare.ts` owns turn prepare (auth, MCP timeout install, effective local HTTP transport configuration, session agent with the Cursor built-in tool allowlist, live-run setup, coordinator) and refuses omp advisor requests on the cloud runtime, where the SDK cannot restrict tools.
+- `src/cursor-one-shot-request.ts` owns request routing (one-shot vs pooled agent, main conversation vs other omp agent loops such as advisors) and the Cursor built-in tool allowlist (`getCursorBuiltInToolAllowlist`: an omp advisor gets only the read-only `read`/`grep`/`glob` that omp granted, a compaction or branch summarizer gets none).
 - `src/cursor-provider-turn-send.ts` owns SDK `agent.send()` wiring and abort listener registration.
 - `src/cursor-provider-turn-finalize.ts` owns unified `awaitFinalizeCursorRunOutcome()` (wait, transcript replay, incomplete tools, artifacts, context cache).
 - `src/cursor-provider-turn-emit.ts` owns live vs direct emission from finalized outcomes.
@@ -91,7 +92,7 @@ This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchm
 - `src/cursor-runtime-state.ts` owns effective Cursor config/runtime resolution, cloud/local runtime flags, runtime status helpers, cloud acknowledgement, and `/cursor-runtime` / `/cursor-cloud` wiring.
 - `src/context.ts`, `src/context-window-cache.ts`, and `src/bundled-context-windows.ts` handle prompt conversion and context-window caches.
 - `src/cursor-bridge-contract.ts` owns pi bridge MCP description helpers and the exported full bridge contract text (bootstrap/manifest carry the user-facing contract; MCP descriptions use a one-line pointer).
-- `src/cursor-tool-manifest.ts` owns bootstrap callable-surface manifest text (`PI_CURSOR_TOOL_MANIFEST`, default on).
+- `src/cursor-tool-manifest.ts` owns bootstrap callable-surface manifest text (`PI_CURSOR_TOOL_MANIFEST`, default on), including an allowlisted agent's exact built-in tools.
 - `test/**/*.test.ts` contains Vitest coverage for provider registration, discovery, state, context, bridge, replay, and streaming behavior.
 - `test/helpers/pi-harness.ts` is the canonical fake pi/extension harness (`createPiHarness`, shared model/context/event runners, tool factories).
 - `test/helpers/cursor-provider-harness.ts` owns Cursor SDK provider mocks/stream helpers and re-exports pi-harness fixtures for provider tests.

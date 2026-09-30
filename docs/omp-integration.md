@@ -334,7 +334,10 @@ The extension wires into OMP's session events:
   session id containing `:side:` (handoff documents, `/btw` and other ephemeral
   turns, `session-handoff.ts`, `agent-session.ts` `runEphemeralTurn`), runs on a
   one-shot agent: no pool entry, no pi tool bridge, no live run, no lineage or
-  resume handle, a temporary store removed afterwards. Such a request never
+  resume handle, a temporary store removed afterwards. On the local runtime a
+  summary also gets no Cursor built-in tools (the SDK's `tools: []`): its
+  transcript can quote instructions, and compacting an advisor's context
+  summarizes the worker transcript the advisor replayed. Such a request never
   carries tool results for the pooled live run, so skipping the pre-send drain
   leaves that run to the continuation that owns it; on the pool it would chain
   into a run that is waiting for tool results. The plugin does not rely on
@@ -351,7 +354,9 @@ The extension wires into OMP's session events:
   loop shares the session's store under its own id (`session-advisors.ts`,
   `advisor/config.ts`) and gets a pooled agent without the pi tool bridge,
   native replay, local resume or lineage (omp tools run only in the main
-  loop); auto-learn capture brings a store of its own (`sdk.ts`
+  loop), limited to the read-only Cursor built-in tools omp granted it
+  ([Cursor tool surfaces](./cursor-tool-surfaces.md)); auto-learn capture
+  brings a store of its own (`sdk.ts`
   `createAutoLearnCaptureRunner`) and runs one-shot. Neither emits extension
   events. Advisor requests are recognized by their `advise` tool (every
   advisor loop runs `[adviseTool, ...tools]`, `session-advisors.ts`;

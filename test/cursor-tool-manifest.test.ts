@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildCursorPrompt } from "../src/context.js";
 import {
 	buildCursorToolManifestText,
+	CURSOR_HOST_TOOL_MANIFEST_SUMMARY,
 	CURSOR_TOOL_MANIFEST_ENV,
 	resolveCursorToolManifestEnabled,
 } from "../src/cursor-tool-manifest.js";
@@ -69,6 +70,16 @@ describe("cursor-tool-manifest", () => {
 		const empty = buildCursorToolManifestText({ piBridgeEnabled: true, bridgeSnapshot: { tools: [], mcpToolNameToPiToolName: new Map(), piToolNameToMcpToolName: new Map() } });
 		expect(disabled).toContain("disabled");
 		expect(empty).toContain("no pi__* tools exposed");
+	});
+
+	it("tells a restricted agent exactly which Cursor built-in tools it has", () => {
+		const restricted = buildCursorToolManifestText({ builtInTools: ["read", "grep", "glob"], includePiBridgeGuidance: false });
+		expect(restricted).toContain("- Cursor built-in tools: read, grep, glob only.");
+		expect(restricted).not.toContain(CURSOR_HOST_TOOL_MANIFEST_SUMMARY);
+		expect(restricted).not.toContain("Pi tool toggles");
+		expect(buildCursorToolManifestText({ builtInTools: [], includePiBridgeGuidance: false })).toContain(
+			"- Cursor built-in tools: none; reply with text only.",
+		);
 	});
 
 	it("defaults manifest env to enabled", () => {

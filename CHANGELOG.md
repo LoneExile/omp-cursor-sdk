@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- An omp advisor on a cursor-sdk model can no longer run shell commands, edit files or call MCP tools. omp advisors are read-only watchdogs (default tools `read`, `grep`, `glob`), but the plugin created the advisor's Cursor agent with Cursor's full toolset, whose shell, edit, delete, MCP and subagent tools run outside omp's tool grants and approval policies: an advisor that replayed a worker's brief ran its docker push and `kubectl apply`. The advisor's agent now gets only the read-only built-in tools omp granted it (the SDK's `tools` allowlist), a narrowed `WATCHDOG.yml` grant replaces its pooled agent, and its bootstrap manifest lists exactly those tools. On the local runtime, compaction and branch summaries now run with no built-in tools, so the summary that compacts an advisor's context, which holds the replayed brief, cannot act on it either. Advisor requests on the cloud runtime are refused, because the SDK cannot restrict a cloud agent's tools; summaries on the cloud runtime still get Cursor's full cloud toolset.
+
 ## 0.4.1 - 2026-09-28
 
 ### Fixed

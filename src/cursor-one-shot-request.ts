@@ -1,3 +1,4 @@
+import type { ToolName } from "@cursor/sdk";
 import type { Context, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 // Host constant, not a copy: omp routes this import to its own in-process pi-agent-core
 // (pi-coding-agent extensibility/plugins/legacy-pi-compat.ts PI_PACKAGE_NAMES), so the
@@ -50,9 +51,14 @@ export function isCursorOneShotRequest(
 	options?: CursorRequestRoutingOptions,
 ): boolean {
 	if (options?.providerSessionState === undefined) return true;
-	const systemPrompt = context.systemPrompt;
-	if (systemPrompt?.length === 1 && systemPrompt[0] === SUMMARIZATION_SYSTEM_PROMPT) return true;
+	if (isCursorSummarizationRequest(context)) return true;
 	return options.sessionId?.includes(HOST_SIDE_REQUEST_SESSION_MARKER) === true;
+}
+
+/** omp compaction and branch summaries: exactly one system prompt, SUMMARIZATION_SYSTEM_PROMPT. */
+function isCursorSummarizationRequest(context: Pick<Context, "systemPrompt">): boolean {
+	const systemPrompt = context.systemPrompt;
+	return systemPrompt?.length === 1 && systemPrompt[0] === SUMMARIZATION_SYSTEM_PROMPT;
 }
 
 /**
@@ -108,6 +114,29 @@ const ADVISOR_TOOL_NAME = "advise";
 /** True for a request of one of omp's advisor loops. */
 export function isCursorAdvisorRequest(context: Pick<Context, "tools">): boolean {
 	return context.tools?.some((tool) => tool.name === ADVISOR_TOOL_NAME) === true;
+}
+
+/**
+ * The read-only Cursor built-in tools an advisor may use. omp can grant an advisor any
+ * builtin tool (sdk.ts builds every one for the advisor session; its WATCHDOG.yml `tools`
+ * picks, default read/grep/glob), but Cursor's own shell, edit, delete, MCP and subagent
+ * tools would run outside omp's tool grants and approval policies. omp's read, grep and
+ * glob share their names with the SDK's built-in tools.
+ */
+const CURSOR_ADVISOR_READ_ONLY_TOOLS: readonly ToolName[] = ["read", "grep", "glob"];
+
+/**
+ * Cursor built-in tools for the request's agent (the SDK's `tools` allowlist): undefined
+ * keeps the SDK's default toolset. A summarizer only writes a summary of the transcript it
+ * is sent, and that transcript can quote instructions (an advisor's replays the worker's
+ * brief), so it gets none; an omp advisor request gets only the read-only tools omp
+ * granted it, possibly none.
+ */
+export function getCursorBuiltInToolAllowlist(context: Pick<Context, "systemPrompt" | "tools">): ToolName[] | undefined {
+	if (isCursorSummarizationRequest(context)) return [];
+	if (!isCursorAdvisorRequest(context)) return undefined;
+	const granted = new Set(context.tools?.map((tool) => tool.name));
+	return CURSOR_ADVISOR_READ_ONLY_TOOLS.filter((name) => granted.has(name));
 }
 
 /**
