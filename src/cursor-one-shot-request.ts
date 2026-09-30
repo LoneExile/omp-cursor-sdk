@@ -111,9 +111,45 @@ interface CursorConversationTrackingExtensionApi {
  */
 const ADVISOR_TOOL_NAME = "advise";
 
+// The in-band tool catalog omp appends as the LAST system-prompt entry: a `<tools>` block with one
+// JSON object per line (pi-ai dialect/catalog.ts renderToolCatalog, shared by every dialect's
+// prompt template). Earlier entries can carry user-controlled text (rules, memories, AGENTS.md) and
+// are never read.
+const INBAND_TOOLS_OPEN = "<tools>\n";
+const INBAND_TOOLS_CLOSE = "\n</tools>";
+
+function readInbandToolName(catalogLine: string): string | undefined {
+	try {
+		const name: unknown = (JSON.parse(catalogLine) as { function?: { name?: unknown } } | null)?.function?.name;
+		return typeof name === "string" ? name : undefined;
+	} catch {
+		return undefined; // not a catalog entry
+	}
+}
+
+/**
+ * Names of the tools omp declared for a request. Under an owned dialect (`PI_DIALECT`) omp
+ * moves them in-band instead: pi-agent-core agent-loop.ts prepareProviderCall appends pi-ai's
+ * `renderInbandToolPrompt` catalog to the system prompt and sends `tools: undefined`.
+ */
+function getCursorRequestToolNames(context: Pick<Context, "systemPrompt" | "tools">): Set<string> {
+	if (context.tools !== undefined) return new Set(context.tools.map((tool) => tool.name));
+	const names = new Set<string>();
+	const catalogEntry = context.systemPrompt?.at(-1) ?? "";
+	// indexOf keeps this linear; a regex retried from every unterminated `<tools>` would not be.
+	const open = catalogEntry.indexOf(INBAND_TOOLS_OPEN);
+	const close = open === -1 ? -1 : catalogEntry.indexOf(INBAND_TOOLS_CLOSE, open + INBAND_TOOLS_OPEN.length);
+	if (close === -1) return names;
+	for (const line of catalogEntry.slice(open + INBAND_TOOLS_OPEN.length, close).split("\n")) {
+		const name = readInbandToolName(line);
+		if (name !== undefined) names.add(name);
+	}
+	return names;
+}
+
 /** True for a request of one of omp's advisor loops. */
-export function isCursorAdvisorRequest(context: Pick<Context, "tools">): boolean {
-	return context.tools?.some((tool) => tool.name === ADVISOR_TOOL_NAME) === true;
+export function isCursorAdvisorRequest(context: Pick<Context, "systemPrompt" | "tools">): boolean {
+	return getCursorRequestToolNames(context).has(ADVISOR_TOOL_NAME);
 }
 
 /**
@@ -134,9 +170,9 @@ const CURSOR_ADVISOR_READ_ONLY_TOOLS: readonly ToolName[] = ["read", "grep", "gl
  */
 export function getCursorBuiltInToolAllowlist(context: Pick<Context, "systemPrompt" | "tools">): ToolName[] | undefined {
 	if (isCursorSummarizationRequest(context)) return [];
-	if (!isCursorAdvisorRequest(context)) return undefined;
-	const granted = new Set(context.tools?.map((tool) => tool.name));
-	return CURSOR_ADVISOR_READ_ONLY_TOOLS.filter((name) => granted.has(name));
+	const declared = getCursorRequestToolNames(context);
+	if (!declared.has(ADVISOR_TOOL_NAME)) return undefined;
+	return CURSOR_ADVISOR_READ_ONLY_TOOLS.filter((name) => declared.has(name));
 }
 
 /**

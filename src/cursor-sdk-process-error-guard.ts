@@ -99,20 +99,25 @@ function isObservedLocalTransportClosedPipeWriteError(error: unknown): boolean {
 }
 
 // The Cursor SDK 1.0.32 local shell tool reaches its executor through an exec replay cache
-// (`mD0` in dist/bundled/index.js) that starts draining the shell stream from its constructor
-// without observing the promise, and ends its readers normally when the stream throws. A shell
-// that fails to start therefore surfaces only as an unhandled rejection carrying the
-// child_process spawn error, whose stack is the SDK's spawn call site. Bun reports a missing
-// working directory as ENOENT on the shell binary (`posix_spawn '/bin/zsh'`).
+// (`Ml1` in dist/bundled/index.js) whose per-exec stream (`mD0`) starts draining the shell stream
+// from its constructor without observing the promise, and ends its readers normally when the
+// stream throws. A shell that fails to start therefore surfaces only as an unhandled rejection
+// whose stack is the SDK's spawn call site, in one of two shapes:
+// - the child_process spawn error. Bun reports it in two forms: an asynchronous 'error' event
+//   with syscall `spawn <file>` (a missing working directory is ENOENT on the spawned binary:
+//   `posix_spawn '/bin/zsh'`), and an error thrown by spawn() itself with syscall `posix_spawn`
+//   (a working directory that is a regular file is ENOTDIR; an argument list over the OS limit
+//   is E2BIG);
+// - with local sandboxing, the SDK spawns the shell through its sandbox helper (`qM8`), which
+//   rethrows a synchronous spawn error as a plain Error without errno fields, `Failed to spawn
+//   sandboxed process: <the original error>`.
+const SANDBOXED_SPAWN_FAILURE_MESSAGE_PREFIX = "Failed to spawn sandboxed process: ";
+
 function isCursorSdkSpawnFailure(error: unknown): error is NodeJS.ErrnoException {
-	if (!(error instanceof Error)) return false;
+	if (!(error instanceof Error) || !CURSOR_SDK_DIST_STACK_FRAME.test(error.stack ?? "")) return false;
+	if (error.message.startsWith(SANDBOXED_SPAWN_FAILURE_MESSAGE_PREFIX)) return true;
 	const { code, syscall } = error as NodeJS.ErrnoException;
-	return (
-		typeof code === "string" &&
-		typeof syscall === "string" &&
-		/^spawn(?: |$)/.test(syscall) &&
-		CURSOR_SDK_DIST_STACK_FRAME.test(error.stack ?? "")
-	);
+	return typeof code === "string" && typeof syscall === "string" && /^(?:posix_)?spawn(?: |$)/.test(syscall);
 }
 
 // Contained only while a provider turn that declared a local transport is active;
@@ -175,7 +180,7 @@ function reportContainedCursorSdkSpawnFailure(error: NodeJS.ErrnoException): voi
 		syscall: error.syscall,
 		path: error.path,
 		...(error.code === "ENOENT"
-			? { hint: "one possible cause: the working directory does not exist (Bun reports that as ENOENT on the shell binary)" }
+			? { hint: "one possible cause: the working directory does not exist (Bun reports that as ENOENT on the spawned binary)" }
 			: {}),
 	});
 }

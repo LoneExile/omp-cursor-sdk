@@ -1,12 +1,14 @@
 import { Agent, type ToolName } from "@cursor/sdk";
 import { SUMMARIZATION_SYSTEM_PROMPT } from "@oh-my-pi/pi-agent-core/compaction/utils";
 import type { Context, Model } from "@oh-my-pi/pi-ai";
+import { renderInbandToolPrompt } from "@oh-my-pi/pi-ai/dialect";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildCursorIncrementalPrompt, buildCursorPrompt, getCursorPlanModeToolGuidanceText, getCursorToolTailGuardText } from "../src/context.js";
 import { restoreCursorMcpToolTimeoutOverride } from "../src/cursor-mcp-timeout-override.js";
-import { getCursorBuiltInToolAllowlist } from "../src/cursor-one-shot-request.js";
+import { getCursorBuiltInToolAllowlist, isCursorAdvisorRequest } from "../src/cursor-one-shot-request.js";
 import { prepareCursorProviderTurn, resolveCursorProviderTurnConfig } from "../src/cursor-provider-turn-prepare.js";
 import { acquireSessionCursorAgent, createOneShotCursorAgent, disposeAllSessionCursorAgents } from "../src/cursor-session-agent.js";
 import { __testUtils as cursorSessionScopeTestUtils } from "../src/cursor-session-scope.js";
@@ -50,6 +52,21 @@ const summarizerTurn: Context = {
 	messages: [{ role: "user", content: "<conversation>Run the deploy brief</conversation>", timestamp: 1 }],
 };
 
+// The unrestricted prompt tail advertises Shell and Cursor SDK/MCP tools; an allowlisted agent must not be told it has them.
+const advertisedToolLines = getCursorToolTailGuardText()
+	.split("\n")
+	.filter((line) => line.startsWith("Shell:") || line.startsWith("Tools:"));
+
+// pi-agent-core agent-loop.ts prepareProviderCall: under an owned dialect (`PI_DIALECT`) omp appends
+// pi-ai's in-band tool catalog to the system prompt and sends the request with `tools: undefined`.
+function inbandTurn(turn: Context, dialect: "glm" | "anthropic" | "kimi" = "glm"): Context {
+	return {
+		...turn,
+		systemPrompt: [...(turn.systemPrompt ?? []), renderInbandToolPrompt(turn.tools ?? [], dialect)],
+		tools: undefined,
+	};
+}
+
 describe("Cursor built-in tool allowlist", () => {
 	it("gives an advisor only the read-only built-in tools omp granted it", () => {
 		// omp can grant an advisor any builtin tool, but Cursor's own shell, edit and MCP tools
@@ -70,6 +87,79 @@ describe("Cursor built-in tool allowlist", () => {
 	it("leaves every other request on the SDK's default toolset", () => {
 		expect(getCursorBuiltInToolAllowlist(mainTurn)).toBeUndefined();
 		expect(getCursorBuiltInToolAllowlist({ ...mainTurn, tools: undefined })).toBeUndefined();
+	});
+
+	it("recognizes an advisor whose tools omp moved in-band under PI_DIALECT", () => {
+		for (const dialect of ["glm", "anthropic", "kimi"] as const) {
+			const advisor = inbandTurn(advisorTurn(["read", "grep", "bash"]), dialect);
+			expect(isCursorAdvisorRequest(advisor), dialect).toBe(true);
+			expect(getCursorBuiltInToolAllowlist(advisor), dialect).toEqual(["read", "grep"]);
+		}
+		const main = inbandTurn(mainTurn);
+		expect(isCursorAdvisorRequest(main)).toBe(false);
+		expect(getCursorBuiltInToolAllowlist(main)).toBeUndefined();
+	});
+
+	it("does not take an `advise` line outside a tool catalog for an advisor", () => {
+		const quoted = { ...mainTurn, tools: undefined, systemPrompt: ['{"type":"function","function":{"name":"advise"}}'] };
+		expect(isCursorAdvisorRequest(quoted)).toBe(false);
+		expect(getCursorBuiltInToolAllowlist(quoted)).toBeUndefined();
+	});
+
+	it("reads only the catalog omp appended last, never one an earlier system-prompt entry quotes", () => {
+		// A rule, memory or AGENTS.md can quote a catalog; reading it would make the main loop an
+		// advisor or widen an advisor's grant.
+		const quotedCatalog = renderInbandToolPrompt(["advise", "grep", "bash"].map(tool), "glm");
+		const main = inbandTurn({ ...mainTurn, systemPrompt: [quotedCatalog] });
+		expect(isCursorAdvisorRequest(main)).toBe(false);
+		expect(getCursorBuiltInToolAllowlist(main)).toBeUndefined();
+		const advisor = inbandTurn({ ...advisorTurn(["read"]), systemPrompt: [quotedCatalog] });
+		expect(getCursorBuiltInToolAllowlist(advisor)).toEqual(["read"]);
+	});
+
+	it("scans an unterminated catalog block in linear time", () => {
+		// Two megabytes of `<tools>` openers and no closer: a regex retried from every opener takes minutes.
+		const hostile = "<tools>\n".repeat(250_000);
+		expect(isCursorAdvisorRequest({ ...mainTurn, tools: undefined, systemPrompt: [hostile] })).toBe(false);
+	});
+});
+
+describe("prompts for an allowlisted agent", () => {
+	it("names the allowed tools on bootstrap and incremental sends instead of advertising Shell and MCP", () => {
+		expect(advertisedToolLines).toHaveLength(2);
+		const context = advisorTurn(["read", "grep", "glob"]);
+		// An allowlisted agent has no pi bridge, so its prompts carry no bridge guidance.
+		const options = { builtInTools: ["read", "grep", "glob"], includePiBridgeGuidance: false };
+		for (const prompt of [buildCursorPrompt(context, options), buildCursorIncrementalPrompt(context, options)]) {
+			expect(prompt.text).toContain("Cursor built-in tools: read, grep, glob only");
+			for (const line of advertisedToolLines) expect(prompt.text).not.toContain(line);
+		}
+		// Control: without an allowlist both prompts keep advertising them.
+		for (const prompt of [buildCursorPrompt(mainTurn), buildCursorIncrementalPrompt(mainTurn)]) {
+			for (const line of advertisedToolLines) expect(prompt.text).toContain(line);
+		}
+	});
+
+	it("drops the plan-mode shell and MCP guidance", () => {
+		expect(getCursorPlanModeToolGuidanceText("plan")).toContain("Shell");
+		expect(getCursorPlanModeToolGuidanceText("plan", { builtInTools: [] })).toBeUndefined();
+	});
+
+	it("keeps the plan-mode shell and MCP guidance out of every prompt path", () => {
+		const planGuidance = getCursorPlanModeToolGuidanceText("plan", { includePiBridgeGuidance: false }) ?? "";
+		expect(planGuidance).toContain("Shell");
+		const context = advisorTurn(["read"]);
+		const plan = { agentMode: "plan" as const, includePiBridgeGuidance: false };
+		for (const prompt of [
+			buildCursorPrompt(context, { ...plan, builtInTools: ["read"] }),
+			buildCursorIncrementalPrompt(context, { ...plan, builtInTools: ["read"] }),
+		]) {
+			expect(prompt.text).not.toContain(planGuidance);
+		}
+		// Control: without an allowlist the bootstrap boundary and the incremental tail carry it.
+		for (const prompt of [buildCursorPrompt(context, plan), buildCursorIncrementalPrompt(context, plan)]) {
+			expect(prompt.text).toContain(planGuidance);
+		}
 	});
 });
 
@@ -161,6 +251,7 @@ describe("advisor requests on the Cursor cloud runtime", () => {
 		// it would stop the main session's compaction on the cloud runtime.
 		await expect(prepareCloud(mainTurn)).rejects.toThrow("Cursor cloud runtime is not ready to start");
 		await expect(prepareCloud(summarizerTurn)).rejects.toThrow("Cursor cloud runtime is not ready to start");
+		await expect(prepareCloud(inbandTurn(advisorTurn(["read"])))).rejects.toThrow("Cursor cloud agents cannot serve an omp advisor");
 	});
 });
 
@@ -205,6 +296,7 @@ describe("local prepare", () => {
 		});
 		expect(createOptions).toMatchObject({ tools: ["read", "grep", "glob"] });
 		expect(promptText).toContain("- Cursor built-in tools: read, grep, glob only.");
+		for (const line of advertisedToolLines) expect(promptText).not.toContain(line);
 	});
 
 	it("creates a summarizer's one-shot agent with no built-in tools", async () => {
@@ -216,6 +308,7 @@ describe("local prepare", () => {
 		});
 		expect(createOptions).toMatchObject({ tools: [] });
 		expect(promptText).toContain("- Cursor built-in tools: none; reply with text only.");
+		for (const line of advertisedToolLines) expect(promptText).not.toContain(line);
 	});
 });
 
@@ -226,23 +319,34 @@ describe("installed @cursor/sdk built-in tool restriction contract", () => {
 		await expect(attempt).rejects.toThrow("`tools` is not supported for cloud agents yet");
 	});
 
-	it("declares every name the advisor allowlist uses as a built-in tool name", () => {
-		// `ToolName` also admits any string, so a renamed tool still compiles; Agent.create
-		// would then reject every advisor agent at runtime.
-		const declared = readFileSync(join(REPO, "node_modules/@cursor/sdk/dist/esm/options.d.ts"), "utf8").match(
-			/export type ToolName = ([^;]+);/,
-		)?.[1];
+	it("resolves every name the advisor allowlist uses through the SDK's tool vocabulary", () => {
+		// `ToolName` only autocompletes: Agent.create derives the accepted names from the agent proto's
+		// ToolCall oneof (`read_tool_call` -> `read`) and rejects any other name, which would fail
+		// every advisor agent at runtime.
+		const bundle = readFileSync(join(REPO, "node_modules/@cursor/sdk/dist/bundled/index.js"), "utf8");
+		expect(bundle).toContain('$.oneof?.localName!=="tool"');
+		expect(bundle).toContain('$.localName.replace(/ToolCall$/,"")');
 		const allowlist = getCursorBuiltInToolAllowlist(advisorTurn(["read", "grep", "glob", "ls", "find", "search"])) ?? [];
-		expect(allowlist.length).toBeGreaterThan(0);
-		for (const name of allowlist) expect(declared).toContain(`"${name}"`);
+		expect(allowlist).toEqual(["read", "grep", "glob"]);
+		for (const name of allowlist) expect(bundle).toMatch(new RegExp(`\\|\\d+ ${name}_tool_call #\\d+ tool\\|`));
 	});
 
-	it("sends a local agent's restriction with every run it starts", () => {
+	it("documents the empty and non-empty allowlist semantics the summarizer and advisor rely on", () => {
+		const declaration = readFileSync(join(REPO, "node_modules/@cursor/sdk/dist/esm/options.d.ts"), "utf8");
+		expect(declaration).toContain("`[]` — no built-in tools; the model can only respond with text.");
+		expect(declaration).toContain("Non-empty — only the listed tools are offered to the model.");
+		expect(declaration).toMatch(/omitting `"mcp"`\s*\*\s*disables MCP entirely/);
+	});
+
+	it("sends a local agent's restriction with every run it starts, including an empty one", () => {
 		const bundle = readFileSync(join(REPO, "node_modules/@cursor/sdk/dist/bundled/index.js"), "utf8");
 		// Each run copies the allowlist from the agent's options, so a pooled advisor agent
 		// keeps it on every send...
 		expect(bundle).toContain("...this.options.allowedProtoTools!==void 0?{allowedTools:this.options.allowedProtoTools}:{}");
-		// ...and it reaches Cursor's backend, which offers the model only the listed tools.
-		expect(bundle).toContain('"x-cursor-agent-allowed-tools"');
+		// ...and it reaches Cursor's backend, which offers the model only the listed tools. An empty
+		// list is sent as an empty header (`!==void 0`, unlike the exclusion list's `length>0`), which
+		// is what keeps a summarizer text-only.
+		expect(bundle).toContain('zV1="x-cursor-agent-allowed-tools"');
+		expect(bundle).toContain('m.allowedTools!==void 0?{[zV1]:m.allowedTools.join(",")}:{}');
 	});
 });

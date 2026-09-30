@@ -1,3 +1,4 @@
+import { formatCursorBuiltInTools } from "./context.js";
 import { parseEnvBoolean } from "./cursor-env-boolean.js";
 import type { CursorPiToolBridgeSnapshot } from "./cursor-pi-tool-bridge-types.js";
 
@@ -33,11 +34,7 @@ export function buildCursorToolManifestText(options: {
 			"- Pi tool toggles affect pi tools/bridge exposure only; they do not disable Cursor host/configured MCP tools.",
 		);
 	} else {
-		lines.push(
-			options.builtInTools.length > 0
-				? `- Cursor built-in tools: ${options.builtInTools.join(", ")} only.`
-				: "- Cursor built-in tools: none; reply with text only.",
-		);
+		lines.push(`- Cursor built-in tools: ${formatCursorBuiltInTools(options.builtInTools)}.`);
 	}
 	const bridgeTools = includePiBridgeGuidance ? options.bridgeSnapshot?.tools ?? [] : [];
 	if (includePiBridgeGuidance) {
