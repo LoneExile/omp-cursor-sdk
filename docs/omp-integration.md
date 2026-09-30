@@ -122,8 +122,8 @@ wins if both are set), `PI_CURSOR_MAX_MODE`, the session entry from
 `~/.omp/agent/cursor-sdk.json` when saved with `--save-user`, then off.
 Project config is never read. Before a Max Mode turn the plugin resolves
 `import.meta.resolve("@cursor/sdk")`, walks to that package root, and requires
-the patch marker in every existing build file (`dist/esm/34.js`,
-`dist/cjs/342.js`, `dist/bundled/index.js`). Bun loads the bundled file; Node
+the patch marker in every existing build file (`dist/esm/479.js`,
+`dist/cjs/479.js`, `dist/bundled/index.js`). Bun loads the bundled file; Node
 loads the ESM chunk. An unpatched copy fails the turn and names the resolved
 path; a copy patched after the process started also fails, because the loaded
 module is the older one, and asks for a restart. Patch this checkout with

@@ -162,7 +162,6 @@ function isCursorSdkStallAbortNetworkError(code: unknown, evidence: string, stac
 		/(?:operation was aborted|canceled)/i.test(evidence) &&
 		/(?:AbortError|operation was aborted)/i.test(`${evidence}\n${stackEvidence}`) &&
 		stackEvidence.includes("@cursor/sdk") &&
-		stackEvidence.includes("@connectrpc/connect-node") &&
 		/\b(?:onStall|reportStall|StallDetected)\b/i.test(stackEvidence)
 	);
 }
@@ -183,31 +182,22 @@ export function isCursorSdkConnectionStalledError(error: unknown): boolean {
 	return /(?:^|[\\/])node_modules[\\/]@cursor[\\/]sdk[\\/]dist[\\/]/.test(stack) || stack.includes("@cursor/sdk");
 }
 
-function isCursorExtensionConnectStack(stack: string): boolean {
-	// pi runs Cursor SDK in Node, where the SDK dynamically imports connect-node.
-	// connect-web is the SDK's Bun/Deno path and is intentionally not classified for supported pi runs.
-	return stack.includes("@connectrpc/connect-node") && /(?:^|[\\/])pi-cursor-sdk(?:[\\/]|$)/.test(stack);
-}
-
+// @cursor/sdk 1.0.34 bundles its Connect Node transport into its own dist files, so a transport
+// error's frames carry the SDK's `node_modules/@cursor/sdk/dist` path and never a
+// `@connectrpc/connect-node` one (1.0.32 imported that package from node_modules).
 function getCursorConnectSource(error: unknown, record: Record<string, unknown> | undefined): CursorConnectErrorSource {
 	const stack = getErrorStack(error, record);
 	if (stack.includes("@cursor/sdk")) return "cursor-sdk-stack";
-	if (isCursorExtensionConnectStack(stack)) return "cursor-extension-connect-stack";
 	const details = Array.isArray(record?.details) ? record.details : [];
 	const hasCursorBackendDetails = details.some((detail) => {
 		const type = getErrorStringField(asRecord(detail), "type");
 		return typeof type === "string" && type.startsWith("aiserver.");
 	});
 	if (hasCursorBackendDetails) return "cursor-backend-details";
-	return stack.includes("@connectrpc/connect-node") ? "connect-node-stack" : "generic-connect";
+	return "generic-connect";
 }
 
-export type CursorConnectErrorSource =
-	| "cursor-sdk-stack"
-	| "cursor-extension-connect-stack"
-	| "cursor-backend-details"
-	| "connect-node-stack"
-	| "generic-connect";
+export type CursorConnectErrorSource = "cursor-sdk-stack" | "cursor-backend-details" | "generic-connect";
 
 export type CursorConnectErrorClassification =
 	| { kind: "abort"; source: "cursor-sdk-stack" }
@@ -231,8 +221,7 @@ export function classifyCursorConnectError(error: unknown): CursorConnectErrorCl
 		(code === 1 || code === "canceled") &&
 		Boolean(rawMessage && /(?:operation was aborted|canceled)/i.test(rawMessage)) &&
 		(causeName === "AbortError" || /AbortError/.test(stack)) &&
-		stack.includes("@cursor/sdk") &&
-		stack.includes("@connectrpc/connect-node")
+		stack.includes("@cursor/sdk")
 	) {
 		return { kind: "abort", source: "cursor-sdk-stack" };
 	}

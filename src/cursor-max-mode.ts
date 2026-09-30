@@ -7,8 +7,8 @@ import { findCursorSdkPackageDir } from "./cursor-sdk-runtime.js";
 export const CURSOR_MAX_MODE_PATCH_MARKER = "/* omp-cursor-sdk:max-mode-patch */";
 export const CURSOR_MAX_MODE_PARAM = { id: "max_mode", value: "true" } as const;
 export const CURSOR_SDK_MAX_MODE_BUILD_FILES = [
-	"dist/esm/34.js",
-	"dist/cjs/342.js",
+	"dist/esm/479.js",
+	"dist/cjs/479.js",
 	"dist/bundled/index.js",
 ] as const;
 

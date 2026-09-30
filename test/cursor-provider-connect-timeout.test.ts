@@ -10,6 +10,7 @@ import {
 	resetCursorProviderTestState,
 	mockCreatedAgent,
 } from "./helpers/cursor-provider-harness.js";
+import { SDK_BUNDLED_TRANSPORT_FRAMES } from "./helpers/cursor-sdk-process-error-fixtures.js";
 import { streamCursor } from "../src/cursor-provider.js";
 import { __testUtils as cursorSdkProcessGuardTestUtils } from "../src/cursor-sdk-process-error-guard.js";
 
@@ -53,7 +54,7 @@ function makeCursorBackendUnavailableConnectError(): Error & {
 	return error;
 }
 
-function makeGenericConnectNodeNetworkConnectError(): Error & { rawMessage: string; code: number; cause: NodeJS.ErrnoException } {
+function makeSdkNetworkConnectError(): Error & { rawMessage: string; code: number; cause: NodeJS.ErrnoException } {
 	const error = new Error("[aborted] read ECONNRESET") as Error & {
 		rawMessage: string;
 		code: number;
@@ -66,11 +67,7 @@ function makeGenericConnectNodeNetworkConnectError(): Error & { rawMessage: stri
 		code: "ECONNRESET",
 		syscall: "read",
 	});
-	error.stack =
-		"ConnectError: [aborted] read ECONNRESET\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect/dist/esm/connect-error.js:71:20\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-error.js:52:29\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63";
+	error.stack = `ConnectError: [aborted] read ECONNRESET\n${SDK_BUNDLED_TRANSPORT_FRAMES}`;
 	return error;
 }
 
@@ -137,8 +134,8 @@ describe("streamCursor connect timeout boundary", () => {
 		}
 	});
 
-	it("suppresses duplicate process-level generic connect-node network ConnectError during an active provider turn", async () => {
-		const connectError = makeGenericConnectNodeNetworkConnectError();
+	it("suppresses duplicate process-level Cursor SDK network ConnectError during an active provider turn", async () => {
+		const connectError = makeSdkNetworkConnectError();
 		let processListenerCalled = false;
 		const processListener = () => {
 			processListenerCalled = true;

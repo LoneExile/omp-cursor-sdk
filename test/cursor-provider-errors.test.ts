@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	classifyCursorConnectError,
 	isCursorSdkConnectionStalledError,
+	isCursorSdkAbortConnectError,
 	formatCursorSdkAbortMessage,
 	formatCursorSdkRunFailureDetail,
 	isUnauthenticatedConnectError,
@@ -10,6 +11,7 @@ import {
 	sanitizeCursorProviderError,
 } from "../src/cursor-provider-errors.js";
 import { __testUtils as modelDiscoveryTestUtils } from "../src/model-discovery.js";
+import { SDK_BUNDLED_TRANSPORT_FRAMES } from "./helpers/cursor-sdk-process-error-fixtures.js";
 
 function makeUnauthenticatedConnectError(): Error & { rawMessage: string; code: number; metadata: Headers } {
 	const error = new Error("[unauthenticated] Error") as Error & { rawMessage: string; code: number; metadata: Headers };
@@ -33,10 +35,21 @@ function makeCursorSdkNetworkConnectError(): Error & { rawMessage: string; code:
 		code: "ECONNRESET",
 		syscall: "read",
 	});
-	error.stack =
-		"ConnectError: [aborted] read ECONNRESET\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63\n" +
-		"    at file:///repo/node_modules/@cursor/sdk/dist/esm/index.js:8:1086456";
+	error.stack = `ConnectError: [aborted] read ECONNRESET\n${SDK_BUNDLED_TRANSPORT_FRAMES}`;
+	return error;
+}
+
+function makeCursorSdkAbortConnectError(): Error & { rawMessage: string; code: number; cause: DOMException } {
+	const error = new Error("[canceled] This operation was aborted") as Error & {
+		rawMessage: string;
+		code: number;
+		cause: DOMException;
+	};
+	error.name = "ConnectError";
+	error.rawMessage = "This operation was aborted";
+	error.code = 1;
+	error.cause = new DOMException("This operation was aborted", "AbortError");
+	error.stack = `ConnectError: [canceled] This operation was aborted\n${SDK_BUNDLED_TRANSPORT_FRAMES}\nCaused by: AbortError`;
 	return error;
 }
 
@@ -71,11 +84,11 @@ function makeCursorSdkStallAbortWrapperConnectError(): Error & { rawMessage: str
 		code: 1,
 		cause: new DOMException("This operation was aborted", "AbortError"),
 	});
+	// The `AbortSignal.r` and `Y.onStall` frames are the stall path observed on 1.0.23. The classifier keys on the
+	// `onStall` and `reportStall` names, which 1.0.34's dist/bundled/index.js still contains (its detector method is
+	// `onStallDetected`, which that pattern does not match).
 	cause.stack =
-		"ConnectError: [canceled] This operation was aborted\n" +
-		"    at ConnectError.from (file:///repo/node_modules/@connectrpc/connect/dist/esm/connect-error.js:69:24)\n" +
-		"    at connectErrorFromNodeReason (file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-error.js:52:29)\n" +
-		"    at Object.reject (file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63)\n" +
+		`ConnectError: [canceled] This operation was aborted\n${SDK_BUNDLED_TRANSPORT_FRAMES}\n` +
 		"    at AbortSignal.r (file:///repo/node_modules/@cursor/sdk/dist/esm/996.js:1:5705)\n" +
 		"    at Y.onStall (file:///repo/node_modules/@cursor/sdk/dist/esm/357.js:1:75246)";
 	const error = new Error("[unknown] [canceled] This operation was aborted") as Error & {
@@ -100,9 +113,7 @@ function makeCursorSdkConnectionStalledRetriableError(
 	const cause = new Error("[unknown] operation was aborted") as Error & { name: string; code: number };
 	cause.name = "ConnectError";
 	cause.code = 2;
-	cause.stack =
-		"ConnectError: [unknown] operation was aborted\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63";
+	cause.stack = `ConnectError: [unknown] operation was aborted\n${SDK_BUNDLED_TRANSPORT_FRAMES}`;
 	const error = new Error(message) as Error & { kind: string; cause: Error };
 	error.name = "RetriableError";
 	error.kind = "RetriableError";
@@ -114,15 +125,7 @@ function makeCursorSdkConnectionStalledRetriableError(
 	return error;
 }
 
-function makeCursorExtensionNetworkConnectError(): Error & { rawMessage: string; code: number; cause: NodeJS.ErrnoException } {
-	const error = makeCursorSdkNetworkConnectError();
-	error.stack =
-		"ConnectError: [aborted] read ECONNRESET\n" +
-		"    at file:///C:/Users/example/.pi/agent/git/github.com/fitchmultz/pi-cursor-sdk/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63";
-	return error;
-}
-
-function makeGenericConnectNodeNetworkConnectError(): Error & { rawMessage: string; code: number; cause: NodeJS.ErrnoException } {
+function makeForeignConnectNodeNetworkConnectError(): Error & { rawMessage: string; code: number; cause: NodeJS.ErrnoException } {
 	const error = makeCursorSdkNetworkConnectError();
 	error.stack =
 		"ConnectError: [aborted] read ECONNRESET\n" +
@@ -450,17 +453,19 @@ describe("cursor-provider-errors", () => {
 		expect(message).not.toContain("[unavailable] Error");
 	});
 
-	it("recognizes extension-local connect-node network stacks as Cursor provenance", () => {
-		expect(classifyCursorConnectError(makeCursorExtensionNetworkConnectError())).toEqual({
-			kind: "network",
-			source: "cursor-extension-connect-stack",
+	it("classifies a Cursor SDK abort ConnectError by SDK provenance, as its transport frames are bundled in the SDK", () => {
+		expect(classifyCursorConnectError(makeCursorSdkAbortConnectError())).toEqual({
+			kind: "abort",
+			source: "cursor-sdk-stack",
 		});
+		expect(isCursorSdkAbortConnectError(makeCursorSdkAbortConnectError())).toBe(true);
+		expect(isCursorSdkAbortConnectError(makeCursorSdkStallAbortWrapperConnectError())).toBe(false);
 	});
 
-	it("classifies connect-node-only ECONNRESET stacks separately from provenance-free generic network errors", () => {
-		expect(classifyCursorConnectError(makeGenericConnectNodeNetworkConnectError())).toEqual({
+	it("does not treat connect-node frames outside the SDK as Cursor provenance", () => {
+		expect(classifyCursorConnectError(makeForeignConnectNodeNetworkConnectError())).toEqual({
 			kind: "network",
-			source: "connect-node-stack",
+			source: "generic-connect",
 		});
 		expect(classifyCursorConnectError(makeProvenanceFreeNetworkConnectError())).toEqual({
 			kind: "network",

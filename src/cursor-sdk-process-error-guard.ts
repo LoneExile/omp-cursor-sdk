@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { logger, postmortem } from "@oh-my-pi/pi-utils";
 import { classifyCursorConnectError, isCursorSdkAbortConnectError, isCursorSdkConnectionStalledError } from "./cursor-provider-errors.js";
+import { CURSOR_RIPGREP_ENV, isCursorRipgrepBinary } from "./cursor-ripgrep-path.js";
 import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 
 interface CursorSdkProcessErrorGuardToken {
@@ -45,10 +46,6 @@ function hasActiveAbortSuppression(): boolean {
 		if (turn.suppressAbortErrors) return true;
 	}
 	return false;
-}
-
-function isCursorProvenance(source: string): boolean {
-	return source === "cursor-sdk-stack" || source === "cursor-extension-connect-stack" || source === "cursor-backend-details";
 }
 
 const CURSOR_SDK_DIST_STACK_FRAME = /(?:^|[\\/])node_modules[\\/]@cursor[\\/]sdk[\\/]dist[\\/]/;
@@ -98,26 +95,31 @@ function isObservedLocalTransportClosedPipeWriteError(error: unknown): boolean {
 	return frames.length === 1 && OBSERVED_CLOSED_PIPE_STACK_FRAME.test(frames[0] ?? "");
 }
 
-// The Cursor SDK 1.0.32 local shell tool reaches its executor through an exec replay cache
-// (`Ml1` in dist/bundled/index.js) whose per-exec stream (`mD0`) starts draining the shell stream
-// from its constructor without observing the promise, and ends its readers normally when the
-// stream throws. A shell that fails to start therefore surfaces only as an unhandled rejection
-// whose stack is the SDK's spawn call site, in one of two shapes:
-// - the child_process spawn error. Bun reports it in two forms: an asynchronous 'error' event
-//   with syscall `spawn <file>` (a missing working directory is ENOENT on the spawned binary:
-//   `posix_spawn '/bin/zsh'`), and an error thrown by spawn() itself with syscall `posix_spawn`
-//   (a working directory that is a regular file is ENOTDIR; an argument list over the OS limit
-//   is E2BIG);
-// - with local sandboxing, the SDK spawns the shell through its sandbox helper (`qM8`), which
-//   rethrows a synchronous spawn error as a plain Error without errno fields, `Failed to spawn
-//   sandboxed process: <the original error>`.
-const SANDBOXED_SPAWN_FAILURE_MESSAGE_PREFIX = "Failed to spawn sandboxed process: ";
+// Cursor's local runtime resolves one ripgrep binary and spawns it for Grep and Glob and for the
+// workspace walk it starts by itself (ignore files, rules, skills and nested AGENTS.md, in any git
+// checkout or `.cursor/rules` directory). The SDK's ripwalk stream (`sy8` in dist/bundled/index.js)
+// arms its `processExit` promise with `child.on('error', reject)` when it spawns; its line generator
+// (`IE0`) awaits that promise only after stdout has ended, and only when no line was read. When
+// ripgrep cannot start, stdout fails first (`ERR_STREAM_PREMATURE_CLOSE`), so
+// `processExit` rejects with no handler and the spawn error surfaces only as an unhandled rejection,
+// which exits omp. Bun reports it as an asynchronous 'error' event with syscall `spawn <file>`: ENOENT
+// for a missing binary, EACCES for a file that is not executable or a directory.
+//
+// On 1.0.34 the other spawn sites that were measured observe their spawn errors, so none reaches this
+// guard: the local shell (its exec replay cache forwards the error to the model; 1.0.32's dropped it),
+// the sandboxed shell, Grep and Glob, stdio MCP servers, hooks, and git. Other spawn sites were not measured.
+//
+// A spawn error names the spawned file in its syscall (`spawn <file>`).
+function getSpawnedFile(error: NodeJS.ErrnoException): string | undefined {
+	const { syscall } = error;
+	return typeof syscall === "string" && syscall.startsWith("spawn ") ? syscall.slice("spawn ".length) : undefined;
+}
 
-function isCursorSdkSpawnFailure(error: unknown): error is NodeJS.ErrnoException {
+function isCursorSdkRipgrepSpawnFailure(error: unknown): error is NodeJS.ErrnoException {
 	if (!(error instanceof Error) || !CURSOR_SDK_DIST_STACK_FRAME.test(error.stack ?? "")) return false;
-	if (error.message.startsWith(SANDBOXED_SPAWN_FAILURE_MESSAGE_PREFIX)) return true;
-	const { code, syscall } = error as NodeJS.ErrnoException;
-	return typeof code === "string" && typeof syscall === "string" && /^(?:posix_)?spawn(?: |$)/.test(syscall);
+	if (typeof (error as NodeJS.ErrnoException).code !== "string") return false;
+	const file = getSpawnedFile(error);
+	return file !== undefined && isCursorRipgrepBinary(file);
 }
 
 // Contained only while a provider turn that declared a local transport is active;
@@ -146,15 +148,14 @@ function shouldSuppressProcessError(event: string | symbol, args: readonly unkno
 	// SDK stall timers and inter-turn teardown aborts never call suppressAbortErrors();
 	// any active provider turn or session is enough — stack provenance already gates SDK-only AbortErrors.
 	if (isCursorSdkAbortError(error)) return hasActiveGuard();
-	if (isCursorSdkSpawnFailure(error)) return hasActiveGuard();
+	if (isCursorSdkRipgrepSpawnFailure(error)) return hasActiveGuard();
 	// RetriableError "Connection stalled" / "Connection stalled repeatedly" is not a ConnectError; suppress during active turns only.
 	if (isCursorSdkConnectionStalledError(error)) return activeProviderTurns.size > 0;
 	const classification = classifyCursorConnectError(error);
 	if (!classification) return false;
 	if (classification.kind === "abort") return hasActiveAbortSuppression();
 	if (activeProviderTurns.size === 0) return false;
-	if (classification.kind === "network") return isCursorProvenance(classification.source) || classification.source === "connect-node-stack";
-	return isCursorProvenance(classification.source);
+	return classification.source === "cursor-sdk-stack" || classification.source === "cursor-backend-details";
 }
 
 function installProcessEmitPatch(): void {
@@ -173,15 +174,14 @@ function installProcessEmitPatch(): void {
 	process.emit = cursorProcessEmit as typeof process.emit;
 }
 
-function reportContainedCursorSdkSpawnFailure(error: NodeJS.ErrnoException): void {
-	logger.warn("Cursor SDK shell failed to start; contained its unhandled rejection", {
+function reportContainedCursorSdkRipgrepSpawnFailure(error: NodeJS.ErrnoException): void {
+	const path = getSpawnedFile(error);
+	logger.warn(`Cursor's ripgrep failed to start (${path}); contained its unhandled rejection. Check ${CURSOR_RIPGREP_ENV}.`, {
 		error: error.message,
 		code: error.code,
 		syscall: error.syscall,
-		path: error.path,
-		...(error.code === "ENOENT"
-			? { hint: "one possible cause: the working directory does not exist (Bun reports that as ENOENT on the spawned binary)" }
-			: {}),
+		path,
+		hint: `${CURSOR_RIPGREP_ENV} names the ripgrep binary Cursor runs. Fix it, or unset it to use the SDK's bundled ripgrep.`,
 	});
 }
 
@@ -191,7 +191,7 @@ function reportContainedCursorSdkSpawnFailure(error: NodeJS.ErrnoException): voi
 // keeps the host alive.
 function interceptHostUnhandledRejection(reason: unknown): boolean {
 	if (!shouldSuppressProcessError("unhandledRejection", [reason])) return false;
-	if (isCursorSdkSpawnFailure(reason)) reportContainedCursorSdkSpawnFailure(reason);
+	if (isCursorSdkRipgrepSpawnFailure(reason)) reportContainedCursorSdkRipgrepSpawnFailure(reason);
 	return true;
 }
 

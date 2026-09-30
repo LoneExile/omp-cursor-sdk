@@ -214,11 +214,15 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
 - **Refused by account policy**: some models need an acknowledgement on the Cursor side first. Claude
   Fable selections failed with "You must acknowledge Claude Fable 5's data retention policy to use the model."
 - **Stale or missing models**: the catalog is cached for 24 h; run `/cursor-refresh-models`.
-- **`Cursor SDK shell failed to start` in the omp log**: Cursor could not start its shell, for example because the
-  call's working directory does not exist or is a file (Bun reports it as `ENOENT … posix_spawn '<spawned binary>'`
-  or `ENOTDIR …`; with local sandboxing a synchronous failure such as a working directory that is a file is
-  reported as `Failed to spawn sandboxed process: Error: ENOTDIR …`). omp stays up and the call's tool stream
-  ends without an exit status; the log (`~/.omp/logs`) records the failure.
+- **Shell call failed to spawn**: Cursor could not start its shell, for example because the call's working
+  directory does not exist or is a file (Bun reports it as `ENOENT … posix_spawn '<spawned binary>'` or
+  `ENOTDIR …`). The model receives `Command failed to spawn: …` and omp stays up.
+- **`Cursor's ripgrep failed to start` in the omp log**: Cursor's ripgrep binary could not be started, most often
+  because `CURSOR_RIPGREP_PATH` names a file that does not exist (`ENOENT … posix_spawn '<path>'`) or is not
+  executable (`EACCES`). Cursor runs ripgrep at startup in any git checkout or `.cursor/rules` workspace (its
+  workspace walk for ignore files, rules, skills and nested AGENTS.md) and for Grep and Glob. omp stays up, the SDK skips the
+  failed walk, and Grep and Glob return the error to the model. Fix the path or unset `CURSOR_RIPGREP_PATH`,
+  and the plugin uses the SDK's bundled ripgrep.
 - **Debugging a turn**: run with `PI_CURSOR_SDK_EVENT_DEBUG=1`; `.debug/cursor-sdk-events/**/metadata.json` holds the exact
   model selection sent, `wait-result.json` the SDK result. They can contain prompts and tool output; delete them afterwards.
 

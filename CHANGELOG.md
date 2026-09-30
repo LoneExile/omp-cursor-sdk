@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `@cursor/sdk` 1.0.34: a Cursor shell tool call that cannot start, for example because its working directory does not exist or is a file, now returns the spawn error to the model (`Command failed to spawn: ENOENT: no such file or directory, posix_spawn '<shell>'`) instead of an empty result with no exit status. 1.0.34's exec replay cache forwards the shell stream's error to its readers, where 1.0.32's dropped it and left an unhandled rejection that 0.4.2 only contained. The guard's shell cases (the `spawn`/`posix_spawn` error and the `Failed to spawn sandboxed process:` rewrap) are removed, because 1.0.34 never leaves those rejections unhandled: checked with a process-level rejection listener for a missing working directory, a working directory that is a file, an oversized environment, and each with local sandboxing.
+- The process-error guard's spawn case is now limited to Cursor's ripgrep failing to start. The SDK runs ripgrep at startup in any git checkout or `.cursor/rules` workspace (its ignore-file scan, nested rules, skills and AGENTS.md discovery, and `.cursor/rules` loading). The `rg --files` stream arms its exit promise with `child.on('error', reject)` when it spawns, but its line generator awaits that promise only after stdout has ended, so a ripgrep that cannot start, for example a `CURSOR_RIPGREP_PATH` that names a missing file (`ENOENT`) or one that is not executable (`EACCES`), leaves an unhandled `spawn` rejection that exits omp. 1.0.34 still does this, as 1.0.32 did; 0.4.2 contained it only incidentally, through its shell case, and logged it as a shell that failed to start. The guard now contains a spawn error only when the spawned file is one the SDK's resolver can select (the absolute `CURSOR_RIPGREP_PATH`, or a file named `rg`) and logs `Cursor's ripgrep failed to start` with the path; a spawn failure of any other file stays fatal.
+- The process-error guard no longer needs a `@connectrpc/connect-node` frame to classify an abort or stall-abort error as Cursor's. 1.0.34 inlines the Node Connect transport (`@connectrpc/connect-node`) into its own dist files, so a transport error's stack carries `@cursor/sdk/dist` frames where connect-node's were and never a `@connectrpc/connect-node` path; those two shapes required that path beside the SDK frame and would have gone uncontained. The two connect-node-only provenance sources are removed: a network `ConnectError` whose only provenance is a `@connectrpc/connect-node` frame is no longer contained during a turn, because 1.0.34 cannot raise one. SDK stack frames and Cursor backend `aiserver.*` error details still contain network errors during an active turn.
+- The Max Mode patch targets 1.0.34's build files: `dist/esm/479.js`, `dist/cjs/479.js` and `dist/bundled/index.js`. Re-run `npm run patch:cursor-sdk` after installing this version.
+
+### Dependencies
+
+- `@cursor/sdk` 1.0.32 → 1.0.34. It no longer installs `@connectrpc/connect-node`, `undici` or `@fastify/busboy`, because it bundles its Node Connect transport.
+
 ## 0.4.2 - 2026-09-30
 
 ### Fixed

@@ -30,7 +30,7 @@ import {
 } from "./helpers/pi-harness.js";
 
 const UNPATCHED_ESM =
-	'const m=void 0!==t.model?new x.G4({modelId:t.model.id,parameters:(null!==(u=t.model.params)&&void 0!==u?u:[]).map((e=>new x.SR({id:e.id,value:e.value})))}):void 0;';
+	'const m=void 0!==t.model?new nx.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new nx.SR({id:e.id,value:e.value})))}):void 0;';
 
 const modelItems: ModelListItem[] = [
 	{
@@ -61,7 +61,7 @@ function writeSdkFixture(root: string, files: Record<string, string>): string {
 		mkdirSync(join(path, ".."), { recursive: true });
 		writeFileSync(path, content);
 	}
-	writeFileSync(join(root, "package.json"), JSON.stringify({ name: "@cursor/sdk", version: "1.0.32" }));
+	writeFileSync(join(root, "package.json"), JSON.stringify({ name: "@cursor/sdk", version: "1.0.34" }));
 	return join(root, "dist/bundled/index.js");
 }
 
@@ -280,8 +280,8 @@ describe("Cursor Max Mode SDK patch guard", () => {
 
 	it("fails loud when the resolved SDK build files are unpatched", () => {
 		const resolved = writeSdkFixture(root, {
-			"dist/esm/34.js": UNPATCHED_ESM,
-			"dist/bundled/index.js": "new d5({modelId:m.model.id,parameters:(m.model.params??[]).map((G1)=>new U$({id:G1.id,value:G1.value}))})",
+			"dist/esm/479.js": UNPATCHED_ESM,
+			"dist/bundled/index.js": "new r5({modelId:m.model.id,parameters:(m.model.params??[]).map((W1)=>new j$({id:W1.id,value:W1.value}))})",
 		});
 		const startedBeforeFixture = Date.now() + 60_000;
 		expect(() => assertCursorSdkMaxModePatched(resolved, { processStartedAtMs: startedBeforeFixture })).toThrow(resolved);
@@ -290,28 +290,28 @@ describe("Cursor Max Mode SDK patch guard", () => {
 		} catch (error) {
 			expect(error).toBeInstanceOf(Error);
 			expect((error as Error).message).toContain("npm run patch:cursor-sdk");
-			expect((error as Error).message).toContain("dist/esm/34.js");
+			expect((error as Error).message).toContain("dist/esm/479.js");
 			expect((error as Error).message).toContain("dist/bundled/index.js");
 		}
 	});
 
 	it("passes when every existing build file contains the patch marker", () => {
 		const resolved = writeSdkFixture(root, {
-			"dist/esm/34.js": `new x.G4({maxMode:true${CURSOR_MAX_MODE_PATCH_MARKER}})`,
-			"dist/cjs/342.js": CURSOR_MAX_MODE_PATCH_MARKER,
+			"dist/esm/479.js": `new nx.G4({maxMode:true${CURSOR_MAX_MODE_PATCH_MARKER}})`,
+			"dist/cjs/479.js": CURSOR_MAX_MODE_PATCH_MARKER,
 		});
 		// The fixture is written now, so a process that started later than that loaded the patched file.
 		expect(() => assertCursorSdkMaxModePatched(resolved, { processStartedAtMs: Date.now() + 60_000 })).not.toThrow();
 	});
 
 	it("fails loud when a patched build file is newer than this process", () => {
-		const resolved = writeSdkFixture(root, { "dist/esm/34.js": `new x.G4({maxMode:true${CURSOR_MAX_MODE_PATCH_MARKER}})` });
+		const resolved = writeSdkFixture(root, { "dist/esm/479.js": `new nx.G4({maxMode:true${CURSOR_MAX_MODE_PATCH_MARKER}})` });
 		try {
 			assertCursorSdkMaxModePatched(resolved, { processStartedAtMs: Date.now() - 60_000 });
 			throw new Error("expected the stale patch to fail the guard");
 		} catch (error) {
 			expect((error as Error).message).toMatch(/restart omp/i);
-			expect((error as Error).message).toContain("dist/esm/34.js");
+			expect((error as Error).message).toContain("dist/esm/479.js");
 		}
 	});
 
@@ -320,7 +320,7 @@ describe("Cursor Max Mode SDK patch guard", () => {
 		// while the on-disk node_modules chain the real import uses is intact.
 		const sdkRoot = join(root, "node_modules", "@cursor", "sdk");
 		writeSdkFixture(sdkRoot, {
-			"dist/esm/34.js": `new x.G4({maxMode:true${CURSOR_MAX_MODE_PATCH_MARKER}})`,
+			"dist/esm/479.js": `new nx.G4({maxMode:true${CURSOR_MAX_MODE_PATCH_MARKER}})`,
 		});
 		const moduleUrl = pathToFileURL(join(root, "consumer", "src", "cursor-max-mode.js")).href;
 		const unresolvable = () => {
