@@ -17,24 +17,23 @@ function evaluatePatchedCall(expression: string, model: { id: string; params: Ar
 	const source = `
 		const t = { model };
 		const m = t;
-		let u;
 		function ctor(value) { return value; }
-		const x = { G4: ctor, SR: ctor };
-		const NC = x;
-		const d5 = ctor;
-		const U$ = ctor;
+		const nx = { G4: ctor, SR: ctor };
+		const ax = nx;
+		const r5 = ctor;
+		const j$ = ctor;
 		return ${expression};
 	`;
 	return new Function("model", source)(model) as { maxMode: boolean; parameters: Array<{ id: string; value: string }> };
 }
 
 const FIXTURES = {
-	"dist/esm/34.js":
-		"const m=void 0!==t.model?new x.G4({modelId:t.model.id,parameters:(null!==(u=t.model.params)&&void 0!==u?u:[]).map((e=>new x.SR({id:e.id,value:e.value})))}):void 0;",
-	"dist/cjs/342.js":
-		"const h=void 0!==t.model?new NC.G4({modelId:t.model.id,parameters:(null!==(u=t.model.params)&&void 0!==u?u:[]).map((e=>new NC.SR({id:e.id,value:e.value})))}):void 0;",
+	"dist/esm/479.js":
+		"const m=void 0!==t.model?new nx.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new nx.SR({id:e.id,value:e.value})))}):void 0;",
+	"dist/cjs/479.js":
+		"const m=void 0!==t.model?new ax.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new ax.SR({id:e.id,value:e.value})))}):void 0;",
 	"dist/bundled/index.js":
-		"F0=m.model!==void 0?new d5({modelId:m.model.id,parameters:(m.model.params??[]).map((G1)=>new U$({id:G1.id,value:G1.value}))}):void 0,H0=",
+		"F0=m.model!==void 0?new r5({modelId:m.model.id,parameters:(m.model.params??[]).map((W1)=>new j$({id:W1.id,value:W1.value}))}):void 0,H0=",
 } as const;
 
 function writeFixture(root: string, files: Record<string, string> = FIXTURES): void {
@@ -69,56 +68,55 @@ describe("patch-cursor-sdk", () => {
 
 		const before = runPatch(["--check", "--sdk", root]);
 		expect(before.status).not.toBe(0);
-		expect(before.stdout + before.stderr).toContain("dist/esm/34.js");
+		expect(before.stdout + before.stderr).toContain("dist/esm/479.js");
 		expect(before.stdout + before.stderr).toContain("unpatched");
 
 		const patched = runPatch(["--sdk", root]);
 		expect(patched.status).toBe(0);
-		for (const rel of Object.keys(FIXTURES)) {
-			const text = readFileSync(join(root, rel), "utf8");
+		for (const target of TARGETS) {
+			const text = readFileSync(join(root, target.rel), "utf8");
 			expect(text).toContain(MARKER);
 			expect(text).toContain("maxMode:");
 			expect(text).toContain(".filter(");
-			expect(text).not.toContain("parameters:(m.model.params??[]).map(");
-			expect(text).not.toContain("parameters:(null!==(u=t.model.params)&&void 0!==u?u:[]).map(");
+			expect(text).not.toContain(target.from);
 		}
-		const esm = readFileSync(join(root, "dist/esm/34.js"), "utf8");
+		const esm = readFileSync(join(root, "dist/esm/479.js"), "utf8");
 		expect(esm).toContain('.filter((e=>!(e.id==="max_mode"&&e.value==="true")))');
 		expect(esm.split(MARKER).length - 1).toBe(1);
 
 		const again = runPatch(["--sdk", root]);
 		expect(again.status).toBe(0);
-		expect(readFileSync(join(root, "dist/esm/34.js"), "utf8")).toBe(esm);
+		expect(readFileSync(join(root, "dist/esm/479.js"), "utf8")).toBe(esm);
 
 		const checked = runPatch(["--check", "--sdk", root]);
 		expect(checked.status).toBe(0);
 		expect(checked.stdout).toContain("dist/bundled/index.js");
 		expect(checked.stdout).toContain("patched");
 
-		writeFileSync(join(root, "dist/cjs/342.js"), `drifted ${MARKER} but not the expression`);
+		writeFileSync(join(root, "dist/cjs/479.js"), `drifted ${MARKER} but not the expression`);
 		const drifted = runPatch(["--check", "--sdk", root]);
 		expect(drifted.status).not.toBe(0);
-		expect(drifted.stderr).toContain("dist/cjs/342.js");
+		expect(drifted.stderr).toContain("dist/cjs/479.js");
 	});
 
 	it("fails loudly when an existing build file has no patch anchor", () => {
 		const root = tempSdk();
-		writeFixture(root, { "dist/esm/34.js": "no model constructor here" });
+		writeFixture(root, { "dist/esm/479.js": "no model constructor here" });
 		const result = runPatch(["--sdk", root]);
 		expect(result.status).not.toBe(0);
-		expect(result.stderr).toContain("dist/esm/34.js");
-		expect(readFileSync(join(root, "dist/esm/34.js"), "utf8")).toBe("no model constructor here");
+		expect(result.stderr).toContain("dist/esm/479.js");
+		expect(readFileSync(join(root, "dist/esm/479.js"), "utf8")).toBe("no model constructor here");
 	});
 
 	it("patches repeated --sdk roots and does not require absent build files", () => {
 		const first = tempSdk();
 		const second = tempSdk();
 		writeFixture(first, { "dist/bundled/index.js": FIXTURES["dist/bundled/index.js"] });
-		writeFixture(second, { "dist/esm/34.js": FIXTURES["dist/esm/34.js"] });
+		writeFixture(second, { "dist/esm/479.js": FIXTURES["dist/esm/479.js"] });
 		const result = runPatch(["--sdk", first, "--sdk", second]);
 		expect(result.status).toBe(0);
 		expect(readFileSync(join(first, "dist/bundled/index.js"), "utf8")).toContain(MARKER);
-		expect(readFileSync(join(second, "dist/esm/34.js"), "utf8")).toContain(MARKER);
+		expect(readFileSync(join(second, "dist/esm/479.js"), "utf8")).toContain(MARKER);
 		expect(runPatch(["--check", "--sdk", first, "--sdk", second]).status).toBe(0);
 	});
 });

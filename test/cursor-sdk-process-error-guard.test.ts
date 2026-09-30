@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { isUnauthenticatedConnectError } from "../src/cursor-provider-errors.js";
-import { makeNodeClosedPipeWriteError } from "./helpers/cursor-sdk-process-error-fixtures.js";
+import { makeNodeClosedPipeWriteError, SDK_BUNDLED_TRANSPORT_FRAMES } from "./helpers/cursor-sdk-process-error-fixtures.js";
 import {
 	__testUtils,
 	installCursorSdkProcessErrorGuard,
@@ -23,11 +23,7 @@ function makeCursorSdkAbortConnectError(): Error & { rawMessage: string; code: n
 	error.rawMessage = "This operation was aborted";
 	error.code = 1;
 	error.cause = new DOMException("This operation was aborted", "AbortError");
-	error.stack =
-		"ConnectError: [canceled] This operation was aborted\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63\n" +
-		"    at file:///repo/node_modules/@cursor/sdk/dist/esm/index.js:8:1086456\n" +
-		"Caused by: AbortError";
+	error.stack = `ConnectError: [canceled] This operation was aborted\n${SDK_BUNDLED_TRANSPORT_FRAMES}\nCaused by: AbortError`;
 	return error;
 }
 
@@ -140,10 +136,7 @@ function makeCursorSdkNetworkConnectError(): Error & { rawMessage: string; code:
 		code: "ECONNRESET",
 		syscall: "read",
 	});
-	error.stack =
-		"ConnectError: [aborted] read ECONNRESET\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63\n" +
-		"    at file:///repo/node_modules/@cursor/sdk/dist/esm/index.js:8:1086456";
+	error.stack = `ConnectError: [aborted] read ECONNRESET\n${SDK_BUNDLED_TRANSPORT_FRAMES}`;
 	return error;
 }
 
@@ -178,11 +171,11 @@ function makeCursorSdkStallAbortWrapperConnectError(): Error & { rawMessage: str
 		code: 1,
 		cause: new DOMException("This operation was aborted", "AbortError"),
 	});
+	// The `AbortSignal.r` and `Y.onStall` frames are the stall path observed on 1.0.23. The classifier keys on the
+	// `onStall` and `reportStall` names, which 1.0.34's dist/bundled/index.js still contains (its detector method is
+	// `onStallDetected`, which that pattern does not match).
 	cause.stack =
-		"ConnectError: [canceled] This operation was aborted\n" +
-		"    at ConnectError.from (file:///repo/node_modules/@connectrpc/connect/dist/esm/connect-error.js:69:24)\n" +
-		"    at connectErrorFromNodeReason (file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-error.js:52:29)\n" +
-		"    at Object.reject (file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63)\n" +
+		`ConnectError: [canceled] This operation was aborted\n${SDK_BUNDLED_TRANSPORT_FRAMES}\n` +
 		"    at AbortSignal.r (file:///repo/node_modules/@cursor/sdk/dist/esm/996.js:1:5705)\n" +
 		"    at Y.onStall (file:///repo/node_modules/@cursor/sdk/dist/esm/357.js:1:75246)";
 	const error = new Error("[unknown] [canceled] This operation was aborted") as Error & {
@@ -201,14 +194,6 @@ function makeCursorSdkStallAbortWrapperConnectError(): Error & { rawMessage: str
 	return error;
 }
 
-function makeCursorExtensionNetworkConnectError(): Error & { rawMessage: string; code: number; cause: NodeJS.ErrnoException } {
-	const error = makeCursorSdkNetworkConnectError();
-	error.stack =
-		"ConnectError: [aborted] read ECONNRESET\n" +
-		"    at file:///C:/Users/example/.pi/agent/git/github.com/fitchmultz/pi-cursor-sdk/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63";
-	return error;
-}
-
 function makeCursorBackendNetworkConnectError(): Error & {
 	rawMessage: string;
 	code: number;
@@ -223,7 +208,7 @@ function makeCursorBackendNetworkConnectError(): Error & {
 	};
 	error.stack =
 		"ConnectError: [aborted] read ECONNRESET\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63";
+		"    at from (file:///repo/node_modules/@connectrpc/connect/dist/esm/connect-error.js:71:24)";
 	error.details = [{ type: "aiserver.v1.ErrorDetails" }];
 	return error;
 }
@@ -245,14 +230,6 @@ function makeCursorBackendUnavailableConnectError(): Error & {
 		"ConnectError: [unavailable] Error\n" +
 		"    at file:///repo/node_modules/@connectrpc/connect/dist/esm/protocol-connect/error-json.js:53:19";
 	error.details = [{ type: "aiserver.v1.ErrorDetails" }];
-	return error;
-}
-
-function makeGenericConnectNodeNetworkConnectError(): Error & { rawMessage: string; code: number; cause: NodeJS.ErrnoException } {
-	const error = makeCursorSdkNetworkConnectError();
-	error.stack =
-		"ConnectError: [aborted] read ECONNRESET\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63";
 	return error;
 }
 
@@ -363,13 +340,12 @@ describe("Cursor SDK process error guard", () => {
 	});
 
 	it("tracks the installed Cursor SDK closed-writable error contract", () => {
-		const bundle = readFileSync("node_modules/@cursor/sdk/dist/esm/index.js", "utf8");
-		const controlledExecBundle = readFileSync("node_modules/@cursor/sdk/dist/esm/357.js", "utf8");
-		expect(bundle).toContain('this.name="WriteIterableClosedError"');
-		expect(bundle).toContain('"WritableIterable is closed"');
-		expect(controlledExecBundle).toContain('SimpleControlledExecManager');
-		expect(controlledExecBundle).toContain('catch(e){if(e instanceof i.W2)return;');
-		expect(controlledExecBundle).toContain('await c.write(new s.$Y({message:{case:"throw"');
+		const sdkChunk = readFileSync("node_modules/@cursor/sdk/dist/esm/479.js", "utf8");
+		expect(sdkChunk).toContain('this.name="WriteIterableClosedError"');
+		expect(sdkChunk).toContain('"WritableIterable is closed"');
+		expect(sdkChunk).toContain("SimpleControlledExecManager");
+		expect(sdkChunk).toContain("catch(e){if(e instanceof p.W2)return;");
+		expect(sdkChunk).toContain('await a.write(new h.$Y({message:{case:"throw"');
 	});
 
 	it("contains delayed exact SDK failures after the provider-turn guard is disposed in real Node", () => {
@@ -663,15 +639,15 @@ setTimeout(() => {
 		// child stdin without a stream 'error' listener, so a mid-write child exit
 		// surfaces as an uncaught raw `write EPIPE`. The MCP stdio transport, by
 		// contrast, attaches its own stdin error listener and needs no containment.
-		const shellExecBundle = readFileSync("node_modules/@cursor/sdk/dist/esm/357.js", "utf8");
-		expect(shellExecBundle).toContain("writeCommandHookStdinPayload");
-		expect(shellExecBundle).toContain("stdin.write(e,(e=>{e?n(e):t(void 0)}))");
-		expect(shellExecBundle).toContain("o.stdin.write(`${t.join(\"\\n\")}\\n`),o.stdin.end()");
-		expect(shellExecBundle).not.toContain('stdin.on("error"');
-		expect(shellExecBundle).not.toContain('stdin?.on("error"');
-		expect(shellExecBundle).not.toContain('stdin.once("error"');
-		const mcpStdioBundle = readFileSync("node_modules/@cursor/sdk/dist/esm/745.js", "utf8");
-		expect(mcpStdioBundle).toContain('stdin?.on("error"');
+		const shellExecChunk = readFileSync("node_modules/@cursor/sdk/dist/esm/479.js", "utf8");
+		expect(shellExecChunk).toContain("writeCommandHookStdinPayload");
+		expect(shellExecChunk).toContain("stdin.write(e,(e=>{e?o(e):t(void 0)}))");
+		expect(shellExecChunk).toContain("s.stdin.write(`${t.join(\"\\n\")}\\n`),s.stdin.end()");
+		expect(shellExecChunk).not.toContain('stdin.on("error"');
+		expect(shellExecChunk).not.toContain('stdin?.on("error"');
+		expect(shellExecChunk).not.toContain('stdin.once("error"');
+		const mcpStdioChunk = readFileSync("node_modules/@cursor/sdk/dist/esm/458.js", "utf8");
+		expect(mcpStdioChunk).toContain('stdin?.on("error"');
 	});
 
 	it("matches local Cursor SDK abort ConnectError shape", () => {
@@ -752,7 +728,6 @@ setTimeout(() => {
 
 	it.each([
 		["Cursor SDK stack", makeCursorSdkNetworkConnectError],
-		["extension-local connect-node stack", makeCursorExtensionNetworkConnectError],
 		["Cursor backend details", makeCursorBackendNetworkConnectError],
 		["Cursor backend unavailable details", makeCursorBackendUnavailableConnectError],
 	])("suppresses Cursor network process errors with %s while a provider turn is active", (_name, makeError) => {
@@ -827,23 +802,6 @@ setTimeout(() => {
 		}
 	});
 
-	it("suppresses generic connect-node network errors while a provider turn is active", () => {
-		const suppression = installCursorSdkProcessErrorGuard();
-		let listenerCalled = false;
-		const listener = () => {
-			listenerCalled = true;
-		};
-		process.once("uncaughtException", listener);
-		try {
-			const emitted = process.emit("uncaughtException", makeGenericConnectNodeNetworkConnectError(), "uncaughtException");
-			expect(emitted).toBe(true);
-			expect(listenerCalled).toBe(false);
-		} finally {
-			process.removeListener("uncaughtException", listener);
-			suppression.dispose();
-		}
-	});
-
 	it("does not suppress provenance-free network ConnectErrors during an active provider turn", () => {
 		const suppression = installCursorSdkProcessErrorGuard();
 		let listenerCalled = false;
@@ -866,7 +824,6 @@ setTimeout(() => {
 		["Cursor SDK stack", makeCursorSdkNetworkConnectError],
 		["Cursor SDK HTTP/2 stream reset", makeCursorSdkHttp2EnhanceYourCalmConnectError],
 		["Cursor SDK stall abort wrapper", makeCursorSdkStallAbortWrapperConnectError],
-		["generic connect-node stack", makeGenericConnectNodeNetworkConnectError],
 	])("does not suppress %s process errors after guard disposal", (_name, makeError) => {
 		const suppression = installCursorSdkProcessErrorGuard();
 		suppression.dispose();

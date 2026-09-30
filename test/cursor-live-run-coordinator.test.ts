@@ -1,5 +1,6 @@
 import type { SDKAgent } from "@cursor/sdk";
 import { createAssistantMessageEventStream } from "@oh-my-pi/pi-ai";
+import { SDK_BUNDLED_TRANSPORT_FRAMES } from "./helpers/cursor-sdk-process-error-fixtures.js";
 import { makeAssistantMessage, makeContext, makeModel } from "./helpers/pi-harness.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -39,11 +40,7 @@ function makeCursorSdkAbortConnectError(): Error & { rawMessage: string; code: n
 	error.rawMessage = "This operation was aborted";
 	error.code = 1;
 	error.cause = new DOMException("This operation was aborted", "AbortError");
-	error.stack =
-		"ConnectError: [canceled] This operation was aborted\n" +
-		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63\n" +
-		"    at file:///repo/node_modules/@cursor/sdk/dist/esm/index.js:8:1086456\n" +
-		"Caused by: AbortError";
+	error.stack = `ConnectError: [canceled] This operation was aborted\n${SDK_BUNDLED_TRANSPORT_FRAMES}\nCaused by: AbortError`;
 	return error;
 }
 

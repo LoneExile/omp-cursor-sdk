@@ -8,19 +8,19 @@ const MARKER = "/* omp-cursor-sdk:max-mode-patch */";
 
 export const TARGETS = [
 	{
-		rel: "dist/esm/34.js",
-		from: "new x.G4({modelId:t.model.id,parameters:(null!==(u=t.model.params)&&void 0!==u?u:[]).map((e=>new x.SR({id:e.id,value:e.value})))})",
-		to: `new x.G4({modelId:t.model.id,maxMode:(null!==(u=t.model.params)&&void 0!==u?u:[]).some((e=>e.id==="max_mode"&&e.value==="true"))${MARKER},parameters:(null!==(u=t.model.params)&&void 0!==u?u:[]).filter((e=>!(e.id==="max_mode"&&e.value==="true"))).map((e=>new x.SR({id:e.id,value:e.value})))})`,
+		rel: "dist/esm/479.js",
+		from: "new nx.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new nx.SR({id:e.id,value:e.value})))})",
+		to: `new nx.G4({modelId:t.model.id,maxMode:(t.model.params??[]).some((e=>e.id==="max_mode"&&e.value==="true"))${MARKER},parameters:(t.model.params??[]).filter((e=>!(e.id==="max_mode"&&e.value==="true"))).map((e=>new nx.SR({id:e.id,value:e.value})))})`,
 	},
 	{
-		rel: "dist/cjs/342.js",
-		from: "new NC.G4({modelId:t.model.id,parameters:(null!==(u=t.model.params)&&void 0!==u?u:[]).map((e=>new NC.SR({id:e.id,value:e.value})))})",
-		to: `new NC.G4({modelId:t.model.id,maxMode:(null!==(u=t.model.params)&&void 0!==u?u:[]).some((e=>e.id==="max_mode"&&e.value==="true"))${MARKER},parameters:(null!==(u=t.model.params)&&void 0!==u?u:[]).filter((e=>!(e.id==="max_mode"&&e.value==="true"))).map((e=>new NC.SR({id:e.id,value:e.value})))})`,
+		rel: "dist/cjs/479.js",
+		from: "new ax.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new ax.SR({id:e.id,value:e.value})))})",
+		to: `new ax.G4({modelId:t.model.id,maxMode:(t.model.params??[]).some((e=>e.id==="max_mode"&&e.value==="true"))${MARKER},parameters:(t.model.params??[]).filter((e=>!(e.id==="max_mode"&&e.value==="true"))).map((e=>new ax.SR({id:e.id,value:e.value})))})`,
 	},
 	{
 		rel: "dist/bundled/index.js",
-		from: "new d5({modelId:m.model.id,parameters:(m.model.params??[]).map((G1)=>new U$({id:G1.id,value:G1.value}))})",
-		to: `new d5({modelId:m.model.id,maxMode:(m.model.params??[]).some((G1)=>G1.id==="max_mode"&&G1.value==="true")${MARKER},parameters:(m.model.params??[]).filter((G1)=>!(G1.id==="max_mode"&&G1.value==="true")).map((G1)=>new U$({id:G1.id,value:G1.value}))})`,
+		from: "new r5({modelId:m.model.id,parameters:(m.model.params??[]).map((W1)=>new j$({id:W1.id,value:W1.value}))})",
+		to: `new r5({modelId:m.model.id,maxMode:(m.model.params??[]).some((W1)=>W1.id==="max_mode"&&W1.value==="true")${MARKER},parameters:(m.model.params??[]).filter((W1)=>!(W1.id==="max_mode"&&W1.value==="true")).map((W1)=>new j$({id:W1.id,value:W1.value}))})`,
 	},
 ];
 

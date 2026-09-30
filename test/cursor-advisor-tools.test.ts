@@ -346,7 +346,7 @@ describe("installed @cursor/sdk built-in tool restriction contract", () => {
 		// ...and it reaches Cursor's backend, which offers the model only the listed tools. An empty
 		// list is sent as an empty header (`!==void 0`, unlike the exclusion list's `length>0`), which
 		// is what keeps a summarizer text-only.
-		expect(bundle).toContain('zV1="x-cursor-agent-allowed-tools"');
-		expect(bundle).toContain('m.allowedTools!==void 0?{[zV1]:m.allowedTools.join(",")}:{}');
+		expect(bundle).toContain('BA1="x-cursor-agent-allowed-tools"');
+		expect(bundle).toContain('...$.allowedTools!==void 0?{[BA1]:$.allowedTools.join(",")}:{}');
 	});
 });

@@ -16,6 +16,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	ensureCursorRipgrepPath,
+	isCursorRipgrepBinary,
 	resolveBundledCursorRipgrepPath,
 } from "../src/cursor-ripgrep-path.js";
 
@@ -97,25 +98,43 @@ describe("Cursor ripgrep path", () => {
 		}
 	});
 
-	it("locks installed @cursor/sdk 1.0.23 Agent.create ripgrep contract", () => {
+	it("locks the installed @cursor/sdk 1.0.34 ripgrep resolver that isCursorRipgrepBinary mirrors", () => {
 		const require = createRequire(import.meta.url);
 		const sdkEntry = require.resolve("@cursor/sdk");
 		const sdkRoot = join(dirname(sdkEntry), "..", "..");
 		const sdkPackage = JSON.parse(readFileSync(join(sdkRoot, "package.json"), "utf8")) as { version: string };
-		expect(sdkPackage.version).toBe("1.0.23");
+		expect(sdkPackage.version).toBe("1.0.34");
+		const bundle = readFileSync(join(sdkRoot, "dist", "bundled", "index.js"), "utf8");
 
-		// Agent.create lives in the local-runtime chunk (esm/357.js beside cjs entry's sibling esm).
-		const bundle = readFileSync(join(sdkRoot, "dist", "esm", "357.js"), "utf8");
+		// The local runtime picks one ripgrep path and every ripgrep spawn uses it (`IZ`): an absolute
+		// CURSOR_RIPGREP_PATH of any file name (`HO6` is path.isAbsolute), else the platform package's
+		// bin/rg (bin/rg.exe on Windows) found from the entry script and the executable, else `rg` from PATH.
+		const anchors = {
+			resolverOrder:
+				'N=process.platform==="win32"?"rg.exe":"rg",O=process.env.CURSOR_RIPGREP_PATH;if(O&&HO6(O))B=O;else B=nc0({binaryName:N,excludedWorkspaceDir:q});if(!B)B=pP0();if(B)lP0(B);',
+			envMustBeAbsolute: 'import{isAbsolute as HO6,resolve as GO6}from"path"',
+			bundledBinary: 'function nc0($){return ic0({relativePath:lc0("bin",$.binaryName),excludedWorkspaceDirs:[$.excludedWorkspaceDir],accept:hT8}',
+			pathFallback: 'function pP0(){let $=O$("rg",[]).cmd;return $!=="rg"?$:void 0}',
+			everySpawnUsesTheResolvedPath:
+				'function IZ(){if(!HV)throw Error("Ripgrep path not configured. Call configureRipgrepPath() at startup.");return HV}',
+		};
+		for (const [fact, anchor] of Object.entries(anchors)) {
+			expect(bundle.split(anchor).length - 1, fact).toBe(1);
+		}
+	});
 
-		// Absolute CURSOR_RIPGREP_PATH wins; otherwise search from process.argv[1]; then configure.
-		expect(bundle).toMatch(
-			/process\.env\.CURSOR_RIPGREP_PATH;w=\w+&&\(0,\w+\.isAbsolute\)\(\w+\)\?\w+:W\(\w+\),\w+\|\|\(\w+=\(0,\w+\.Qd\)\(\)\),\w+&&\(0,\w+\.J\)\(\w+\)/,
-		);
-		expect(bundle).toContain("if(!process.argv[1])return;");
-		expect(bundle).toContain("node_modules");
-		expect(bundle).toContain("`@cursor/sdk-${t}`");
-		expect(bundle).toContain('throw new Error("configureRipgrepPath: path must not be empty")');
-		expect(bundle).toContain("Ripgrep path not configured. Call configureRipgrepPath() at startup.");
+	it("treats the configured absolute path, whatever its name, and any file named rg as Cursor's ripgrep", () => {
+		const named = join(tmpdir(), "tools", "ripgrep-14");
+		expect(isCursorRipgrepBinary(named, { CURSOR_RIPGREP_PATH: named })).toBe(true);
+		expect(isCursorRipgrepBinary(join(tmpdir(), "tools", "other"), { CURSOR_RIPGREP_PATH: named })).toBe(false);
+		expect(isCursorRipgrepBinary(join(tmpdir(), "bin", rgBinaryName), {})).toBe(true);
+		expect(isCursorRipgrepBinary(join(tmpdir(), "bin", rgBinaryName), { CURSOR_RIPGREP_PATH: named })).toBe(true);
+	});
+
+	it("ignores a relative CURSOR_RIPGREP_PATH, as the SDK does, and does not take a shell for ripgrep", () => {
+		expect(isCursorRipgrepBinary("ripgrep-14", { CURSOR_RIPGREP_PATH: "ripgrep-14" })).toBe(false);
+		expect(isCursorRipgrepBinary(join(tmpdir(), "bin", "zsh"), { CURSOR_RIPGREP_PATH: "" })).toBe(false);
+		expect(isCursorRipgrepBinary(join(tmpdir(), "bin", "rg-wrapper"), {})).toBe(false);
 	});
 
 	it("configures an empty path without overriding an existing absolute value", () => {

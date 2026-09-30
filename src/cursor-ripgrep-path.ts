@@ -1,9 +1,9 @@
 import { accessSync, constants, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { findCursorSdkPackageDir } from "./cursor-sdk-runtime.js";
 
-const RIPGREP_ENV = "CURSOR_RIPGREP_PATH";
+export const CURSOR_RIPGREP_ENV = "CURSOR_RIPGREP_PATH";
 
 export function resolveBundledCursorRipgrepPath(
 	fromModuleUrl: string | URL = import.meta.url,
@@ -43,10 +43,26 @@ export function resolveBundledCursorRipgrepPath(
 }
 
 export function ensureCursorRipgrepPath(): string | undefined {
-	const configuredPath = process.env[RIPGREP_ENV];
+	const configuredPath = process.env[CURSOR_RIPGREP_ENV];
 	if (configuredPath && isAbsolute(configuredPath)) return configuredPath;
 
 	const bundledPath = resolveBundledCursorRipgrepPath();
-	if (bundledPath) process.env[RIPGREP_ENV] = bundledPath;
+	if (bundledPath) process.env[CURSOR_RIPGREP_ENV] = bundledPath;
 	return bundledPath;
+}
+
+/**
+ * Whether `file` can be the ripgrep binary Cursor's local runtime spawns. The SDK (1.0.34, in its
+ * local runtime bootstrap) picks one path and spawns it for every ripgrep run: `CURSOR_RIPGREP_PATH`
+ * when it is an absolute path, whatever the file is called; else the platform package's `bin/rg`
+ * (`bin/rg.exe` on Windows), found by walking up from the entry script and from the executable; else
+ * `rg` from PATH. This accepts the union of those: the configured absolute path, or any file named
+ * `rg` (`rg.exe` on Windows). It does not model which one the SDK picked, so it can also accept an
+ * `rg` the SDK did not pick; that only widens a check that also requires SDK stack provenance and a
+ * `spawn <file>` error.
+ */
+export function isCursorRipgrepBinary(file: string, env: NodeJS.ProcessEnv = process.env): boolean {
+	const configuredPath = env[CURSOR_RIPGREP_ENV];
+	if (configuredPath && isAbsolute(configuredPath) && file === configuredPath) return true;
+	return (process.platform === "win32" ? /^rg\.exe$/i : /^rg$/).test(basename(file));
 }
