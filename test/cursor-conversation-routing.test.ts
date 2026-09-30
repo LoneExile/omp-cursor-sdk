@@ -228,6 +228,15 @@ describe("session agent pool under concurrent utility requests", () => {
 		expect(next.sendState.contextFingerprint).toBe(computeCursorContextFingerprint(turn));
 	});
 
+	// Pinned to the key 0.4.1 built for these params: persisted local-resume handles match the
+	// pool key by exact string, so a changed unrestricted key invalidates every saved handle.
+	it("keeps the unrestricted main-conversation pool key stable across releases", async () => {
+		const lease = await acquireSessionCursorAgent(acquireParams({ id: "composer-2.5" }, "agent-golden"));
+		expect(lease.poolKey).toBe(
+			"/tmp/sessions/routing.jsonl\x00conversation:01a0e2a0-0000-7000-8000-000000000001\x00/tmp/project\x00{\"id\":\"composer-2.5\"}\x00\x00{\"autoReview\":false,\"sandboxEnabled\":false}\x00http1:default\x0062af8704764faf8e\x00bridge:absent",
+		);
+	});
+
 	it("persists a local-resume handle only for the main conversation", async () => {
 		const turn: Context = { systemPrompt: ["omp system prompt"], messages: [{ role: "user", content: "Refactor the parser", timestamp: 1 }] };
 		const advisorLease = await acquireSessionCursorAgent({ ...advisorParams("agent-advisor"), localResume: true });
