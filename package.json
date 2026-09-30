@@ -1,6 +1,6 @@
 {
   "name": "omp-cursor-sdk",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "omp (oh-my-pi) plugin that registers Cursor models as the cursor-sdk provider, backed by @cursor/sdk local and cloud agents",
   "author": "Mitch Fultz (https://github.com/fitchmultz)",
   "license": "MIT",
