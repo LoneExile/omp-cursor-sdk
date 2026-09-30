@@ -330,8 +330,13 @@ console.log("host handler saw: " + (typeof reason.code === "string" ? reason.cod
  * binary that does not exist. The child runs with no API key (the script deletes it after Bun has
  * loaded any `.env` from the repo), so `Agent.create` builds the local runtime without the keyed
  * bootstrap, and its first `send` starts the workspace walk (ignore files, rules, skills and nested
- * AGENTS.md) that spawns ripgrep. The proxy variables point at a closed port as a
- * precaution; the SDK's own transport may not honor them and the test does not depend on them.
+ * AGENTS.md) that spawns ripgrep. After `send` the SDK also POSTs `auth/exchange_user_api_key` to
+ * Cursor's backend through `fetch`, which Bun routes through the proxy variables: lowercase ones win
+ * over uppercase ones, and a NO_PROXY that names the host skips the proxy. The child gets every
+ * spelling pointed at a closed port and a NO_PROXY that names only `localhost`. Both are set rather
+ * than deleted because the repo's `.env`, which Bun loads for any key that is unset and pi-utils for
+ * any key that is unset or empty, could otherwise supply a NO_PROXY of its own. So the request cannot
+ * leave the machine, and the walk does not wait on it.
  */
 function runRipgrepStartupWalk(guardSetup: string): HostRun & { missingRipgrep: string } {
 	const root = mkdtempSync(join(tmpdir(), "omp-cursor-sdk-rg-walk-"));
@@ -344,8 +349,9 @@ function runRipgrepStartupWalk(guardSetup: string): HostRun & { missingRipgrep: 
 	const env = sanitizeCursorCloudGitEnvironment(childEnv(root));
 	env.CURSOR_RIPGREP_PATH = missingRipgrep;
 	delete env.CURSOR_API_KEY;
-	env.HTTPS_PROXY = "http://127.0.0.1:9";
-	env.HTTP_PROXY = "http://127.0.0.1:9";
+	for (const name of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]) env[name] = "http://127.0.0.1:9";
+	env.NO_PROXY = "localhost";
+	env.no_proxy = "localhost";
 	const result = spawnSync(
 		process.execPath,
 		[
