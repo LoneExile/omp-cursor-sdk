@@ -12,7 +12,12 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
-      - run: bun install --no-save
+      # copyfile, not bun's default Linux hardlinks: node-tar 7.5.14+ can deadlock packing two
+      # paths that share an inode (isaacs/node-tar#458, #460; unfixed in 7.5.22), which fails
+      # the pack test in package-metadata.test.ts with "Exit handler never called!". Seen on
+      # npm 10.9.9 (ubuntu-latest image 20260927.320.1), 11.19.0 and 11.20.0. Drop this once
+      # #460 is fixed and CI passes without it.
+      - run: bun install --no-save --backend=copyfile
       - name: Typecheck against OMP types
         run: bun run typecheck:src
       - name: Port-relevant unit tests (Bun runtime)
