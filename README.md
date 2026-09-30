@@ -213,6 +213,9 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
 - **Refused by account policy**: some models need an acknowledgement on the Cursor side first. Claude
   Fable selections failed with "You must acknowledge Claude Fable 5's data retention policy to use the model."
 - **Stale or missing models**: the catalog is cached for 24 h; run `/cursor-refresh-models`.
+- **Shell call returned no exit status**: Cursor could not start its shell, for example because the call's working
+  directory does not exist (Bun reports it as `ENOENT … posix_spawn '<shell>'`). omp stays up and its log
+  (`~/.omp/logs`) records `Cursor SDK shell failed to start`.
 - **Debugging a turn**: run with `PI_CURSOR_SDK_EVENT_DEBUG=1`; `.debug/cursor-sdk-events/**/metadata.json` holds the exact
   model selection sent, `wait-result.json` the SDK result. They can contain prompts and tool output; delete them afterwards.
 
