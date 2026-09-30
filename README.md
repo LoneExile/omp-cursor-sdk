@@ -130,14 +130,15 @@ plan and model, so check Cursor's pricing page. The default is off.
 
 ## omp advisors
 
-An omp advisor (a `WATCHDOG.yml` advisor or the `advisor` model role) on a cursor-sdk model runs
-read-only. Its Cursor agent gets only the built-in `read`, `grep` and `glob` tools that omp granted
-the advisor: no shell, edits, MCP servers or subagents, even when the advisor's `tools` grant omp's
-`bash` or `edit`. On the local runtime, compaction and branch summaries get no built-in tools at all,
-including the summary that compacts an advisor's context. Cursor cloud agents cannot be limited this
-way, so the plugin refuses advisor requests on the cloud runtime; summaries there keep Cursor's full
-cloud toolset. Advisors also get no pi tool bridge, so a cursor-sdk advisor has no `advise` tool and
-its notes never reach the main session; run the advisor on another provider to get advice.
+An omp advisor (a `WATCHDOG.yml` advisor or the `advisor` model role) on a cursor-sdk model gets a
+read-only Cursor agent: only the built-in `read`, `grep` and `glob` tools that omp granted the
+advisor, with no Cursor shell, edits, MCP servers or subagents, even when the advisor's `tools` grant
+omp's `bash` or `edit`. On the local runtime, compaction and branch summaries that use omp's summarization
+prompt get no built-in tools at all, including the summary that compacts an advisor's context.
+Cursor cloud agents cannot be limited this way, so the plugin refuses advisor requests on the cloud
+runtime; summaries there keep Cursor's full cloud toolset. Advisors also get no pi tool bridge, so
+without an owned dialect (`PI_DIALECT`) a cursor-sdk advisor has no `advise` tool and its notes never
+reach the main session; run the advisor on another provider to get advice.
 
 ## Commands and flags
 
@@ -193,14 +194,14 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
   ```bash
   cd ~/.omp/plugins
   rm -f bun.lock                 # holds the failed resolution; bun regenerates it
-  bun add omp-cursor-sdk@0.4.1   # writes a real range and installs the plugin's own dependencies
+  bun add omp-cursor-sdk@0.4.2   # writes a real range and installs the plugin's own dependencies
   ls node_modules/omp-cursor-sdk/package.json node_modules/@cursor/sdk/package.json
   omp plugin list
   ```
 
   Restart omp afterwards — plugins load at startup, so a session that was already running still sees the
   old module graph. Keep one source per plugin: with the npm version pinned in `~/.omp/plugins/package.json`,
-  installing the `github:` form on top fails with `Package "omp-cursor-sdk@0.4.1" has a dependency loop`.
+  installing the `github:` form on top fails with `Package "omp-cursor-sdk@0.4.2" has a dependency loop`.
 - **`AI Model Not Found Invalid parameters for registry model`**: Cursor refused the selected
   parameters. For a larger context variant that means Max Mode is not active — see
   [Cursor Max Mode](#cursor-max-mode). The hint names the smaller variant that works without it
@@ -213,9 +214,11 @@ state is rejected unless allowed. `/cursor-cloud` lists, archives, or deletes th
 - **Refused by account policy**: some models need an acknowledgement on the Cursor side first. Claude
   Fable selections failed with "You must acknowledge Claude Fable 5's data retention policy to use the model."
 - **Stale or missing models**: the catalog is cached for 24 h; run `/cursor-refresh-models`.
-- **Shell call returned no exit status**: Cursor could not start its shell, for example because the call's working
-  directory does not exist (Bun reports it as `ENOENT … posix_spawn '<shell>'`). omp stays up and its log
-  (`~/.omp/logs`) records `Cursor SDK shell failed to start`.
+- **`Cursor SDK shell failed to start` in the omp log**: Cursor could not start its shell, for example because the
+  call's working directory does not exist or is a file (Bun reports it as `ENOENT … posix_spawn '<spawned binary>'`
+  or `ENOTDIR …`; with local sandboxing a synchronous failure such as a working directory that is a file is
+  reported as `Failed to spawn sandboxed process: Error: ENOTDIR …`). omp stays up and the call's tool stream
+  ends without an exit status; the log (`~/.omp/logs`) records the failure.
 - **Debugging a turn**: run with `PI_CURSOR_SDK_EVENT_DEBUG=1`; `.debug/cursor-sdk-events/**/metadata.json` holds the exact
   model selection sent, `wait-result.json` the SDK result. They can contain prompts and tool output; delete them afterwards.
 
