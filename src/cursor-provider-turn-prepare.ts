@@ -1,5 +1,6 @@
 import type { Context, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
-import type { AgentModeOption, ModelSelection, SDKAgent } from "@cursor/sdk";
+import type { AgentModeOption, ModelSelection, SDKAgent, ToolName } from "@cursor/sdk";
+import { getCursorBuiltInToolAllowlist, isCursorAdvisorRequest } from "./cursor-one-shot-request.js";
 import { configureCursorSdkHttp1 } from "./cursor-http1.js";
 import { installCursorMcpToolTimeoutOverride } from "./cursor-mcp-timeout-override.js";
 import { ensureCursorRipgrepPath } from "./cursor-ripgrep-path.js";
@@ -89,6 +90,14 @@ interface PrepareCursorProviderTurnContext extends PrepareCursorProviderTurnPara
 	selection: ModelSelection;
 	fastEnabled: boolean | undefined;
 }
+
+interface PrepareCursorLocalProviderTurnContext extends PrepareCursorProviderTurnContext {
+	/** Cursor built-in tools for the request's agent; see getCursorBuiltInToolAllowlist. */
+	builtInTools: ToolName[] | undefined;
+}
+
+const CURSOR_CLOUD_ADVISOR_REFUSED_MESSAGE =
+	"Cursor cloud agents cannot serve an omp advisor: the Cursor SDK cannot limit a cloud agent to the read-only tools an advisor may use. Run the advisor on another provider (its WATCHDOG.yml `model` or the advisor model role).";
 
 function buildCursorCloudPromptContext(context: Context, handoff: "fresh" | "bootstrap" | "never"): Context {
 	if (handoff === "bootstrap") return context;
@@ -260,7 +269,7 @@ async function prepareCursorCloudProviderTurn(
 }
 
 async function prepareCursorLocalProviderTurn(
-	prepareParams: PrepareCursorProviderTurnContext,
+	prepareParams: PrepareCursorLocalProviderTurnContext,
 ): Promise<LocalCursorProviderTurnPrepareResult> {
 	const { params, cwd, resolvedApiKey, sdkEventDebug, throwIfAborted, resolvedConfig, agentMode, selection, fastEnabled } = prepareParams;
 	const { model, context, options } = params;
@@ -302,6 +311,7 @@ async function prepareCursorLocalProviderTurn(
 			debugRecorder: sdkEventDebug,
 			conversationId: prepareParams.conversationId,
 			mainConversation: prepareParams.mainConversation !== false,
+			builtInTools: prepareParams.builtInTools,
 			onBridgeToolRequest: (request: CursorPiBridgeToolRequest) => {
 				if (liveRunForBridgeQueue && !liveRunForBridgeQueue.disposed) {
 					cursorLiveRuns.queueEvent(liveRunForBridgeQueue, { type: "bridge-tool", request });
@@ -338,6 +348,7 @@ async function prepareCursorLocalProviderTurn(
 					bridgeSnapshot: sessionAgentLease.bridgeRun?.snapshot,
 					piBridgeEnabled: resolveCursorPiToolBridgeEnabled(),
 					includePiBridgeGuidance,
+					builtInTools: prepareParams.builtInTools,
 				}),
 			};
 		};
@@ -392,6 +403,7 @@ async function prepareCursorLocalProviderTurn(
 			localForce: resolvedConfig.local.force.value,
 			localResume: resolvedConfig.local.resume.value,
 			resumedAgent: sessionAgentLease.resumed,
+			builtInTools: prepareParams.builtInTools ?? null,
 			activeToolNames: activeToolNames ? [...activeToolNames] : [],
 			sessionAgentScopeKey,
 			bridgeRunId: bridgeRun?.id,
@@ -497,12 +509,16 @@ export async function prepareCursorProviderTurn(
 	const context: PrepareCursorProviderTurnContext = { ...prepareParams, agentMode, selection, fastEnabled };
 
 	if (resolvedConfig.runtime.value === "cloud") {
+		// The SDK rejects a tool allowlist for cloud agents, so a cloud advisor would get
+		// every tool; refuse it before the cloud turn invalidates the local agent. Summarizer
+		// requests stay unrestricted there, like every other cloud request.
+		if (isCursorAdvisorRequest(params.context)) throw new Error(CURSOR_CLOUD_ADVISOR_REFUSED_MESSAGE);
 		// A cloud turn's assistant messages also carry api `cursor-sdk`, so the local pooled
 		// agent could not tell it missed them; the next local turn must re-bootstrap.
 		invalidateSessionAgent(getCursorSessionScopeKey());
 		return prepareCursorCloudProviderTurn(context);
 	}
-	return prepareCursorLocalProviderTurn(context);
+	return prepareCursorLocalProviderTurn({ ...context, builtInTools: getCursorBuiltInToolAllowlist(params.context) });
 }
 
 export async function requireCursorApiKey(options: SimpleStreamOptions | undefined): Promise<string> {

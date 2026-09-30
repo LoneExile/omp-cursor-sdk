@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AgentModeOption, LocalAgentOptions, LocalAgentStore, ModelSelection, SDKAgent, SettingSource } from "@cursor/sdk";
+import type { AgentModeOption, LocalAgentOptions, LocalAgentStore, ModelSelection, SDKAgent, SettingSource, ToolName } from "@cursor/sdk";
 import type { Context } from "@oh-my-pi/pi-ai";
 import {
 	getRegisteredCursorPiToolBridge,
@@ -160,6 +160,11 @@ interface SessionCursorAgentCreateParams {
 	 * only in the main loop, and only the main conversation is resumed or cleaned up.
 	 */
 	mainConversation?: boolean;
+	/**
+	 * Cursor built-in tools the agent may use (the SDK's `tools` allowlist); undefined keeps
+	 * the SDK's default toolset. Set for omp advisor and summarizer requests (see getCursorBuiltInToolAllowlist).
+	 */
+	builtInTools?: ToolName[];
 }
 
 const CONVERSATION_ENTRY_SEPARATOR = "\u0000conversation:";
@@ -271,6 +276,9 @@ function buildSessionAgentPoolKey(scopeKey: string, params: SessionCursorAgentCr
 				: "http1:off",
 		buildApiKeyPoolKeyFingerprint(params.apiKey),
 		buildBridgePoolKeySuffix(params.mainConversation !== false),
+		// Only a restricted agent's key names its tools: unrestricted keys, and the local-resume
+		// handles persisted with them (matched by exact key), stay as they were.
+		...(params.builtInTools === undefined ? [] : [`tools:${params.builtInTools.join(",")}`]),
 	].join("\0");
 }
 
@@ -547,6 +555,7 @@ async function createSessionAgentEntry(
 				store: sessionStore!.store,
 			}),
 			...(bridgeRun?.mcpServers ? { mcpServers: bridgeRun.mcpServers } : {}),
+			...(params.builtInTools !== undefined ? { tools: params.builtInTools } : {}),
 		});
 		let agent: SDKAgent | undefined;
 		let effectiveSendState = sendState;
@@ -642,6 +651,7 @@ export async function createOneShotCursorAgent(params: SessionCursorAgentCreateP
 				localSafety: params.localSafety,
 				store: sessionStore.store,
 			}),
+			...(params.builtInTools !== undefined ? { tools: params.builtInTools } : {}),
 		});
 	} catch (error) {
 		await sessionStore.dispose().catch(() => undefined);

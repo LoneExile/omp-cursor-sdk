@@ -21,14 +21,24 @@ export function buildCursorToolManifestText(options: {
 	/** When false, bridge is off via PI_CURSOR_PI_TOOL_BRIDGE=0 (not merely empty). */
 	piBridgeEnabled?: boolean;
 	includePiBridgeGuidance?: boolean;
+	/** The agent's Cursor built-in tool allowlist (SDK `tools`); undefined for the default toolset. */
+	builtInTools?: readonly string[];
 } = {}): string {
 	const piBridgeEnabled = options.piBridgeEnabled ?? true;
 	const includePiBridgeGuidance = options.includePiBridgeGuidance !== false;
-	const lines = [
-		"Callable tool surfaces this run:",
-		`- Cursor host/MCP: ${CURSOR_HOST_TOOL_MANIFEST_SUMMARY}; configured MCP depends on Cursor settings.`,
-		"- Pi tool toggles affect pi tools/bridge exposure only; they do not disable Cursor host/configured MCP tools.",
-	];
+	const lines = ["Callable tool surfaces this run:"];
+	if (options.builtInTools === undefined) {
+		lines.push(
+			`- Cursor host/MCP: ${CURSOR_HOST_TOOL_MANIFEST_SUMMARY}; configured MCP depends on Cursor settings.`,
+			"- Pi tool toggles affect pi tools/bridge exposure only; they do not disable Cursor host/configured MCP tools.",
+		);
+	} else {
+		lines.push(
+			options.builtInTools.length > 0
+				? `- Cursor built-in tools: ${options.builtInTools.join(", ")} only.`
+				: "- Cursor built-in tools: none; reply with text only.",
+		);
+	}
 	const bridgeTools = includePiBridgeGuidance ? options.bridgeSnapshot?.tools ?? [] : [];
 	if (includePiBridgeGuidance) {
 		if (!piBridgeEnabled) {

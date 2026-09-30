@@ -128,6 +128,17 @@ specifier for a plugin file.
 Max Mode and long context bill at Cursor's higher long-context rates; the surcharge depends on your
 plan and model, so check Cursor's pricing page. The default is off.
 
+## omp advisors
+
+An omp advisor (a `WATCHDOG.yml` advisor or the `advisor` model role) on a cursor-sdk model runs
+read-only. Its Cursor agent gets only the built-in `read`, `grep` and `glob` tools that omp granted
+the advisor: no shell, edits, MCP servers or subagents, even when the advisor's `tools` grant omp's
+`bash` or `edit`. On the local runtime, compaction and branch summaries get no built-in tools at all,
+including the summary that compacts an advisor's context. Cursor cloud agents cannot be limited this
+way, so the plugin refuses advisor requests on the cloud runtime; summaries there keep Cursor's full
+cloud toolset. Advisors also get no pi tool bridge, so a cursor-sdk advisor has no `advise` tool and
+its notes never reach the main session; run the advisor on another provider to get advice.
+
 ## Commands and flags
 
 | Command | Purpose |
