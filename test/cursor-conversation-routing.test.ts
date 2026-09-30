@@ -8,12 +8,14 @@ import {
 	type Model,
 	type SimpleStreamOptions,
 } from "@oh-my-pi/pi-ai";
+import { renderInbandToolPrompt } from "@oh-my-pi/pi-ai/dialect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computeCursorContextFingerprint } from "../src/context.js";
 import { cursorLiveRuns, drainExistingCursorLiveRunBeforeSend } from "../src/cursor-provider-live-run-drain.js";
 import {
 	classifyCursorRequestRoute,
 	getCursorConversationId,
+	isCursorAdvisorRequest,
 	isCursorOneShotRequest,
 	registerCursorConversationTracking,
 	__testUtils as conversationTestUtils,
@@ -119,6 +121,24 @@ describe("conversation turn identification at the provider boundary", () => {
 		const turn = captured.at(-1)!;
 		expect(isCursorOneShotRequest(turn.context, turn.options)).toBe(false);
 		expect(getCursorConversationId(turn.options)).toBe(MAIN_SESSION_ID);
+	});
+
+	it("recognizes an advisor whose tools omp moved in-band under an owned dialect", async () => {
+		// pi-agent-core agent-loop.ts prepareProviderCall: an owned dialect (`PI_DIALECT` or the
+		// agent's `dialect`) appends the tool catalog to the system prompt and sends no `tools`.
+		const adviseTool = { name: "advise", label: "Advise", description: "Send advice", parameters: {}, execute: async () => ({ content: [] }) };
+		const agent = new Agent({
+			initialState: { systemPrompt: ["advisor prompt"], model, tools: [adviseTool as never], messages: [] },
+			sessionId: ADVISOR_SESSION_ID,
+			providerSessionState: new Map(),
+			dialect: "glm",
+			getApiKey: () => "test-key",
+		});
+		await agent.prompt("Review the diff");
+		await agent.waitForIdle();
+		const turn = captured.at(-1)!;
+		expect(turn.context.tools).toBeUndefined();
+		expect(isCursorAdvisorRequest(turn.context)).toBe(true);
 	});
 
 	it("sends the auto-thinking judge one-shot although it carries the main session id", async () => {
@@ -286,6 +306,19 @@ describe("main conversation tracking", () => {
 		session.beforeAgentStart();
 		expect(classifyCursorRequestRoute(advisorTurn, { sessionId: ADVISOR_SESSION_ID, providerSessionState: store }).mainConversation).toBe(false);
 		// The user switches the main loop to a Cursor model.
+		expect(classifyCursorRequestRoute(turn, { sessionId: MAIN_SESSION_ID, providerSessionState: store }).mainConversation).toBe(true);
+	});
+
+	it("never lets an advisor take the main conversation when omp sends its tools in-band", () => {
+		const session = startSession(MAIN_SESSION_ID);
+		const store = new Map();
+		session.beforeAgentStart();
+		const inbandAdvisorTurn: Context = {
+			...advisorTurn,
+			systemPrompt: [...(advisorTurn.systemPrompt ?? []), renderInbandToolPrompt(advisorTurn.tools ?? [], "glm")],
+			tools: undefined,
+		};
+		expect(classifyCursorRequestRoute(inbandAdvisorTurn, { sessionId: ADVISOR_SESSION_ID, providerSessionState: store }).mainConversation).toBe(false);
 		expect(classifyCursorRequestRoute(turn, { sessionId: MAIN_SESSION_ID, providerSessionState: store }).mainConversation).toBe(true);
 	});
 

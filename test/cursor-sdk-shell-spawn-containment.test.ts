@@ -16,6 +16,7 @@ const SHELL_EXEC_ANCHORS = {
 	replayCacheForExecId: "let G=$.execute(X,Y,Q),q=new mD0(G);Z.set(K,q),yield*q.fork()",
 	unobservedPump: "constructor($){this.source=$;this.consume()}",
 	readersClosedNormallyOnError: "finally{this.closed=!0;for(let $ of this.forks)$.close();this.forks.clear()}",
+	sandboxHelperRewrapsSynchronousSpawnErrors: "catch(U){throw Error(`Failed to spawn sandboxed process: ${U}`)}",
 } as const;
 const ZSH_EXECUTE_ANCHOR = 'async*execute($,J,Z){let v=[];try{const X=k0(v,R0($.withName("ZshState.execute"))';
 
@@ -54,7 +55,7 @@ const SDK_FIXTURE_DIR = "node_modules/@cursor/sdk/dist/bundled";
 const OMP_HOST_CHILD_TIMEOUT_MS = 30_000;
 const OMP_HOST_TEST_TIMEOUT_MS = OMP_HOST_CHILD_TIMEOUT_MS + 10_000;
 
-type OmpHostAction = "shell-spawn" | "write-after-close" | "read-missing-file";
+type OmpHostAction = "shell-spawn" | "shell-spawn-cwd-is-file" | "sandboxed-shell-spawn" | "write-after-close" | "read-missing-file";
 
 interface OmpHostRun {
 	status: number | null;
@@ -67,9 +68,10 @@ interface OmpHostRun {
  * Runs `action` in a Bun process that imports omp's real postmortem handlers (pi-utils) and the
  * guard module, beside a fixture built from the installed SDK's own writable iterable (`M5`) and
  * replay cache (`mD0`). `runShellStreamExec` wires a shell spawn into them like `ZshState.execute`;
- * `writeAfterClose` writes to a closed iterable; `readMissingFile` raises a real errno error from a
- * syscall other than spawn. A fixture under `node_modules/@cursor/sdk/dist/` carries SDK stack
- * provenance; one anywhere else does not.
+ * `runSandboxedShellStreamExec` does the same through the sandbox helper's rewrap of a synchronous
+ * spawn error; `writeAfterClose` writes to a closed iterable; `readMissingFile` raises a real errno
+ * error from a syscall other than spawn. A fixture under `node_modules/@cursor/sdk/dist/` carries SDK
+ * stack provenance; one anywhere else does not.
  */
 function runInOmpHost(options: { guardSetup: string; action: OmpHostAction; fixtureDir?: string }): OmpHostRun {
 	const root = mkdtempSync(join(tmpdir(), "omp-cursor-sdk-spawn-"));
@@ -95,6 +97,23 @@ export async function runShellStreamExec(cwd) {
 	for await (const event of new mD0(execute(cwd)).fork()) events.push(event);
 	return events;
 }
+async function* executeSandboxed(cwd) {
+	let Q = M5();
+	let D;
+	try {
+		D = spawn("/bin/sh", ["-c", "pwd"], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+	} catch (U) {
+		throw Error("Failed to spawn sandboxed process: " + U);
+	}
+	D.on("error", (f) => { Q.throw(f); });
+	D.on("close", () => { Q.close(); });
+	yield* Q;
+}
+export async function runSandboxedShellStreamExec(cwd) {
+	const events = [];
+	for await (const event of new mD0(executeSandboxed(cwd)).fork()) events.push(event);
+	return events;
+}
 export function writeAfterClose() {
 	const writable = M5();
 	writable.close();
@@ -108,6 +127,8 @@ export async function readMissingFile(path) {
 	const home = join(root, "home");
 	mkdirSync(home);
 	const missingCwd = join(root, "missing-cwd");
+	const fileCwd = join(root, "cwd-is-file");
+	writeFileSync(fileCwd, "");
 	const env: Record<string, string | undefined> = { ...process.env, HOME: home, PI_CODING_AGENT_DIR: join(home, "agent") };
 	delete env.XDG_STATE_HOME;
 	delete env.PI_CONFIG_DIR;
@@ -115,6 +136,8 @@ export async function readMissingFile(path) {
 	delete env.PI_PROFILE;
 	const actions: Record<OmpHostAction, string> = {
 		"shell-spawn": `console.log("tool stream events: " + JSON.stringify(await runShellStreamExec(${JSON.stringify(missingCwd)})));`,
+		"shell-spawn-cwd-is-file": `console.log("tool stream events: " + JSON.stringify(await runShellStreamExec(${JSON.stringify(fileCwd)})));`,
+		"sandboxed-shell-spawn": `console.log("tool stream events: " + JSON.stringify(await runSandboxedShellStreamExec(${JSON.stringify(fileCwd)})));`,
 		"write-after-close": "writeAfterClose();",
 		"read-missing-file": `void readMissingFile(${JSON.stringify(join(root, "missing-file"))});`,
 	};
@@ -124,7 +147,7 @@ export async function readMissingFile(path) {
 			"--eval",
 			`import { getLogsDir, postmortem } from "@oh-my-pi/pi-utils";
 import { installCursorSdkSessionProcessErrorGuard } from ${JSON.stringify(GUARD_URL)};
-import { readMissingFile, runShellStreamExec, writeAfterClose } from ${JSON.stringify(pathToFileURL(fixturePath).href)};
+import { readMissingFile, runSandboxedShellStreamExec, runShellStreamExec, writeAfterClose } from ${JSON.stringify(pathToFileURL(fixturePath).href)};
 // Referenced so Bun's import elision keeps the guard module loaded when the setup does not use it.
 void installCursorSdkSessionProcessErrorGuard;
 console.log("logs dir: " + getLogsDir());
@@ -187,6 +210,31 @@ describe("Cursor SDK rejection containment in the omp host", () => {
 		expect(run.log).toContain("ENOENT");
 	}, OMP_HOST_TEST_TIMEOUT_MS);
 
+	it("keeps the omp host alive when the shell's working directory is a regular file", () => {
+		// Bun throws this failure from spawn() itself with syscall `posix_spawn`, unlike the asynchronous `spawn <file>` of a missing directory.
+		const run = runInOmpHost({ guardSetup: "installCursorSdkSessionProcessErrorGuard();", action: "shell-spawn-cwd-is-file" });
+
+		expect(run.status, run.output).toBe(0);
+		expect(run.output).toContain("tool stream events: []");
+		expect(run.output).toContain("host handler saw: ENOTDIR");
+		expect(run.output).not.toContain("[Unhandled Rejection]");
+		expect(run.log).toContain("Cursor SDK shell failed to start");
+		expect(run.log).toContain("ENOTDIR");
+	}, OMP_HOST_TEST_TIMEOUT_MS);
+
+	it("keeps the omp host alive when the sandbox helper rewraps a synchronous spawn failure", () => {
+		// With local sandboxing the SDK spawns through a helper that rethrows a synchronous spawn error as a
+		// plain Error with no errno fields (anchored in SHELL_EXEC_ANCHORS), so only its message names it.
+		const run = runInOmpHost({ guardSetup: "installCursorSdkSessionProcessErrorGuard();", action: "sandboxed-shell-spawn" });
+
+		expect(run.status, run.output).toBe(0);
+		expect(run.output).toContain("tool stream events: []");
+		expect(run.output).toContain("host handler saw: Error");
+		expect(run.output).not.toContain("[Unhandled Rejection]");
+		expect(run.log).toContain("Cursor SDK shell failed to start");
+		expect(run.log).toContain("Failed to spawn sandboxed process");
+	}, OMP_HOST_TEST_TIMEOUT_MS);
+
 	it("keeps a spawn failure without Cursor SDK stack provenance fatal while the guard is active", () => {
 		const run = runInOmpHost({
 			guardSetup: "installCursorSdkSessionProcessErrorGuard();",
@@ -197,6 +245,18 @@ describe("Cursor SDK rejection containment in the omp host", () => {
 		expect(run.status).toBe(1);
 		expect(run.output).toContain("host handler saw: ENOENT");
 		expect(run.output).toContain("[Unhandled Rejection]");
+	}, OMP_HOST_TEST_TIMEOUT_MS);
+
+	it("keeps a sandbox-style spawn failure without Cursor SDK stack provenance fatal while the guard is active", () => {
+		const run = runInOmpHost({
+			guardSetup: "installCursorSdkSessionProcessErrorGuard();",
+			action: "sandboxed-shell-spawn",
+			fixtureDir: "lib",
+		});
+
+		expect(run.status).toBe(1);
+		expect(run.output).toContain("[Unhandled Rejection]");
+		expect(run.output).toContain("Failed to spawn sandboxed process");
 	}, OMP_HOST_TEST_TIMEOUT_MS);
 
 	it("keeps a Cursor SDK errno failure from a syscall other than spawn fatal while the guard is active", () => {

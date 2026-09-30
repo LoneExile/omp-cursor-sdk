@@ -338,6 +338,7 @@ async function prepareCursorLocalProviderTurn(
 				agentMode,
 				includePiBridgeGuidance,
 				includePiAskQuestionGuidance: bridgeToolNames.has("pi__cursor_ask_question"),
+				builtInTools: prepareParams.builtInTools,
 			};
 			if (plan.mode !== "bootstrap" || !resolveCursorToolManifestEnabled()) {
 				return promptOptions;

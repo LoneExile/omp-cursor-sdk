@@ -20,17 +20,25 @@ export interface CursorPromptOptions {
 	toolManifest?: string;
 	includePiBridgeGuidance?: boolean;
 	includePiAskQuestionGuidance?: boolean;
+	/** The agent's Cursor built-in tool allowlist (the SDK's `tools`); undefined for the default toolset. */
+	builtInTools?: readonly string[];
 }
 
 export const CURSOR_APPROX_CHARS_PER_TOKEN = 4;
 export const CURSOR_IMAGE_TOKEN_ESTIMATE = 1200;
 const SECTION_SEPARATOR = "\n\n";
 
+/** How a prompt names an allowlisted agent's Cursor built-in tools: `read, grep only` or `none; reply with text only`. */
+export function formatCursorBuiltInTools(builtInTools: readonly string[]): string {
+	return builtInTools.length > 0 ? `${builtInTools.join(", ")} only` : "none; reply with text only";
+}
+
 export function getCursorPlanModeToolGuidanceText(
 	agentMode: AgentModeOption | undefined,
-	options: { includePiBridgeGuidance?: boolean } = {},
+	options: { includePiBridgeGuidance?: boolean; builtInTools?: readonly string[] } = {},
 ): string | undefined {
-	if (agentMode !== "plan") return undefined;
+	// An allowlisted agent has no shell or MCP tools for plan mode to permit.
+	if (agentMode !== "plan" || options.builtInTools !== undefined) return undefined;
 	return [
 		"Cursor SDK mode is plan for this run. In pi-cursor-sdk, plan mode may still use available Cursor SDK/MCP tools for inspection when needed.",
 		"Safe/read-only shell commands that inspect or print information are allowed when Cursor chooses to call Shell; do not say Shell is blocked by plan mode and then call it anyway.",
@@ -41,21 +49,26 @@ export function getCursorPlanModeToolGuidanceText(
 }
 
 export function getCursorToolTailGuardText(
-	options: Pick<CursorPromptOptions, "agentMode"> & { includePlanModeGuidance?: boolean; includePiBridgeGuidance?: boolean } = {},
+	options: Pick<CursorPromptOptions, "agentMode" | "builtInTools"> & { includePlanModeGuidance?: boolean; includePiBridgeGuidance?: boolean } = {},
 ): string {
+	const { builtInTools } = options;
 	return [
-		"Shell: use explicit `cd` to repo path for project commands; session cwd may differ from tool args.",
+		builtInTools === undefined
+			? "Shell: use explicit `cd` to repo path for project commands; session cwd may differ from tool args."
+			: undefined,
 		options.includePlanModeGuidance === false
 			? undefined
-			: getCursorPlanModeToolGuidanceText(options.agentMode, { includePiBridgeGuidance: options.includePiBridgeGuidance }),
+			: getCursorPlanModeToolGuidanceText(options.agentMode, { includePiBridgeGuidance: options.includePiBridgeGuidance, builtInTools }),
 		"Exact-output requests: output exactly the requested text; no preamble or checks unless asked.",
-		"Tools: call available Cursor SDK/MCP tools; never print tool cards as assistant text.",
+		builtInTools === undefined
+			? "Tools: call available Cursor SDK/MCP tools; never print tool cards as assistant text."
+			: `Cursor built-in tools: ${formatCursorBuiltInTools(builtInTools)}; never print tool cards as assistant text.`,
 		options.includePiBridgeGuidance === false ? undefined : CURSOR_PI_BRIDGE_PREFERENCE_TEXT,
 	].filter((line): line is string => line !== undefined).join("\n");
 }
 
 function getCursorToolBoundaryText(
-	options: Pick<CursorPromptOptions, "agentMode" | "includePiAskQuestionGuidance"> & { hasToolManifest?: boolean; includePiBridgeGuidance?: boolean } = {},
+	options: Pick<CursorPromptOptions, "agentMode" | "builtInTools" | "includePiAskQuestionGuidance"> & { hasToolManifest?: boolean; includePiBridgeGuidance?: boolean } = {},
 ): string {
 	const includePiBridgeGuidance = options.includePiBridgeGuidance !== false;
 	const includePiAskQuestionGuidance = includePiBridgeGuidance && options.includePiAskQuestionGuidance !== false;
@@ -67,7 +80,7 @@ function getCursorToolBoundaryText(
 			: undefined,
 		"Do not claim pi-side or WebSearch/WebFetch tools unless Cursor ran an equivalent tool.",
 		includePiAskQuestionGuidance ? "Use pi__cursor_ask_question for material choices if exposed." : undefined,
-		getCursorPlanModeToolGuidanceText(options.agentMode, { includePiBridgeGuidance }),
+		getCursorPlanModeToolGuidanceText(options.agentMode, { includePiBridgeGuidance, builtInTools: options.builtInTools }),
 		"Images: only latest user images are sent; ask to reattach prior images.",
 	].filter((line): line is string => line !== undefined);
 	if (options.hasToolManifest) {
@@ -77,7 +90,7 @@ function getCursorToolBoundaryText(
 }
 
 function getCursorBootstrapTailSections(
-	options: Pick<CursorPromptOptions, "agentMode" | "includePiBridgeGuidance"> = {},
+	options: Pick<CursorPromptOptions, "agentMode" | "builtInTools" | "includePiBridgeGuidance"> = {},
 ): string[] {
 	return [
 		"Answer the latest user request above using the instructions and Cursor SDK capabilities available in this run.",
@@ -468,6 +481,7 @@ export function buildCursorPrompt(context: Context, options: CursorPromptOptions
 		agentMode: options.agentMode,
 		hasToolManifest: Boolean(options.toolManifest),
 		includePiBridgeGuidance: options.includePiBridgeGuidance,
+		builtInTools: options.builtInTools,
 		includePiAskQuestionGuidance: options.includePiAskQuestionGuidance,
 	})];
 	if (options.toolManifest) {

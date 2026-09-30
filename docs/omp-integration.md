@@ -358,9 +358,12 @@ The extension wires into OMP's session events:
   ([Cursor tool surfaces](./cursor-tool-surfaces.md)); auto-learn capture
   brings a store of its own (`sdk.ts`
   `createAutoLearnCaptureRunner`) and runs one-shot. Neither emits extension
-  events. Advisor requests are recognized by their `advise` tool (every
+  events. Advisor requests are recognized by their `advise` tool, in the
+  request's `tools` or, when an owned dialect (`PI_DIALECT`) moves the tools
+  in-band, in the `<tools>` catalog appended to the system prompt (every
   advisor loop runs `[adviseTool, ...tools]`, `session-advisors.ts`;
-  `advisor/advise-tool.ts`) and never take the main conversation, also when
+  `advisor/advise-tool.ts`; pi-ai `dialect/catalog.ts`) and never take the
+  main conversation, also when
   the main loop runs on another provider or an advisor's new id after
   `/fresh` arrives first. Of the other requests, the main conversation is
   the one whose id is the session id, or, after `/fresh` or with
