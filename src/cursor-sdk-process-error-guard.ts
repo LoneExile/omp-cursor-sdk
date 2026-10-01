@@ -124,11 +124,18 @@ function getSpawnedFile(error: NodeJS.ErrnoException): string | undefined {
 	return typeof syscall === "string" && syscall.startsWith("spawn ") ? syscall.slice("spawn ".length) : undefined;
 }
 
-function isCursorSdkRipgrepSpawnFailure(error: unknown): error is NodeJS.ErrnoException {
-	if (!(error instanceof Error) || !CURSOR_SDK_DIST_STACK_FRAME.test(error.stack ?? "")) return false;
-	if (typeof (error as NodeJS.ErrnoException).code !== "string") return false;
+interface CursorSdkRipgrepSpawnFailure {
+	readonly error: NodeJS.ErrnoException;
+	readonly code: string;
+	readonly file: string;
+}
+
+function getCursorSdkRipgrepSpawnFailure(error: unknown): CursorSdkRipgrepSpawnFailure | undefined {
+	if (!(error instanceof Error) || !CURSOR_SDK_DIST_STACK_FRAME.test(error.stack ?? "")) return undefined;
+	const { code } = error as NodeJS.ErrnoException;
+	if (typeof code !== "string") return undefined;
 	const file = getSpawnedFile(error);
-	return file !== undefined && isCursorRipgrepBinary(file);
+	return file !== undefined && isCursorRipgrepBinary(file) ? { error, code, file } : undefined;
 }
 
 // Contained only while a provider turn that declared a local transport is active;
@@ -157,7 +164,7 @@ function shouldSuppressProcessError(event: string | symbol, args: readonly unkno
 	// SDK stall timers and inter-turn teardown aborts never call suppressAbortErrors();
 	// any active provider turn or session is enough — stack provenance already gates SDK-only AbortErrors.
 	if (isCursorSdkAbortError(error)) return hasActiveGuard();
-	if (isCursorSdkRipgrepSpawnFailure(error)) return hasActiveGuard();
+	if (getCursorSdkRipgrepSpawnFailure(error)) return hasActiveGuard();
 	// RetriableError "Connection stalled" / "Connection stalled repeatedly" is not a ConnectError; suppress during active turns only.
 	if (isCursorSdkConnectionStalledError(error)) return activeProviderTurns.size > 0;
 	const classification = classifyCursorConnectError(error);
@@ -204,30 +211,30 @@ function isExecutableRegularFile(path: string): boolean {
 	}
 }
 
-function describeRipgrepSpawnFailure(error: NodeJS.ErrnoException, path: string | undefined): string {
-	if (error.code !== undefined && Object.hasOwn(RESOURCE_ERRNO_CODES, error.code)) {
-		return `The system could not start ${path} (${error.code}): a process or open-file limit, not a problem with the binary.`;
+function describeRipgrepSpawnFailure({ code, file }: CursorSdkRipgrepSpawnFailure): string {
+	if (Object.hasOwn(RESOURCE_ERRNO_CODES, code)) {
+		return `The system could not start ${file} (${code}): a process or open-file limit, not a problem with the binary.`;
 	}
-	if (path !== undefined && error.code === "ENOENT" && existsSync(path)) {
-		return `${path} exists, so the ENOENT is not about the binary itself: the working directory Cursor spawned it in may no longer exist, or the binary's interpreter may be missing.`;
+	if (code === "ENOENT" && existsSync(file)) {
+		return `${file} exists, so the ENOENT is not about the binary itself: the working directory Cursor spawned it in may no longer exist, or the binary's interpreter may be missing.`;
 	}
-	if (path !== undefined && error.code === "EACCES" && isExecutableRegularFile(path)) {
-		return `${path} is an executable file, so the EACCES is not about the binary itself: the working directory Cursor spawned it in may not be accessible, or the binary's interpreter may not be executable.`;
+	if (code === "EACCES" && isExecutableRegularFile(file)) {
+		return `${file} is an executable file, so the EACCES is not about the binary itself: the working directory Cursor spawned it in may not be accessible, or the binary's interpreter may not be executable.`;
 	}
-	if (path !== undefined && path === process.env[CURSOR_RIPGREP_ENV] && !isBundledCursorRipgrepPath(path)) {
+	if (file === process.env[CURSOR_RIPGREP_ENV] && !isBundledCursorRipgrepPath(file)) {
 		return `${CURSOR_RIPGREP_ENV} overrides the ripgrep Cursor runs and names this file. Fix it, or unset it to use the SDK's bundled ripgrep, then restart omp.`;
 	}
 	return `This is the SDK's bundled ripgrep or one found on PATH, not a ${CURSOR_RIPGREP_ENV} override. Make sure it exists and is executable, or reinstall @cursor/sdk, then restart omp.`;
 }
 
-function reportContainedCursorSdkRipgrepSpawnFailure(error: NodeJS.ErrnoException): void {
-	const path = getSpawnedFile(error);
-	logger.warn(`Cursor's ripgrep failed to start (${path}); contained its unhandled rejection.`, {
+function reportContainedCursorSdkRipgrepSpawnFailure(failure: CursorSdkRipgrepSpawnFailure): void {
+	const { error, code, file } = failure;
+	logger.warn(`Cursor's ripgrep failed to start (${file}); contained its unhandled rejection.`, {
 		error: error.message,
-		code: error.code,
+		code,
 		syscall: error.syscall,
-		path,
-		hint: describeRipgrepSpawnFailure(error, path),
+		path: file,
+		hint: describeRipgrepSpawnFailure(failure),
 	});
 }
 
@@ -237,7 +244,8 @@ function reportContainedCursorSdkRipgrepSpawnFailure(error: NodeJS.ErrnoExceptio
 // keeps the host alive.
 function interceptHostUnhandledRejection(reason: unknown): boolean {
 	if (!shouldSuppressProcessError("unhandledRejection", [reason])) return false;
-	if (isCursorSdkRipgrepSpawnFailure(reason)) reportContainedCursorSdkRipgrepSpawnFailure(reason);
+	const ripgrepFailure = getCursorSdkRipgrepSpawnFailure(reason);
+	if (ripgrepFailure) reportContainedCursorSdkRipgrepSpawnFailure(ripgrepFailure);
 	return true;
 }
 
