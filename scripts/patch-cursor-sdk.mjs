@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -166,7 +166,19 @@ function sdkRoots(args) {
 	return roots;
 }
 
-const invokedDirectly = process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+// process.argv[1] keeps symlinks, and so does import.meta.url under --preserve-symlinks-main, while
+// Node resolves them in import.meta.url otherwise; compare real paths on both sides, because a
+// mismatch makes a run through a symlinked directory (macOS /tmp) do nothing and exit 0.
+function startedDirectly() {
+	if (process.argv[1] === undefined) return false;
+	try {
+		return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+	} catch {
+		return false;
+	}
+}
+
+const invokedDirectly = startedDirectly();
 if (invokedDirectly) {
 	const args = parseArgs(process.argv.slice(2));
 	if (args.help) {

@@ -135,6 +135,32 @@ function makeForeignConnectNodeNetworkConnectError(): Error & { rawMessage: stri
 	return error;
 }
 
+// The abort shape with every condition but SDK provenance: connect-node frames outside the SDK.
+function makeForeignConnectNodeAbortConnectError(): Error & { rawMessage: string; code: number; cause: DOMException } {
+	const error = makeCursorSdkAbortConnectError();
+	error.stack =
+		"ConnectError: [canceled] This operation was aborted\n" +
+		"    at file:///repo/node_modules/@connectrpc/connect/dist/esm/connect-error.js:71:20\n" +
+		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-error.js:52:29\n" +
+		"    at file:///repo/node_modules/@connectrpc/connect-node/dist/esm/node-universal-client.js:293:63\n" +
+		"Caused by: AbortError";
+	return error;
+}
+
+// The stall-abort wrapper with every condition but SDK provenance: its abort and `onStall` frames are outside the SDK.
+function makeForeignStallAbortWrapperConnectError(): Error & { rawMessage: string; code: number; cause: Error } {
+	const error = makeCursorSdkStallAbortWrapperConnectError();
+	error.cause.stack =
+		"ConnectError: [canceled] This operation was aborted\n" +
+		"    at file:///repo/node_modules/@connectrpc/connect/dist/esm/connect-error.js:71:20\n" +
+		"    at AbortSignal.r (file:///repo/node_modules/other-client/dist/stall.js:1:5705)\n" +
+		"    at Y.onStall (file:///repo/node_modules/other-client/dist/stall.js:1:75246)";
+	error.stack =
+		"ConnectError: [unknown] [canceled] This operation was aborted\n" +
+		"    at a.from (file:///repo/node_modules/other-client/dist/index.js:1:1125976)";
+	return error;
+}
+
 function makeProvenanceFreeNetworkConnectError(): Error & { rawMessage: string; code: number; cause: NodeJS.ErrnoException } {
 	const error = makeCursorSdkNetworkConnectError();
 	error.stack =
@@ -428,6 +454,7 @@ describe("cursor-provider-errors", () => {
 		expect(classification).toEqual({ kind: "network", source: "cursor-sdk-stack" });
 		expect(message).toContain("Network error");
 		expect(message).not.toContain("operation was aborted");
+		expect(classifyCursorConnectError(makeForeignStallAbortWrapperConnectError())).toBeUndefined();
 	});
 
 	it.each([
@@ -460,6 +487,8 @@ describe("cursor-provider-errors", () => {
 		});
 		expect(isCursorSdkAbortConnectError(makeCursorSdkAbortConnectError())).toBe(true);
 		expect(isCursorSdkAbortConnectError(makeCursorSdkStallAbortWrapperConnectError())).toBe(false);
+		expect(classifyCursorConnectError(makeForeignConnectNodeAbortConnectError())).toBeUndefined();
+		expect(isCursorSdkAbortConnectError(makeForeignConnectNodeAbortConnectError())).toBe(false);
 	});
 
 	it("does not treat connect-node frames outside the SDK as Cursor provenance", () => {

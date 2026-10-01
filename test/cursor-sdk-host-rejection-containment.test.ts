@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -76,6 +76,33 @@ const SDK_FIXTURE_DIR = "node_modules/@cursor/sdk/dist/bundled";
 const CHILD_TIMEOUT_MS = 30_000;
 const TEST_TIMEOUT_MS = CHILD_TIMEOUT_MS + 10_000;
 
+// Whether a directory with mode 000 blocks entry here. It does not for root, a process with
+// CAP_DAC_OVERRIDE, or a filesystem that ignores mode bits; there the spawn from that directory
+// succeeds and the EACCES test has nothing to observe.
+const MODE_000_BLOCKS_ENTRY = (() => {
+	if (process.platform === "win32") return false;
+	const dir = mkdtempSync(join(tmpdir(), "omp-cursor-sdk-mode000-"));
+	try {
+		chmodSync(dir, 0o000);
+		try {
+			accessSync(dir, constants.X_OK);
+			return false;
+		} catch {
+			return true;
+		}
+	} finally {
+		chmodSync(dir, 0o700);
+		rmSync(dir, { recursive: true, force: true });
+	}
+})();
+
+// The errnos that mean the system could not start a file for lack of a resource, with libuv's message for each.
+const RESOURCE_ERRNO_FIXTURES: Record<string, string> = {
+	EAGAIN: "resource temporarily unavailable",
+	EMFILE: "too many open files",
+	ENFILE: "file table overflow",
+};
+
 /**
  * A fixture module built from the installed SDK's own writable iterable (`v5`), closed-writable
  * error class (`f7`) and exec replay cache (`KT0`). `runShellStreamExec` wires a shell spawn into
@@ -127,10 +154,20 @@ export function rejectWithAbort() {
 export function rejectWithConnectUnavailable() {
 	void Promise.reject(new ConnectError("backend unavailable", Code.Unavailable));
 }
-export function rejectWithSpawnFailure(file) {
+export function rejectWithSpawnFailure(file, cwd) {
 	void new Promise((_, reject) => {
-		spawn(file, ["--files"], { stdio: "ignore" }).on("error", reject);
+		spawn(file, ["--files"], { stdio: "ignore", cwd }).on("error", reject);
 	});
+}
+// A spawn error with the message, code, syscall (\`spawn <file>\`) and path that Bun reports, for an errno
+// a test cannot provoke portably (a real EAGAIN needs a process limit set on the child, and what
+// ulimit -u counts differs by platform).
+export function rejectWithSpawnErrno(code, reason, file) {
+	void Promise.reject(Object.assign(new Error(code + ": " + reason + ", posix_spawn '" + file + "'"), { code, syscall: "spawn " + file, path: file }));
+}
+// A spawn-shaped error with no errno code, which no observed failure looks like.
+export function rejectWithSpawnErrorWithoutCode(file) {
+	void Promise.reject(Object.assign(new Error("spawn failed, posix_spawn '" + file + "'"), { syscall: "spawn " + file, path: file }));
 }
 `,
 	);
@@ -146,6 +183,7 @@ function childEnv(root: string): Record<string, string | undefined> {
 	delete env.PI_CONFIG_DIR;
 	delete env.OMP_PROFILE;
 	delete env.PI_PROFILE;
+	delete env.CURSOR_RIPGREP_PATH;
 	return env;
 }
 
@@ -210,30 +248,59 @@ type OmpHostAction =
 	| "abort-rejection"
 	| "connect-unavailable"
 	| "spawn-failure-ripgrep"
+	| "spawn-failure-configured-ripgrep"
+	| "spawn-failure-configured-ripgrep-missing-cwd"
+	| "spawn-failure-configured-ripgrep-inaccessible-cwd"
+	| "spawn-failure-without-errno-code"
+	| "spawn-failure-resource-limit"
 	| "spawn-failure-shell";
+
+/** Runs `run` with `dir` created empty and unenterable (mode 000), then restores access so the root can be removed. */
+function withUnenterableDir<T>(dir: string | undefined, run: () => T): T {
+	if (dir === undefined) return run();
+	mkdirSync(dir);
+	chmodSync(dir, 0o000);
+	try {
+		return run();
+	} finally {
+		chmodSync(dir, 0o700);
+	}
+}
 
 /**
  * Runs `action` in a Bun process that imports omp's real postmortem handlers (pi-utils) and the
  * guard module, beside the fixture module. `guardSetup` runs before the action; a host handler
  * registered ahead of it sees every rejection first and never claims one.
  */
-function runInOmpHost(options: { guardSetup: string; action: OmpHostAction; fixtureDir?: string }): HostRun {
+function runInOmpHost(options: { guardSetup: string; action: OmpHostAction; fixtureDir?: string; env?: Record<string, string>; noAccessDir?: boolean }): HostRun {
 	const { root, fixturePath } = writeSdkFixture(options.fixtureDir ?? SDK_FIXTURE_DIR);
 	const actions: Record<OmpHostAction, string> = {
 		"write-after-close": "writeAfterClose();",
 		"read-missing-file": `void readMissingFile(${JSON.stringify(join(root, "missing-file"))});`,
 		"abort-rejection": "rejectWithAbort();",
 		"connect-unavailable": "rejectWithConnectUnavailable();",
-		"spawn-failure-ripgrep": `rejectWithSpawnFailure(${JSON.stringify(join(root, "missing-bin", "rg"))});`,
+		// The SDK's resolver accepts the file `rg` (`rg.exe` on Windows) found another way than CURSOR_RIPGREP_PATH.
+		"spawn-failure-ripgrep": `rejectWithSpawnFailure(${JSON.stringify(join(root, "missing-bin", process.platform === "win32" ? "rg.exe" : "rg"))});`,
+		// Spawns the file CURSOR_RIPGREP_PATH names, which the test makes fail to start.
+		"spawn-failure-configured-ripgrep": "rejectWithSpawnFailure(process.env.CURSOR_RIPGREP_PATH);",
+		// Spawns that file from a working directory that does not exist, so a file that exists fails with ENOENT.
+		"spawn-failure-configured-ripgrep-missing-cwd": `rejectWithSpawnFailure(process.env.CURSOR_RIPGREP_PATH, ${JSON.stringify(join(root, "missing-cwd"))});`,
+		// Spawns that file from a working directory the process cannot enter (`noAccessDir`), so a file that is executable fails with EACCES.
+		"spawn-failure-configured-ripgrep-inaccessible-cwd": `rejectWithSpawnFailure(process.env.CURSOR_RIPGREP_PATH, ${JSON.stringify(join(root, "no-access"))});`,
+		// Looks like a spawn failure of ripgrep, but has no errno code.
+		"spawn-failure-without-errno-code": "rejectWithSpawnErrorWithoutCode(process.env.CURSOR_RIPGREP_PATH);",
+		// The file exists and runs; the system refused to start it for lack of a resource (the errno and message come from the env).
+		"spawn-failure-resource-limit": "rejectWithSpawnErrno(process.env.SPAWN_ERRNO_CODE, process.env.SPAWN_ERRNO_REASON, process.env.CURSOR_RIPGREP_PATH);",
 		"spawn-failure-shell": `rejectWithSpawnFailure(${JSON.stringify(join(root, "missing-bin", "zsh"))});`,
 	};
-	const result = spawnSync(
-		process.execPath,
-		[
-			"--eval",
-			`import { getLogsDir, postmortem } from "@oh-my-pi/pi-utils";
+	const result = withUnenterableDir(options.noAccessDir ? join(root, "no-access") : undefined, () =>
+		spawnSync(
+			process.execPath,
+			[
+				"--eval",
+				`import { getLogsDir, postmortem } from "@oh-my-pi/pi-utils";
 import { installCursorSdkProcessErrorGuard, installCursorSdkSessionProcessErrorGuard } from ${JSON.stringify(GUARD_URL)};
-import { readMissingFile, rejectWithAbort, rejectWithConnectUnavailable, rejectWithSpawnFailure, writeAfterClose } from ${JSON.stringify(pathToFileURL(fixturePath).href)};
+import { readMissingFile, rejectWithAbort, rejectWithConnectUnavailable, rejectWithSpawnErrno, rejectWithSpawnErrorWithoutCode, rejectWithSpawnFailure, writeAfterClose } from ${JSON.stringify(pathToFileURL(fixturePath).href)};
 // Referenced so Bun's import elision keeps the guard module loaded when the setup does not use it.
 void installCursorSdkProcessErrorGuard;
 void installCursorSdkSessionProcessErrorGuard;
@@ -249,8 +316,9 @@ ${actions[options.action]}
 const reason = await rejectionReachedHost.promise;
 console.log("host handler saw: " + (typeof reason.code === "string" ? reason.code : reason.name));
 `,
-		],
-		{ cwd: REPO, env: childEnv(root), encoding: "utf8", timeout: CHILD_TIMEOUT_MS },
+			],
+			{ cwd: REPO, env: { ...childEnv(root), ...options.env }, encoding: "utf8", timeout: CHILD_TIMEOUT_MS },
+		),
 	);
 	const output = `${result.stdout}\n${result.stderr}`;
 	return { status: result.status, output, log: readOmpLog(output, root) };
@@ -262,8 +330,13 @@ console.log("host handler saw: " + (typeof reason.code === "string" ? reason.cod
  * binary that does not exist. The child runs with no API key (the script deletes it after Bun has
  * loaded any `.env` from the repo), so `Agent.create` builds the local runtime without the keyed
  * bootstrap, and its first `send` starts the workspace walk (ignore files, rules, skills and nested
- * AGENTS.md) that spawns ripgrep. The proxy variables point at a closed port as a
- * precaution; the SDK's own transport may not honor them and the test does not depend on them.
+ * AGENTS.md) that spawns ripgrep. After `send` the SDK also POSTs `auth/exchange_user_api_key` to
+ * Cursor's backend through `fetch`, which Bun routes through the proxy variables: lowercase ones win
+ * over uppercase ones, and a NO_PROXY that names the host skips the proxy. The child gets every
+ * spelling pointed at a closed port and a NO_PROXY that names only `localhost`. Both are set rather
+ * than deleted because the repo's `.env`, which Bun loads for any key that is unset and pi-utils for
+ * any key that is unset or empty, could otherwise supply a NO_PROXY of its own. So the request cannot
+ * leave the machine, and the walk does not wait on it.
  */
 function runRipgrepStartupWalk(guardSetup: string): HostRun & { missingRipgrep: string } {
 	const root = mkdtempSync(join(tmpdir(), "omp-cursor-sdk-rg-walk-"));
@@ -276,8 +349,9 @@ function runRipgrepStartupWalk(guardSetup: string): HostRun & { missingRipgrep: 
 	const env = sanitizeCursorCloudGitEnvironment(childEnv(root));
 	env.CURSOR_RIPGREP_PATH = missingRipgrep;
 	delete env.CURSOR_API_KEY;
-	env.HTTPS_PROXY = "http://127.0.0.1:9";
-	env.HTTP_PROXY = "http://127.0.0.1:9";
+	for (const name of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]) env[name] = "http://127.0.0.1:9";
+	env.NO_PROXY = "localhost";
+	env.no_proxy = "localhost";
 	const result = spawnSync(
 		process.execPath,
 		[
@@ -361,8 +435,137 @@ describe("Cursor SDK ripgrep spawn failures", () => {
 		expect(run.output).not.toContain("[Unhandled Rejection]");
 		expect(run.log).toContain("Cursor's ripgrep failed to start");
 		expect(run.log).toContain(run.missingRipgrep);
-		expect(run.log).toContain("CURSOR_RIPGREP_PATH");
+		// CURSOR_RIPGREP_PATH names the failing file, so the hint tells the user to fix or unset it.
+		expect(run.log).toContain(
+			"CURSOR_RIPGREP_PATH overrides the ripgrep Cursor runs and names this file. Fix it, or unset it to use the SDK's bundled ripgrep, then restart omp.",
+		);
+		expect(run.log).not.toContain("not a CURSOR_RIPGREP_PATH override");
 	}, TEST_TIMEOUT_MS);
+
+	it("does not blame CURSOR_RIPGREP_PATH when a ripgrep found another way cannot start", () => {
+		// CURSOR_RIPGREP_PATH is unset, so the SDK's resolver fell back to the platform package or PATH.
+		const run = runInOmpHost({ guardSetup: "installCursorSdkProcessErrorGuard();", action: "spawn-failure-ripgrep" });
+
+		expect(run.status, run.output).toBe(0);
+		expect(run.output).toContain("host handler saw: ENOENT");
+		expect(run.output).not.toContain("[Unhandled Rejection]");
+		expect(run.log).toContain("Cursor's ripgrep failed to start");
+		expect(run.log).toContain("not a CURSOR_RIPGREP_PATH override");
+		expect(run.log).not.toContain("overrides the ripgrep Cursor runs");
+	}, TEST_TIMEOUT_MS);
+
+	/** A platform-package `bin/rg` path under a throwaway root, as `ensureCursorRipgrepPath` would write it. */
+	function bundledRipgrepPathUnderTempRoot(): string {
+		const root = mkdtempSync(join(tmpdir(), "omp-cursor-sdk-bundled-rg-"));
+		tempRoots.push(root);
+		const binary = process.platform === "win32" ? "rg.exe" : "rg";
+		return join(root, "node_modules", "@cursor", `sdk-${process.platform}-${process.arch}`, "bin", binary);
+	}
+
+	it("does not tell the user to unset CURSOR_RIPGREP_PATH when it names a bundled ripgrep that is not executable", () => {
+		// ensureCursorRipgrepPath wrote this platform-package path into the variable itself, so it is not a user override to unset: the fix is to restore that binary.
+		const bundled = bundledRipgrepPathUnderTempRoot();
+		mkdirSync(dirname(bundled), { recursive: true });
+		writeFileSync(bundled, "not a binary", { mode: 0o644 });
+		const run = runInOmpHost({
+			guardSetup: "installCursorSdkProcessErrorGuard();",
+			action: "spawn-failure-configured-ripgrep",
+			env: { CURSOR_RIPGREP_PATH: bundled },
+		});
+
+		expect(run.status, run.output).toBe(0);
+		expect(run.output).toContain("host handler saw: EACCES");
+		expect(run.log).toContain(`Cursor's ripgrep failed to start (${bundled})`);
+		expect(run.log).toContain("not a CURSOR_RIPGREP_PATH override");
+		expect(run.log).not.toContain("overrides the ripgrep Cursor runs");
+	}, TEST_TIMEOUT_MS);
+
+	it("does not tell the user to unset CURSOR_RIPGREP_PATH when it names a bundled ripgrep that is gone", () => {
+		const bundled = bundledRipgrepPathUnderTempRoot();
+		const run = runInOmpHost({
+			guardSetup: "installCursorSdkProcessErrorGuard();",
+			action: "spawn-failure-configured-ripgrep",
+			env: { CURSOR_RIPGREP_PATH: bundled },
+		});
+
+		expect(run.status, run.output).toBe(0);
+		expect(run.output).toContain("host handler saw: ENOENT");
+		expect(run.log).toContain(`Cursor's ripgrep failed to start (${bundled})`);
+		expect(run.log).toContain("not a CURSOR_RIPGREP_PATH override");
+		expect(run.log).not.toContain("overrides the ripgrep Cursor runs");
+	}, TEST_TIMEOUT_MS);
+
+	it("points at the working directory, not the binary, when a ripgrep that exists fails with ENOENT", () => {
+		// Bun reports a missing working directory as ENOENT on the spawned binary; process.execPath exists.
+		const run = runInOmpHost({
+			guardSetup: "installCursorSdkProcessErrorGuard();",
+			action: "spawn-failure-configured-ripgrep-missing-cwd",
+			env: { CURSOR_RIPGREP_PATH: process.execPath },
+		});
+
+		expect(run.status, run.output).toBe(0);
+		expect(run.output).toContain("host handler saw: ENOENT");
+		expect(run.log).toContain(`Cursor's ripgrep failed to start (${process.execPath})`);
+		expect(run.log).toContain("exists, so the ENOENT is not about the binary itself");
+		expect(run.log).not.toContain("overrides the ripgrep Cursor runs");
+		expect(run.log).not.toContain("not a CURSOR_RIPGREP_PATH override");
+	}, TEST_TIMEOUT_MS);
+
+	it.skipIf(!MODE_000_BLOCKS_ENTRY)(
+		"points at the working directory, not the binary, when a ripgrep that is executable fails with EACCES",
+		() => {
+			// Bun reports a working directory the process cannot enter as EACCES on the spawned binary; process.execPath is executable.
+			const run = runInOmpHost({
+				guardSetup: "installCursorSdkProcessErrorGuard();",
+				action: "spawn-failure-configured-ripgrep-inaccessible-cwd",
+				env: { CURSOR_RIPGREP_PATH: process.execPath },
+				noAccessDir: true,
+			});
+
+			expect(run.status, run.output).toBe(0);
+			expect(run.output).toContain("host handler saw: EACCES");
+			expect(run.log).toContain(`Cursor's ripgrep failed to start (${process.execPath})`);
+			expect(run.log).toContain("is an executable file, so the EACCES is not about the binary itself");
+			expect(run.log).not.toContain("overrides the ripgrep Cursor runs");
+			expect(run.log).not.toContain("not a CURSOR_RIPGREP_PATH override");
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it.skipIf(process.platform === "win32")("keeps the override advice when CURSOR_RIPGREP_PATH names a directory", () => {
+		// Spawning a directory fails with EACCES, as a file that is not executable does, but a directory is not an executable file.
+		const dir = mkdtempSync(join(tmpdir(), "omp-cursor-sdk-rg-dir-"));
+		tempRoots.push(dir);
+		const run = runInOmpHost({
+			guardSetup: "installCursorSdkProcessErrorGuard();",
+			action: "spawn-failure-configured-ripgrep",
+			env: { CURSOR_RIPGREP_PATH: dir },
+		});
+
+		expect(run.status, run.output).toBe(0);
+		expect(run.output).toContain("host handler saw: EACCES");
+		expect(run.log).toContain(`Cursor's ripgrep failed to start (${dir})`);
+		expect(run.log).toContain("CURSOR_RIPGREP_PATH overrides the ripgrep Cursor runs");
+		expect(run.log).not.toContain("is an executable file");
+	}, TEST_TIMEOUT_MS);
+
+	// The file exists and runs; a process or open-file limit says nothing about the ripgrep.
+	for (const [code, reason] of Object.entries(RESOURCE_ERRNO_FIXTURES)) {
+		it(`does not blame the binary when the system could not start it for lack of a resource (${code})`, () => {
+			const run = runInOmpHost({
+				guardSetup: "installCursorSdkProcessErrorGuard();",
+				action: "spawn-failure-resource-limit",
+				env: { CURSOR_RIPGREP_PATH: process.execPath, SPAWN_ERRNO_CODE: code, SPAWN_ERRNO_REASON: reason },
+			});
+
+			expect(run.status, run.output).toBe(0);
+			expect(run.output).toContain(`host handler saw: ${code}`);
+			expect(run.log).toContain(`Cursor's ripgrep failed to start (${process.execPath})`);
+			expect(run.log).toContain("a process or open-file limit, not a problem with the binary");
+			expect(run.log).not.toContain("overrides the ripgrep Cursor runs");
+			expect(run.log).not.toContain("not a CURSOR_RIPGREP_PATH override");
+		}, TEST_TIMEOUT_MS);
+	}
 });
 
 describe("Cursor SDK rejection containment in the omp host", () => {
@@ -464,6 +667,19 @@ describe("Cursor SDK rejection containment in the omp host", () => {
 		expect(run.status).toBe(1);
 		expect(run.output).toContain("host handler saw: ENOENT");
 		expect(run.output).toContain("[Unhandled Rejection]");
+	}, TEST_TIMEOUT_MS);
+
+	it("keeps a spawn-shaped rejection from Cursor's SDK without an errno code fatal while the guard is active", () => {
+		const run = runInOmpHost({
+			guardSetup: "installCursorSdkProcessErrorGuard();",
+			action: "spawn-failure-without-errno-code",
+			env: { CURSOR_RIPGREP_PATH: process.execPath },
+		});
+
+		expect(run.status).toBe(1);
+		expect(run.output).toContain("host handler saw: Error");
+		expect(run.output).toContain("[Unhandled Rejection]");
+		expect(run.log).not.toContain("Cursor's ripgrep failed to start");
 	}, TEST_TIMEOUT_MS);
 
 	it("keeps a ripgrep spawn rejection without Cursor SDK stack provenance fatal while the guard is active", () => {

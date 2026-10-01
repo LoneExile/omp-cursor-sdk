@@ -2,6 +2,7 @@ import {
 	accessSync,
 	chmodSync,
 	constants,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -16,6 +17,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	ensureCursorRipgrepPath,
+	isBundledCursorRipgrepPath,
 	isCursorRipgrepBinary,
 	resolveBundledCursorRipgrepPath,
 } from "../src/cursor-ripgrep-path.js";
@@ -106,17 +108,21 @@ describe("Cursor ripgrep path", () => {
 		expect(sdkPackage.version).toBe("1.0.34");
 		const bundle = readFileSync(join(sdkRoot, "dist", "bundled", "index.js"), "utf8");
 
-		// The local runtime picks one ripgrep path and every ripgrep spawn uses it (`IZ`): an absolute
-		// CURSOR_RIPGREP_PATH of any file name (`HO6` is path.isAbsolute), else the platform package's
-		// bin/rg (bin/rg.exe on Windows) found from the entry script and the executable, else `rg` from PATH.
+		// The local runtime picks one ripgrep path and every unsandboxed ripgrep spawn uses it (`IZ`): an
+		// absolute CURSOR_RIPGREP_PATH of any file name (`HO6` is path.isAbsolute), else the `bin/rg`
+		// (`bin/rg.exe` on Windows) of the @cursor/sdk-<platform>-<arch> or @cursor/february-<platform>-<arch>
+		// package found from the entry script and the executable (`ic0`), else `rg` from PATH.
 		const anchors = {
 			resolverOrder:
 				'N=process.platform==="win32"?"rg.exe":"rg",O=process.env.CURSOR_RIPGREP_PATH;if(O&&HO6(O))B=O;else B=nc0({binaryName:N,excludedWorkspaceDir:q});if(!B)B=pP0();if(B)lP0(B);',
 			envMustBeAbsolute: 'import{isAbsolute as HO6,resolve as GO6}from"path"',
 			bundledBinary: 'function nc0($){return ic0({relativePath:lc0("bin",$.binaryName),excludedWorkspaceDirs:[$.excludedWorkspaceDir],accept:hT8}',
+			bundledPackages: "Y=[`@cursor/sdk-${X}`,`@cursor/february-${X}`]",
 			pathFallback: 'function pP0(){let $=O$("rg",[]).cmd;return $!=="rg"?$:void 0}',
 			everySpawnUsesTheResolvedPath:
 				'function IZ(){if(!HV)throw Error("Ripgrep path not configured. Call configureRipgrepPath() at startup.");return HV}',
+			// A sandboxed run (any policy but insecure_none) goes to the sandbox helper instead of spawning ripgrep itself.
+			sandboxedRunsUseTheHelper: 'if(X.type!=="insecure_none"){if(YE0())return uj1($,J,Z,X);',
 		};
 		for (const [fact, anchor] of Object.entries(anchors)) {
 			expect(bundle.split(anchor).length - 1, fact).toBe(1);
@@ -145,5 +151,21 @@ describe("Cursor ripgrep path", () => {
 		process.env.CURSOR_RIPGREP_PATH = "/custom/rg";
 		expect(ensureCursorRipgrepPath()).toBe("/custom/rg");
 		expect(process.env.CURSOR_RIPGREP_PATH).toBe("/custom/rg");
+	});
+
+	it("recognizes the platform package's bin/rg by its path alone, whether or not the file exists", () => {
+		const missing = join(tmpdir(), "gone", "node_modules", ...platformPackage.split("/"), "bin", rgBinaryName);
+		expect(existsSync(missing)).toBe(false);
+		expect(isBundledCursorRipgrepPath(missing)).toBe(true);
+		expect(isBundledCursorRipgrepPath(join(tmpdir(), "bin", rgBinaryName))).toBe(false);
+		expect(isBundledCursorRipgrepPath(join(tmpdir(), "node_modules", "@cursor", "sdk-other-arch", "bin", rgBinaryName))).toBe(false);
+		expect(isBundledCursorRipgrepPath(join(tmpdir(), "node_modules", ...platformPackage.split("/"), "bin", "rg-wrapper"))).toBe(false);
+	});
+
+	it("recognizes the path ensureCursorRipgrepPath writes as the bundled ripgrep", () => {
+		delete process.env.CURSOR_RIPGREP_PATH;
+		const written = ensureCursorRipgrepPath();
+		if (!written) throw new Error("Expected the installed Cursor SDK platform package to include ripgrep");
+		expect(isBundledCursorRipgrepPath(written)).toBe(true);
 	});
 });
