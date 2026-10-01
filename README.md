@@ -19,9 +19,9 @@ flowchart TD
   plugin <-->|"prompt, events"| agent["@cursor/sdk agent<br/>(on your machine)"]
   agent <-->|"model calls"| backend["Cursor backend"]
   agent --> tools["Cursor tools<br/>shell, read, edit,<br/>grep, glob"]
-  agent --> mcp["Cursor MCP servers"]
   agent -->|"pi__* calls"| bridge["plugin tool bridge<br/>(loopback MCP)"]
   bridge --> ompTools["omp's other tools"]
+  agent --> mcp["Cursor MCP servers"]
 ```
 
 The agent runs on your machine and calls Cursor's backend for the model. Cursor uses its own shell and
