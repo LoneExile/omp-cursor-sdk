@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- CI patches `@cursor/sdk` before the test job. Max Mode defaults on, so a fresh install failed four prepare tests with "SDK is not patched" before those tests reached the cloud and advisor checks.
+
+### Changed
+
+- The README install steps now include the SDK patch. A turn fails until that patch is applied, because Max Mode is on by default.
+
 ## 0.4.4 - 2026-10-03
 
 ### Fixed

@@ -20,5 +20,10 @@ jobs:
       - run: bun install --no-save --backend=copyfile
       - name: Typecheck against OMP types
         run: bun run typecheck:src
+      # Max Mode defaults on, so a turn checks that @cursor/sdk is patched before it
+      # sends. A fresh install is not patched. Patch here so prepare tests reach the
+      # behavior they assert instead of stopping on the missing marker.
+      - name: Patch @cursor/sdk for default Max Mode
+        run: bun scripts/patch-cursor-sdk.mjs
       - name: Port-relevant unit tests (Bun runtime)
         run: bun run test
