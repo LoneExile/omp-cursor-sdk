@@ -78,7 +78,8 @@ Model selector: `cursor-sdk/<model>[@<context>][@fast|@slow]`, with ids from `om
 ## Cursor Max Mode
 
 `@cursor/sdk` never sets the `max_mode` flag on Cursor's `RequestedModel`, so the plugin can send it only
-through a patched SDK. Max Mode is off by default and bills at Cursor's higher long-context rates.
+through a patched SDK. Max Mode is on by default and bills at Cursor's higher long-context rates; use
+`--cursor-no-max-mode` or `/cursor-max-mode off` to opt out.
 
 ```mermaid
 flowchart TD
@@ -102,11 +103,12 @@ flowchart TD
    ```
 
    `--check` (or `npm run check:cursor-sdk-patch`) reports each file without patching.
-2. **Restart omp**: a running process keeps the SDK module it already loaded.
-3. **Turn it on** with `--cursor-max-mode`, `PI_CURSOR_MAX_MODE=1` or `/cursor-max-mode on`
-   (`--save-user` saves it to `~/.omp/agent/cursor-sdk.json`; project config cannot set it). The
-   status line shows `max:on`. Precedence: `--cursor-no-max-mode` > `--cursor-max-mode` >
-   `PI_CURSOR_MAX_MODE` > session toggle > user config > off.
+2. **Restart omp**: a running process keeps the SDK module it already loaded. The same patch turns off the local agent's default commit trailer `Co-authored-by: Cursor <cursoragent@cursor.com>`. `@cursor/sdk` 1.0.34 does not read `~/.cursor/cli-config.json` on this path, so the trailer stays on until you patch and restart. Cloud agents still add it.
+3. Max Mode is **on by default** (status shows `max:on`). Opt out with `--cursor-no-max-mode`,
+   `PI_CURSOR_MAX_MODE=0`, or `/cursor-max-mode off` (`--save-user` writes
+   `~/.omp/agent/cursor-sdk.json`; project config cannot set it). Precedence:
+   `--cursor-no-max-mode` > `--cursor-max-mode` > `PI_CURSOR_MAX_MODE` > session toggle > user
+   config > on.
 
 ## omp advisors
 
@@ -170,7 +172,7 @@ Cursor-hosted VM against a Git repository. First use needs `--cursor-cloud-ack` 
   ```bash
   cd ~/.omp/plugins
   rm -f bun.lock                 # holds the failed resolution; bun regenerates it
-  bun add omp-cursor-sdk@0.4.3   # writes a real range and installs the plugin's own dependencies
+  bun add omp-cursor-sdk@0.4.4   # writes a real range and installs the plugin's own dependencies
   ls node_modules/omp-cursor-sdk/package.json node_modules/@cursor/sdk/package.json
   omp plugin list
   ```
@@ -189,6 +191,10 @@ Cursor-hosted VM against a Git repository. First use needs `--cursor-cloud-ack` 
 - **Stale or missing models**: the catalog is cached for 24 h; run `/cursor-refresh-models`.
 - **`Command failed to spawn: …`**: Cursor could not start its shell, for example because the working
   directory does not exist or is a file (`ENOENT … posix_spawn` or `ENOTDIR`). omp stays up.
+- **omp exits a few seconds after a turn** and `~/Library/Logs/DiagnosticReports/bun-*.ips` says
+  `EXC_GUARD` / `CLOSE` with guard `0x08fd4dbfade2dead`: Bun 1.3.14 closed a Cursor shell pipe whose
+  number SQLite had reused. This plugin keeps those subprocesses referenced. Restart omp after you
+  update the plugin. The report is from the old process.
 - **`Cursor's ripgrep failed to start` in the omp log**: Cursor runs ripgrep for Grep, Glob and `ls`,
   and at startup in git checkouts and `.cursor/rules` workspaces. omp stays up and Grep and Glob return
   the error. Follow the log's `hint`, which names the cause: a `CURSOR_RIPGREP_PATH` override, the

@@ -1,6 +1,6 @@
 {
   "name": "omp-cursor-sdk",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "omp (oh-my-pi) plugin that registers Cursor models as the cursor-sdk provider, backed by @cursor/sdk local and cloud agents",
   "author": "Mitch Fultz (https://github.com/fitchmultz)",
   "license": "MIT",
@@ -121,7 +121,7 @@
     "typecheck:tests": "tsc -p tsconfig.test.json --noEmit",
     "typecheck:replay-compile": "tsc --noEmit -p test/tsconfig.json",
     "verify": "npm run check:platform-smoke && npm run typecheck && npm test",
-    "test": "bun test test/cursor-api-key.test.ts test/model-list-cache.test.ts test/model-discovery-selection.test.ts test/context.test.ts test/package-metadata.test.ts test/cursor-config.test.ts test/cursor-model-lifecycle.test.ts test/cursor-session-scope.test.ts test/cursor-model.test.ts test/cursor-provider-errors.test.ts test/cursor-provider-run-finalizer-abort.test.ts test/cursor-text-boundaries.test.ts test/cursor-session-agent-resume-compaction.test.ts test/cursor-pi-tool-bridge-server-lifecycle.test.ts test/cursor-usage-compaction.test.ts test/cursor-session-send-policy.test.ts test/cursor-one-shot-request.test.ts test/cursor-conversation-routing.test.ts test/cursor-session-binding.test.ts test/cursor-session-instances.test.ts test/cursor-runtime-switch.test.ts test/cursor-provider-turn-send-lineage.test.ts test/cursor-pi-tool-bridge-hooks.test.ts test/cursor-pi-tool-bridge-create-run.test.ts test/cursor-max-mode.test.ts test/patch-cursor-sdk.test.ts test/cursor-advisor-tools.test.ts test/cursor-tool-manifest.test.ts test/cursor-sdk-host-rejection-containment.test.ts test/cursor-ripgrep-path.test.ts",
+    "test": "bun test test/cursor-api-key.test.ts test/model-list-cache.test.ts test/model-discovery-selection.test.ts test/context.test.ts test/package-metadata.test.ts test/cursor-config.test.ts test/cursor-model-lifecycle.test.ts test/cursor-session-scope.test.ts test/cursor-model.test.ts test/cursor-provider-errors.test.ts test/cursor-provider-run-finalizer-abort.test.ts test/cursor-text-boundaries.test.ts test/cursor-session-agent-resume-compaction.test.ts test/cursor-pi-tool-bridge-server-lifecycle.test.ts test/cursor-usage-compaction.test.ts test/cursor-session-send-policy.test.ts test/cursor-one-shot-request.test.ts test/cursor-conversation-routing.test.ts test/cursor-session-binding.test.ts test/cursor-session-instances.test.ts test/cursor-runtime-switch.test.ts test/cursor-provider-turn-send-lineage.test.ts test/cursor-pi-tool-bridge-hooks.test.ts test/cursor-pi-tool-bridge-create-run.test.ts test/cursor-max-mode.test.ts test/patch-cursor-sdk.test.ts test/cursor-advisor-tools.test.ts test/cursor-tool-manifest.test.ts test/cursor-sdk-host-rejection-containment.test.ts test/cursor-ripgrep-path.test.ts test/cursor-spawn-fd-guard.test.ts",
     "test:full": "bun test test/*.test.ts",
     "refresh:cursor-snapshots": "node scripts/refresh-cursor-model-snapshots.mjs",
     "check:cursor-snapshots": "node scripts/refresh-cursor-model-snapshots.mjs --check",

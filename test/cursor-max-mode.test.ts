@@ -105,8 +105,8 @@ describe("Cursor Max Mode selection", () => {
 });
 
 describe("Cursor Max Mode precedence", () => {
-	it("uses CLI, then env, then session, then saved user config, then off", () => {
-		expect(resolveCursorMaxMode({}).value).toBe(false);
+	it("uses CLI, then env, then session, then saved user config, then on", () => {
+		expect(resolveCursorMaxMode({}).value).toBe(true);
 		expect(resolveCursorMaxMode({ userValue: true }).value).toBe(true);
 		expect(resolveCursorMaxMode({ userValue: true, sessionValue: false }).value).toBe(false);
 		expect(resolveCursorMaxMode({ sessionValue: false, envValue: true }).value).toBe(true);
@@ -185,16 +185,16 @@ describe("Cursor Max Mode session toggle", () => {
 		return runInCursorSessionBinding(createDetachedCursorSessionBinding(), body);
 	}
 
-	it("defaults off and toggles session state without writing user config", async () => {
+	it("defaults on and toggles session state without writing user config", async () => {
 		const { pi, ctx, commandCtx, commands } = harness();
 		await inSession(async () => {
 			await pi.invokeEventWithContext("session_start", { type: "session_start" }, ctx);
-			expect(getEffectiveCursorMaxMode()).toBe(false);
-			expect(ctx.ui.setStatus).toHaveBeenLastCalledWith("cursor", expect.not.stringContaining("max:"));
-			await commands.get("cursor-max-mode")!.handler("on", commandCtx);
 			expect(getEffectiveCursorMaxMode()).toBe(true);
 			expect(ctx.ui.setStatus).toHaveBeenLastCalledWith("cursor", expect.stringContaining("max:on"));
-			expect(pi.appendEntry).toHaveBeenCalledWith(__testUtils.MAX_MODE_ENTRY_TYPE, { enabled: true });
+			await commands.get("cursor-max-mode")!.handler("off", commandCtx);
+			expect(getEffectiveCursorMaxMode()).toBe(false);
+			expect(ctx.ui.setStatus).toHaveBeenLastCalledWith("cursor", expect.not.stringContaining("max:"));
+			expect(pi.appendEntry).toHaveBeenCalledWith(__testUtils.MAX_MODE_ENTRY_TYPE, { enabled: false });
 		});
 		expect(() => readFileSync(getCursorSdkUserConfigPath(), "utf8")).toThrow();
 	});

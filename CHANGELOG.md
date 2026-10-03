@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.4 - 2026-10-03
+
+### Fixed
+
+- A Cursor shell no longer kills omp on macOS when it exits. `@cursor/sdk` 1.0.34 spawns that shell with two extra `"pipe"` stdio slots (shell state on fds 3 and 4). Bun 1.3.14's subprocess finalizer closes those descriptors again at garbage collection. SQLite may already own the recycled numbers, and macOS raises `EXC_GUARD` (`CLOSE`, guard `0x08fd4dbfade2dead`). The plugin keeps each such subprocess referenced so the finalizer does not run. Restart omp to load the guard. Ordinary stdin, stdout, and stderr spawns are unchanged.
+
+- Local cursor-sdk agents no longer add `Co-authored-by: Cursor <cursoragent@cursor.com>` after you re-apply `npm run patch:cursor-sdk` and restart omp. `@cursor/sdk` 1.0.34 leaves commit attribution on when no attribution provider is set. Its local executor never sets one, and it does not read `attribution.attributeCommitsToAgent` in `~/.cursor/cli-config.json`. The patch changes that default from on to off in `dist/esm/479.js`, `dist/cjs/479.js`, and `dist/bundled/index.js`. An explicit provider value still wins. Cloud agents do not load this build, so they still add the trailer.
+
+### Changed
+
+- Cursor Max Mode defaults on when no CLI, environment, session, or saved user override is set. Use `--cursor-no-max-mode`, `PI_CURSOR_MAX_MODE=0`, or `/cursor-max-mode off` to opt out. Turns still require the patched `@cursor/sdk` (`npm run patch:cursor-sdk`).
+
 ## 0.4.3 - 2026-10-01
 
 ### Fixed

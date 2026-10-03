@@ -119,7 +119,7 @@ command and the next smaller catalog context (`@256k`).
 Precedence, highest first: `--cursor-max-mode` / `--cursor-no-max-mode` (no-max
 wins if both are set), `PI_CURSOR_MAX_MODE`, the session entry from
 `/cursor-max-mode [on|off|toggle]`, then `maxMode` in
-`~/.omp/agent/cursor-sdk.json` when saved with `--save-user`, then off.
+`~/.omp/agent/cursor-sdk.json` when saved with `--save-user`, then on.
 Project config is never read. Before a Max Mode turn the plugin resolves
 `import.meta.resolve("@cursor/sdk")`, walks to that package root, and requires
 the patch marker in every existing build file (`dist/esm/479.js`,
@@ -131,6 +131,14 @@ module is the older one, and asks for a restart. Patch this checkout with
 hoists `@cursor/sdk` to `~/.omp/plugins/node_modules/@cursor/sdk` and must be
 patched with `node scripts/patch-cursor-sdk.mjs --sdk` that path; re-apply
 after `omp plugin install` and restart. Long context bills higher.
+
+The same patch turns off the local agent's default commit trailer
+`Co-authored-by: Cursor <cursoragent@cursor.com>`. `@cursor/sdk` 1.0.34's
+local executor never sets an attribution provider, so
+`attributeCommitsToAgent` defaults on and `~/.cursor/cli-config.json` has no
+effect. The patch changes that default to off. An explicit provider value
+still wins. Cloud agents do not load this build, so they still add the trailer.
+Re-apply the patch and restart omp.
 
 ## 4. Authentication and key resolution
 
@@ -176,6 +184,24 @@ provider id are read via `ctx.modelRegistry.getApiKeyForProvider("cursor-sdk")`
 OAuth credential (omp `/login`) is never read: it is an OAuth access token, not
 a Cursor SDK API key. Do not reintroduce a direct `SqliteAuthCredentialStore`
 open from the plugin.
+
+### 4.4 Why a finished Cursor shell must not be collected
+
+`@cursor/sdk` 1.0.34's local shell (`jL0` bash, `RL0` zsh, `Yi0` zsh-light in
+`dist/bundled/index.js`) spawns through `node:child_process` with
+`stdio: [stdin, "pipe", "pipe", "pipe", "pipe"]`. The last two pipes carry
+shell state on fds 3 and 4. Bun implements that spawn as `Bun.spawn` and stores
+the extra pipes as owned descriptors. On Bun 1.3.14, `Subprocess` finalization
+closes every owned extra descriptor. The streams already closed them when the
+shell exited, and SQLite (omp's `agent.db` / `models.db` / `history.db`, or the
+SDK store) can reuse the numbers and guard them (`0x08fd4dbfade2dead`). The
+late `close()` is macOS `EXC_GUARD` / `CLOSE` on the main thread, a few seconds
+after `agent_end`. `Symbol.dispose` takes the same path. Stdin, stdout, and
+stderr do not: their close marks the slot done. `src/cursor-spawn-fd-guard.ts`
+wraps `Bun.spawn` and retains the returned subprocess when an extra slot is
+`"pipe"` or a number, so the finalizer never runs. The retain lasts for the
+omp process. Restart omp after this module changes. Do not drop that set, and
+do not call `Symbol.dispose` on these subprocesses.
 
 ## 5. The turn path
 

@@ -821,5 +821,5 @@ export function resolveCursorMaxMode(options: {
 	if (options.envValue !== undefined) return resolved("environment", options.envValue);
 	if (options.sessionValue !== undefined) return resolved("session", options.sessionValue);
 	if (options.userValue !== undefined) return resolved("user", options.userValue);
-	return resolved("builtin", false);
+	return resolved("builtin", true);
 }

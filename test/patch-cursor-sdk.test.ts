@@ -9,6 +9,8 @@ import { TARGETS } from "../scripts/patch-cursor-sdk.mjs";
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(TEST_DIR, "../scripts/patch-cursor-sdk.mjs");
 const MARKER = "/* omp-cursor-sdk:max-mode-patch */";
+const COMMIT_ATTRIBUTION_MARKER = "/* omp-cursor-sdk:commit-attribution-patch */";
+const COMMIT_ATTRIBUTION_ANCHOR = "attributeCommitsToAgent??!0";
 
 const SDK_ROOT = join(TEST_DIR, "../node_modules/@cursor/sdk");
 const INSTALLED_BUILD_FILES = TARGETS.filter((target) => existsSync(join(SDK_ROOT, target.rel)));
@@ -29,11 +31,11 @@ function evaluatePatchedCall(expression: string, model: { id: string; params: Ar
 
 const FIXTURES = {
 	"dist/esm/479.js":
-		"const m=void 0!==t.model?new nx.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new nx.SR({id:e.id,value:e.value})))}):void 0;",
+		"const m=void 0!==t.model?new nx.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new nx.SR({id:e.id,value:e.value})))}):void 0;C=!y&&(E?.attribution?.attributeCommitsToAgent??!0),",
 	"dist/cjs/479.js":
-		"const m=void 0!==t.model?new ax.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new ax.SR({id:e.id,value:e.value})))}):void 0;",
+		"const m=void 0!==t.model?new ax.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new ax.SR({id:e.id,value:e.value})))}):void 0;C=!y&&(E?.attribution?.attributeCommitsToAgent??!0),",
 	"dist/bundled/index.js":
-		"F0=m.model!==void 0?new r5({modelId:m.model.id,parameters:(m.model.params??[]).map((W1)=>new j$({id:W1.id,value:W1.value}))}):void 0,H0=",
+		"F0=m.model!==void 0?new r5({modelId:m.model.id,parameters:(m.model.params??[]).map((W1)=>new j$({id:W1.id,value:W1.value}))}):void 0,H0=;let T=L?!1:j?.attribution?.attributeCommitsToAgent??!0;let M=",
 } as const;
 
 function writeFixture(root: string, files: Record<string, string> = FIXTURES): void {
@@ -87,6 +89,9 @@ describe("patch-cursor-sdk", () => {
 		const esm = readFileSync(join(root, "dist/esm/479.js"), "utf8");
 		expect(esm).toContain('.filter((e=>!(e.id==="max_mode"&&e.value==="true")))');
 		expect(esm.split(MARKER).length - 1).toBe(1);
+		expect(esm.split(COMMIT_ATTRIBUTION_MARKER).length - 1).toBe(1);
+		expect(esm).toContain("attributeCommitsToAgent??!1");
+		expect(esm).not.toContain(COMMIT_ATTRIBUTION_ANCHOR);
 
 		const again = runPatch(["--sdk", root]);
 		expect(again.status).toBe(0);
@@ -160,6 +165,20 @@ describe("installed Cursor SDK max-mode anchor", () => {
 		}
 	});
 
+	it("turns the missing attribution provider into commit attribution off, and keeps an explicit value", () => {
+		const targets = TARGETS.filter((entry) => entry.marker === COMMIT_ATTRIBUTION_MARKER);
+		expect(targets).toHaveLength(3);
+		const evaluate = (expression: string, provider: unknown) =>
+			new Function("provider", `const E = provider; return E?.attribution?.${expression}`)(provider) as boolean;
+		for (const target of targets) {
+			expect(evaluate(target.to, undefined), target.rel).toBe(false);
+			expect(evaluate(target.to, {}), target.rel).toBe(false);
+			expect(evaluate(target.to, { attribution: {} }), target.rel).toBe(false);
+			expect(evaluate(target.to, { attribution: { attributeCommitsToAgent: false } }), target.rel).toBe(false);
+			expect(evaluate(target.to, { attribution: { attributeCommitsToAgent: true } }), target.rel).toBe(true);
+		}
+	});
+
 	it("evaluates the patch script's own call shape: maxMode on, sentinel dropped, other params kept", () => {
 		const model = {
 			id: "grok-4.7",
@@ -176,7 +195,7 @@ describe("installed Cursor SDK max-mode anchor", () => {
 				{ id: "fast", value: "false" },
 			],
 		};
-		for (const target of TARGETS) {
+		for (const target of TARGETS.filter((entry) => entry.to.includes("maxMode:"))) {
 			const enabled = evaluatePatchedCall(target.to, model);
 			expect(enabled.maxMode, target.rel).toBe(true);
 			expect(enabled.parameters.map((param) => param.id), target.rel).not.toContain("max_mode");

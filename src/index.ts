@@ -1,3 +1,4 @@
+import { installCursorSpawnFdGuard } from "./cursor-spawn-fd-guard.js";
 import type { ExtensionAPI, ProviderConfig, ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
 import { discoverModels, type CursorModelFallbackIssue } from "./model-discovery.js";
 import { registerCursorRuntimeControls } from "./cursor-state.js";
@@ -71,6 +72,7 @@ export default async function (hostPi: CursorExtensionApi) {
 }
 
 async function registerCursorExtension(pi: CursorExtensionApi, binding: CursorSessionBinding): Promise<void> {
+	installCursorSpawnFdGuard();
 	pi.on("session_start", (_event, ctx) => {
 		markCursorSessionBindingStarted(binding, ctx.sessionManager?.getSessionId?.() ?? undefined, ctx.agent?.kind);
 	});

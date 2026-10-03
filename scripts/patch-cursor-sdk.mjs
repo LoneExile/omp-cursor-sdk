@@ -5,6 +5,13 @@ import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MARKER = "/* omp-cursor-sdk:max-mode-patch */";
+const COMMIT_ATTRIBUTION_MARKER = "/* omp-cursor-sdk:commit-attribution-patch */";
+// @cursor/sdk 1.0.34's local executor never sets attributionConfigProvider.
+// The request context then uses `attributeCommitsToAgent ?? true`, so every
+// local commit gets `Co-authored-by: Cursor <cursoragent@cursor.com>`.
+// `??!1` is the false default. An explicit provider value still wins.
+const COMMIT_ATTRIBUTION_FROM = "attributeCommitsToAgent??!0";
+const COMMIT_ATTRIBUTION_TO = `attributeCommitsToAgent??!1${COMMIT_ATTRIBUTION_MARKER}`;
 
 export const TARGETS = [
 	{
@@ -22,6 +29,12 @@ export const TARGETS = [
 		from: "new r5({modelId:m.model.id,parameters:(m.model.params??[]).map((W1)=>new j$({id:W1.id,value:W1.value}))})",
 		to: `new r5({modelId:m.model.id,maxMode:(m.model.params??[]).some((W1)=>W1.id==="max_mode"&&W1.value==="true")${MARKER},parameters:(m.model.params??[]).filter((W1)=>!(W1.id==="max_mode"&&W1.value==="true")).map((W1)=>new j$({id:W1.id,value:W1.value}))})`,
 	},
+	...["dist/esm/479.js", "dist/cjs/479.js", "dist/bundled/index.js"].map((rel) => ({
+		rel,
+		from: COMMIT_ATTRIBUTION_FROM,
+		to: COMMIT_ATTRIBUTION_TO,
+		marker: COMMIT_ATTRIBUTION_MARKER,
+	})),
 ];
 
 function defaultSdkPath() {
@@ -41,10 +54,15 @@ function printHelp() {
 	console.log(`Usage: node scripts/patch-cursor-sdk.mjs [--check] [--sdk <path>]... [--all]
 
 Patches @cursor/sdk so a model param {id:"max_mode", value:"true"} sets RequestedModel.maxMode
-and is not forwarded as a parameter. Default SDK: this repo's node_modules/@cursor/sdk.
+and is not forwarded as a parameter. The same run changes the local commit-attribution
+default from on to off, so local agents do not add
+Co-authored-by: Cursor <cursoragent@cursor.com> unless an attribution provider
+explicitly enables it. @cursor/sdk 1.0.34's local executor does not set that provider
+and does not read ~/.cursor/cli-config.json. Default SDK: this repo's node_modules/@cursor/sdk.
 --sdk may be repeated. --all also patches ~/.omp/plugins/node_modules/@cursor/sdk when it exists.
-Re-apply after omp plugin install or a dependency reinstall. Max Mode bills higher; leave it off
-unless you want the long-context window.`);
+Re-apply after omp plugin install or a dependency reinstall, then restart omp.
+Max Mode bills higher; omp-cursor-sdk defaults it on—use --cursor-no-max-mode or
+/cursor-max-mode off to opt out.`);
 }
 
 function parseArgs(argv) {
@@ -96,14 +114,14 @@ function inspectFile(sdkRoot, target) {
 	const text = readFileSync(path, "utf8");
 	const patched = count(text, target.to);
 	const anchor = count(text, target.from);
-	const marker = count(text, MARKER);
+	const marker = count(text, target.marker ?? MARKER);
 	if (patched === 1 && anchor === 0 && marker === 1) return { rel: target.rel, status: "patched", path, text };
 	if (anchor === 1 && patched === 0 && marker === 0) return { rel: target.rel, status: "unpatched", path, text, target };
 	return {
 		rel: target.rel,
 		status: "drifted",
 		path,
-		detail: `expected exactly one unpatched anchor or one patched expression with ${MARKER}; found anchor=${anchor} patched=${patched} marker=${marker}`,
+		detail: `expected exactly one unpatched anchor or one patched expression with ${target.marker ?? MARKER}; found anchor=${anchor} patched=${patched} marker=${marker}`,
 	};
 }
 
@@ -140,9 +158,11 @@ function patchSdk(sdkRoot, check) {
 			ok = false;
 			continue;
 		}
-		const next = report.text.replace(report.target.from, report.target.to);
-		if (next === report.text || count(next, report.target.to) !== 1) {
-			fail(`${report.path}: replacement did not produce the Max Mode expression`);
+		// Re-read so a second patch of the same file keeps the first write.
+		const current = readFileSync(report.path, "utf8");
+		const next = current.replace(report.target.from, report.target.to);
+		if (next === current || count(next, report.target.to) !== 1) {
+			fail(`${report.path}: replacement did not produce one ${report.target.marker ?? MARKER} expression`);
 			ok = false;
 			continue;
 		}
