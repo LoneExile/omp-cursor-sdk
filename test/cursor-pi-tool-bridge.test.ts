@@ -258,7 +258,8 @@ describe("cursor pi tool bridge loopback MCP lifecycle", () => {
 
 			expect(run.id).toMatch(/^cursor-pi-bridge-run-[0-9a-f-]{36}$/);
 			expect(request.runId).toBe(run.id);
-			expect(request.piToolCallId).toContain(run.id);
+			expect(request.piToolCallId).not.toContain(run.id);
+			expect(request.piToolCallId.length).toBeLessThanOrEqual(64);
 			expect(request.piToolCallId).not.toBe(historicalSequentialToolCallId);
 			expect(request.bridgeCallId).not.toContain(endpointToken);
 			expect(request.piToolCallId).not.toContain(endpointToken);
@@ -452,7 +453,8 @@ describe("cursor pi tool bridge loopback MCP lifecycle", () => {
 			const [resolvedRequest] = await waitForQueuedRequests(run);
 			expect(resolvedRequest.runId).toBe(run.id);
 			expect(resolvedRequest.bridgeCallId).toContain(run.id);
-			expect(resolvedRequest.piToolCallId).toContain(run.id);
+			expect(resolvedRequest.piToolCallId).not.toContain(run.id);
+			expect(resolvedRequest.piToolCallId).toMatch(/^cursor-pi-bridge-[0-9a-f]{32}-t\d+$/);
 			expect(resolvedRequest.bridgeCallId).not.toContain(endpointToken);
 			expect(resolvedRequest.piToolCallId).not.toContain(endpointToken);
 			await run.resolveToolResultsFromContext({
@@ -697,7 +699,7 @@ describe("cursor pi tool bridge loopback MCP lifecycle", () => {
 		}
 	});
 
-	it("aborts active bridged pi tool execution when the tool context signal aborts", async () => {
+	it("aborts active bridged pi tool execution when the turn ends", async () => {
 		const pi = createBridgePiHarness({
 			active: ["bash"],
 			tools: [createBuiltinToolInfo("bash", Type.Object({ command: Type.String() }), "Run shell commands")],
@@ -711,7 +713,6 @@ describe("cursor pi tool bridge loopback MCP lifecycle", () => {
 			const observedCallError = callPromise.catch((error: unknown) => error);
 			const [request] = await waitForQueuedRequests(run);
 			const agentAbort = vi.fn();
-			const abortController = new AbortController();
 			const bashInput = request.args as { command: string };
 
 			await pi.runToolCall(
@@ -722,19 +723,18 @@ describe("cursor pi tool bridge loopback MCP lifecycle", () => {
 					input: bashInput,
 				},
 				{
-					signal: abortController.signal,
 					abort: agentAbort,
 				},
 			);
 			expect(__testUtils.getActiveBridgeToolExecutionAbortCount()).toBe(1);
 
-			abortController.abort();
+			await pi.runTurnEnd();
 
 			expect(agentAbort).toHaveBeenCalledOnce();
 			expect(__testUtils.getActiveBridgeToolExecutionAbortCount()).toBe(0);
 			const error = await observedCallError;
 			expect(error).toBeInstanceOf(Error);
-			expect((error as Error).message).toMatch(/aborted|MCP error/i);
+			expect((error as Error).message).toMatch(/turn ended|MCP error/i);
 		} finally {
 			await client.close().catch(() => undefined);
 			await transport.close().catch(() => undefined);
@@ -890,8 +890,13 @@ describe("cursor pi tool bridge loopback MCP lifecycle", () => {
 		const { client, transport } = await connectClient(getCursorPiBridgeMcpUrl(run));
 		try {
 			const callPromise = client.callTool({ name: "pi__read", arguments: { path: "README.md" } }).catch((callError: unknown) => callError);
-			await vi.waitFor(() => expect(diagnostics.records().some((record) => record.event === "request_queued")).toBe(true));
-			const queued = diagnostics.records().find((record) => record.event === "request_queued");
+			let queued: (ReturnType<typeof diagnostics.records>[number] & { event: "request_queued" }) | undefined;
+			for (let attempt = 0; attempt < 100; attempt += 1) {
+				queued = diagnostics.records().find((record) => record.event === "request_queued");
+				if (queued) break;
+				await sleep(10);
+			}
+			if (!queued) throw new Error("Timed out waiting for request_queued diagnostic");
 
 			run.setOnToolRequest(() => {
 				throw new Error("handler failed");

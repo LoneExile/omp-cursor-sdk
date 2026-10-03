@@ -1,3 +1,22 @@
+import type { JsonValue } from "@oh-my-pi/pi-ai";
+
+/** Narrow untyped SDK/MCP arguments at the Pi transcript boundary without rewriting them. */
+export function isJsonObject(value: unknown): value is Record<string, JsonValue> {
+	return value !== null && typeof value === "object" && !Array.isArray(value)
+		&& isJsonValue(value, new Set());
+}
+
+function isJsonValue(value: unknown, ancestors: Set<object>): boolean {
+	if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+	if (typeof value === "number") return Number.isFinite(value);
+	if (typeof value !== "object" || ancestors.has(value)) return false;
+	if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) return false;
+	ancestors.add(value);
+	const valid = Object.values(value).every(entry => isJsonValue(entry, ancestors));
+	ancestors.delete(value);
+	return valid;
+}
+
 export function asRecord(value: unknown): Record<string, unknown> | undefined {
 	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }

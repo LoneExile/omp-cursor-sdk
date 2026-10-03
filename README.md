@@ -164,12 +164,12 @@ Cloud is off until you opt in. `--cursor-runtime cloud` or `PI_CURSOR_RUNTIME=cl
 ## When something goes wrong
 
 - **No `cursor-sdk` rows.** The plugin is not loaded, or it is disabled. Run `omp plugin list`. Without a key you still see a small fallback list, and turns fail until `CURSOR_API_KEY` is set. Restart omp after you add the key.
-- **The plugin did not install.** The error names a missing `package.json` under `omp-cursor-sdk` or `github:LoneExile/omp-cursor-sdk`. Not every omp version maps a `github:` spec to the npm name. A failed try can leave `"omp-cursor-sdk": ""` in `~/.omp/plugins/package.json` and a duplicate `bun.lock` key. Reset, install `0.4.4`, and restart omp:
+- **The plugin did not install.** The error names a missing `package.json` under `omp-cursor-sdk` or `github:LoneExile/omp-cursor-sdk`. Not every omp version maps a `github:` spec to the npm name. A failed try can leave `"omp-cursor-sdk": ""` in `~/.omp/plugins/package.json` and a duplicate `bun.lock` key. Reset, install `0.4.5`, and restart omp:
 
   ```bash
   cd ~/.omp/plugins
   rm -f bun.lock
-  bun add omp-cursor-sdk@0.4.4
+  bun add omp-cursor-sdk@0.4.5
   ls node_modules/omp-cursor-sdk/package.json node_modules/@cursor/sdk/package.json
   omp plugin list
   ```

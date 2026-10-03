@@ -13,6 +13,7 @@ import type { SessionCursorAgentLease } from "./cursor-session-agent.js";
 import type { planCursorSessionSend } from "./cursor-session-agent.js";
 import type { CursorSdkEventDebugSink } from "./cursor-sdk-event-debug.js";
 import type { CursorSdkTurnCoordinator } from "./cursor-provider-turn-coordinator.js";
+import type { CursorSdkTurnUsage } from "./cursor-usage-accounting.js";
 import type { CursorPrompt } from "./context.js";
 import type { CursorResolvedSetting } from "./cursor-config.js";
 
@@ -49,6 +50,8 @@ export interface CursorProviderTurnSendMeta {
 
 interface CursorProviderTurnRuntimeBase {
 	turnCoordinator: CursorSdkTurnCoordinator;
+	/** Billed getUsage() token totals for this turn. Absent when getUsage failed or returned none. */
+	billedTurnUsage?: CursorSdkTurnUsage;
 }
 
 /**

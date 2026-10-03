@@ -93,14 +93,20 @@ function getCursorSdkUncachedInputTokens(turnUsage: CursorSdkTurnUsage): number 
 	return turnUsage.inputTokens - turnUsage.cacheReadTokens - turnUsage.cacheWriteTokens;
 }
 
-export function isCursorSdkUsageSafeForPiMessage(turnUsage: CursorSdkTurnUsage, model: Model<Api>): boolean {
+export function isCursorSdkUsagePartitionSafe(turnUsage: CursorSdkTurnUsage, model: Model<Api>): boolean {
 	const counts = [turnUsage.inputTokens, turnUsage.outputTokens, turnUsage.cacheReadTokens, turnUsage.cacheWriteTokens];
 	const uncachedInput = getCursorSdkUncachedInputTokens(turnUsage);
 	return (
 		counts.every((count) => Number.isFinite(count) && count >= 0) &&
 		Number.isFinite(uncachedInput) &&
 		uncachedInput >= 0 &&
-		(model.maxTokens === null || turnUsage.outputTokens <= model.maxTokens) &&
+		(model.maxTokens === null || turnUsage.outputTokens <= model.maxTokens)
+	);
+}
+
+export function isCursorSdkUsageSafeForPiMessage(turnUsage: CursorSdkTurnUsage, model: Model<Api>): boolean {
+	return (
+		isCursorSdkUsagePartitionSafe(turnUsage, model) &&
 		(model.contextWindow === null || turnUsage.inputTokens + turnUsage.outputTokens <= model.contextWindow)
 	);
 }
@@ -171,13 +177,29 @@ export function applyCursorUsage(
 	model: Model<Api>,
 	context: Context,
 	sessionInputTokens: number,
-	sdkUsage?: { runtime: CursorRuntime; turn?: CursorSdkTurnUsage },
+	sdkUsage?: { runtime: CursorRuntime; turn?: CursorSdkTurnUsage; billed?: CursorSdkTurnUsage },
 ): void {
+	const billed = sdkUsage?.billed;
+	const localTurn = sdkUsage?.runtime === "local" ? sdkUsage.turn : undefined;
+	// Billed getUsage() rows are spend. Host totalTokens stays context occupancy:
+	// a safe local turn-ended count when we have one, otherwise the existing estimate.
+	// Cent fields on AgentUsage are not copied; model rates are zero.
+	if (billed && isCursorSdkUsagePartitionSafe(billed, model)) {
+		applyCursorSdkUsage(partial, billed);
+		if (localTurn && isCursorSdkUsageSafeForPiMessage(localTurn, model)) {
+			partial.usage.totalTokens = localTurn.inputTokens + localTurn.outputTokens;
+		} else {
+			partial.usage.totalTokens = Math.max(
+				estimateCursorContextTotalTokens(partial, model, context),
+				getLastAcceptedContextOccupancy(context, model),
+			);
+		}
+		return;
+	}
 	// Only local raw turn-ended usage has a captured full-prompt/cache-partition contract.
 	// Cloud raw usage remains display-only until its field semantics are independently observed.
-	const usage = sdkUsage?.runtime === "local" ? sdkUsage.turn : undefined;
-	if (usage && isCursorSdkUsageSafeForPiMessage(usage, model)) {
-		applyCursorSdkUsage(partial, usage);
+	if (localTurn && isCursorSdkUsageSafeForPiMessage(localTurn, model)) {
+		applyCursorSdkUsage(partial, localTurn);
 		return;
 	}
 	applyCursorApproximateUsage(partial, model, context, sessionInputTokens);

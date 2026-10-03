@@ -15,6 +15,7 @@ This repository is an omp (oh-my-pi) plugin, ported from the Pi extension fitchm
 - `src/cursor-one-shot-request.ts` owns request routing (one-shot vs pooled agent, main conversation vs other omp agent loops such as advisors, recognized by their `advise` tool whether omp sends its tools natively or in-band under `PI_DIALECT`) and the Cursor built-in tool allowlist (`getCursorBuiltInToolAllowlist`: an omp advisor gets only the read-only `read`/`grep`/`glob` that omp granted, a compaction or branch summarizer gets none).
 - `src/cursor-provider-turn-send.ts` owns SDK `agent.send()` wiring and abort listener registration.
 - `src/cursor-provider-turn-finalize.ts` owns unified `awaitFinalizeCursorRunOutcome()` (wait, transcript replay, incomplete tools, artifacts, context cache).
+- `src/cursor-sdk-billed-usage.ts` copies `agent.getUsage()` token totals onto the host usage result; a missing or failed read leaves the turn's existing usage unchanged.
 - `src/cursor-provider-turn-emit.ts` owns live vs direct emission from finalized outcomes.
 - `src/cursor-provider-turn-types.ts` owns immutable turn phase data and explicit phase result types; phase-local cleanup stays inside the owning phase.
 - `src/cursor-provider-run-outcome.ts` owns the discriminated `CursorRunOutcome` model and terminal emission classification.

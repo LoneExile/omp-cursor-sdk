@@ -52,6 +52,8 @@ export interface CursorLiveRun {
 	recordedToolDisplayIds: string[];
 	finalText?: string;
 	resumeNotice?: string;
+	/** Billed getUsage() token totals stored by finalize before the run is marked done. */
+	billedTurnUsage?: CursorSdkTurnUsage;
 	done: boolean;
 	cancelled: boolean;
 	disposed: boolean;

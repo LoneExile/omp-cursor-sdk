@@ -1,14 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.4.5 - 2026-10-03
+
+### Added
+
+- After a successful run, token counts on the host usage result come from `agent.getUsage()` when that read returns them: uncached input, output, cache read, and cache write. A missing, failed, or empty read leaves the turn's existing usage unchanged. `chargedCents` and `rawCostCents` are not copied. Cloud agents pass a `run-` id into `getUsage()`. Local agents do not, because the installed SDK throws `ConfigurationError` for a client-side `run-` id.
 
 ### Fixed
 
+- Pi bridge tool-call ids stay within 64 characters. The 10th call in one run used to be `cursor-pi-bridge-run-<uuid>-tool-10` (65 characters), which OpenAI-compatible backends reject. New ids are `cursor-pi-bridge-` plus the run UUID with hyphens removed, plus `-t` and the counter. Older ids are still recognized so a stale call is blocked.
+- Replay and bridge tool arguments that are not a JSON object are rejected before they are written onto the host transcript.
 - CI patches `@cursor/sdk` before the test job. Max Mode defaults on, so a fresh install failed four prepare tests with "SDK is not patched" before those tests reached the cloud and advisor checks.
 
 ### Changed
 
-- The README install steps now include the SDK patch. A turn fails until that patch is applied, because Max Mode is on by default.
+- The README install steps now include the SDK patch, and the recovery pin is `omp-cursor-sdk@0.4.5`. A turn fails until that patch is applied, because Max Mode is on by default.
 
 ## 0.4.4 - 2026-10-03
 
