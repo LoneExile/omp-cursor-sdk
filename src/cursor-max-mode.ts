@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ModelSelection } from "@cursor/sdk";
-import { findCursorSdkPackageDir } from "./cursor-sdk-runtime.js";
+import { findCursorSdkPackageDir } from "./cursor-sdk-package-dir.js";
 
 export const CURSOR_MAX_MODE_PATCH_MARKER = "/* omp-cursor-sdk:max-mode-patch */";
 export const CURSOR_MAX_MODE_PARAM = { id: "max_mode", value: "true" } as const;

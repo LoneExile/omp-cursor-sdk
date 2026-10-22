@@ -55,6 +55,8 @@ interface PendingBridgeCall {
 	onAbort?: () => void;
 	timeout?: ReturnType<typeof setTimeout>;
 	settled: boolean;
+	/** omp has produced this call's tool result (completed, failed or aborted); only a provider request can still resolve it. */
+	hostResultReady: boolean;
 }
 
 export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
@@ -71,6 +73,7 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 	private readonly knownMcpToolNames: ReadonlySet<string>;
 	private readonly knownCursorMcpCallIds = new Set<string>();
 	private readonly queuedRequests: CursorPiBridgeToolRequest[] = [];
+	private readonly executingToolCallListeners = new Set<() => void>();
 	private readonly pendingByPiToolCallId = new Map<string, PendingBridgeCall>();
 	private readonly pendingByBridgeCallId = new Map<string, PendingBridgeCall>();
 	private readonly pendingByCursorMcpCallId = new Map<string, PendingBridgeCall>();
@@ -195,6 +198,34 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 		return this.pendingByPiToolCallId.has(piToolCallId);
 	}
 
+	hasExecutingToolCalls(): boolean {
+		for (const pending of this.pendingByBridgeCallId.values()) {
+			if (!pending.hostResultReady) return true;
+		}
+		return false;
+	}
+
+	onExecutingToolCallsChanged(listener: () => void): () => void {
+		// A per-subscription wrapper keeps unsubscribe idempotent and independent when one listener is added twice.
+		const subscription = (): void => listener();
+		this.executingToolCallListeners.add(subscription);
+		return () => {
+			this.executingToolCallListeners.delete(subscription);
+		};
+	}
+
+	/**
+	 * omp finished with a pending call (its `tool_result` was produced, including for an abort). The call stays
+	 * pending until a provider request resolves it or the run is cancelled, but it stops counting as executing.
+	 */
+	markPiToolResultReady(piToolCallId: string): boolean {
+		const pending = this.pendingByPiToolCallId.get(piToolCallId);
+		if (!pending || pending.hostResultReady) return false;
+		pending.hostResultReady = true;
+		this.notifyExecutingToolCallsChanged();
+		return true;
+	}
+
 	cancelPendingPiToolCallId(piToolCallId: string, reason: string): boolean {
 		const pending = this.pendingByPiToolCallId.get(piToolCallId);
 		if (!pending) return false;
@@ -239,6 +270,7 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 		if (this.disposed) return;
 		this.disposed = true;
 		this.cancel("Cursor pi tool bridge run disposed");
+		this.executingToolCallListeners.clear();
 		await waitForProtocolFlush();
 		await Promise.allSettled([
 			this.mcpTransport?.close(),
@@ -307,6 +339,7 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 				reject,
 				signal,
 				settled: false,
+				hostResultReady: false,
 			};
 			pending.onAbort = () => {
 				this.rejectAndAbortPending(pending, new Error("Cursor MCP bridge tool request was aborted"), "cancelled");
@@ -320,6 +353,7 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 			this.pendingByBridgeCallId.set(request.bridgeCallId, pending);
 			this.pendingByCursorMcpCallId.set(cursorMcpCallId, pending);
 			this.knownCursorMcpCallIds.add(cursorMcpCallId);
+			this.notifyExecutingToolCallsChanged();
 			pending.timeout = setTimeout(() => {
 				const reason = `Cursor pi bridge CallTool timed out after ${this.callTimeoutMs} ms`;
 				this.rejectAndAbortPending(pending, new Error(reason));
@@ -427,6 +461,17 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 		this.emitDiagnostic({ event: "request_rejected", ...this.requestDiagnosticFields(request), rejectionKind });
 	}
 
+	private notifyExecutingToolCallsChanged(): void {
+		if (this.executingToolCallListeners.size === 0) return;
+		for (const subscription of [...this.executingToolCallListeners]) {
+			try {
+				subscription();
+			} catch {
+				// Observers must not prevent call registration or protocol settlement.
+			}
+		}
+	}
+
 	private emitDiagnostic(event: CursorPiToolBridgeDiagnosticEvent): void {
 		writeCursorPiToolBridgeDiagnostic(this.env, event, this.debugRecorder);
 	}
@@ -439,9 +484,10 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 		if (pending.onAbort) pending.signal?.removeEventListener("abort", pending.onAbort);
 		if (pending.timeout) clearTimeout(pending.timeout);
 		this.pendingByPiToolCallId.delete(pending.request.piToolCallId);
-		this.pendingByBridgeCallId.delete(pending.request.bridgeCallId);
+		const removed = this.pendingByBridgeCallId.delete(pending.request.bridgeCallId);
 		if (pending.request.cursorMcpCallId) this.pendingByCursorMcpCallId.delete(pending.request.cursorMcpCallId);
 		const queuedIndex = this.queuedRequests.findIndex((request) => request.bridgeCallId === pending.request.bridgeCallId);
 		if (queuedIndex >= 0) this.queuedRequests.splice(queuedIndex, 1);
+		if (removed && !pending.hostResultReady) this.notifyExecutingToolCallsChanged();
 	}
 }

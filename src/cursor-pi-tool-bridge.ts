@@ -132,6 +132,10 @@ export function registerCursorPiToolBridge(pi: CursorPiToolBridgeExtensionApi): 
 		});
 		pi.on("tool_result", (event) => {
 			bridge.abortTracker.finish(event.toolCallId);
+			// omp emits tool_result once it is done with the call, for a completed, failed or aborted
+			// execution alike. The MCP call stays pending until the next provider request resolves it,
+			// but it no longer holds the live run against idle disposal.
+			bridge.markPiToolResultReady(event.toolCallId);
 		});
 	};
 	const bridge = new CursorPiToolBridgeRegistry(pi, process.env, attachToolHooks);

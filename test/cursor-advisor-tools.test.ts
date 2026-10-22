@@ -279,7 +279,6 @@ describe("local prepare", () => {
 				resolvedConfig: resolveCursorProviderTurnConfig("/tmp/project"),
 				...route,
 			});
-			prepared.restoreCursorSdkOutputFilter();
 			await prepared.lifecycle.dispose();
 			return { createOptions: create.mock.calls[0]?.[0], promptText: prepared.payload.text };
 		} finally {

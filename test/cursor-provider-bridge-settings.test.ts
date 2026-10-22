@@ -162,8 +162,10 @@ describe("streamCursor bridge settings", () => {
 				process.stdout.write('18:05:57.959 INFO  managed_skills.removed ctx=syncBuiltinSkills meta={skill_id: "clone"}\n');
 				process.stderr.write('18:05:57.961 INFO  managed_skills.removed ctx=syncBuiltinSkills meta={skill_id: "cursor"}\n');
 				console.log('18:05:57.962 INFO  managed_skills.removed ctx=syncBuiltinSkills meta={skill_id: "cursor-sdk"}');
-				process.stderr.write("Error initializing ignore mapping for /tmp/project: permission denied\n");
-				console.warn("Ripgrep path not configured. Call configureRipgrepPath() at startup.");
+				console.error(
+					"Error initializing ignore mapping for .gitignore:",
+					new Error("Ripgrep path not configured. Call configureRipgrepPath() at startup."),
+				);
 				return asMockCursorRun({
 					id: "run-1",
 					agentId: "agent-1",

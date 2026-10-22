@@ -144,7 +144,6 @@ export class CursorRunFinalizer {
 		sendResult: CursorProviderTurnSendResult | undefined,
 		liveCompletion: CursorLiveRunCompletion | undefined,
 	): Promise<void> {
-		this.safeCleanup(() => prepared?.restoreCursorSdkOutputFilter());
 		const abortRegistration = sendResult?.abortRegistration;
 		this.params.runnerParams.sdkEventDebugRef.current = undefined;
 		if (liveCompletion) {

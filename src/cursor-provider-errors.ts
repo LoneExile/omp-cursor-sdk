@@ -115,37 +115,49 @@ function getErrorEvidenceField(
 	return undefined;
 }
 
-function collectConnectErrorEvidence(error: unknown, record: Record<string, unknown> | undefined): string {
-	const evidence: string[] = [];
+// @cursor/sdk's convertConnectError re-wraps a ConnectError (as a NetworkError for Unavailable,
+// DeadlineExceeded and Internal) and keeps the original only on `cause`; the wrapper has no `details`
+// of its own. The ConnectError, its evidence, stacks and details are read from the error and at most
+// this many errors down its `cause` chain, so neither a cycle nor a deep chain is walked unbounded.
+const CAUSE_CHAIN_MAX_LINKS = 3;
+
+interface CauseChainLink {
+	value: unknown;
+	record: Record<string, unknown>;
+}
+
+function collectCauseChain(error: unknown, record: Record<string, unknown> | undefined): CauseChainLink[] {
+	const chain: CauseChainLink[] = [];
+	const seen = new Set<Record<string, unknown>>();
 	let value = error;
 	let currentRecord = record;
-	for (let depth = 0; depth < 3 && currentRecord; depth += 1) {
-		for (const key of CONNECT_ERROR_EVIDENCE_KEYS) {
-			const field = getErrorEvidenceField(value, currentRecord, key)?.trim();
-			if (field) evidence.push(field);
-		}
+	while (currentRecord && chain.length < CAUSE_CHAIN_MAX_LINKS && !seen.has(currentRecord)) {
+		seen.add(currentRecord);
+		chain.push({ value, record: currentRecord });
 		value = currentRecord.cause;
 		currentRecord = asRecord(value);
+	}
+	return chain;
+}
+
+function collectConnectErrorEvidence(chain: readonly CauseChainLink[]): string {
+	const evidence: string[] = [];
+	for (const { value, record } of chain) {
+		for (const key of CONNECT_ERROR_EVIDENCE_KEYS) {
+			const field = getErrorEvidenceField(value, record, key)?.trim();
+			if (field) evidence.push(field);
+		}
 	}
 	return evidence.join("\n");
 }
 
-function collectConnectErrorStacks(error: unknown, record: Record<string, unknown> | undefined): string {
+function collectConnectErrorStacks(chain: readonly CauseChainLink[]): string {
 	const stacks: string[] = [];
-	let value = error;
-	let currentRecord = record;
-	for (let depth = 0; depth < 3 && currentRecord; depth += 1) {
-		const stack = getErrorStack(value, currentRecord).trim();
+	for (const { value, record } of chain) {
+		const stack = getErrorStack(value, record).trim();
 		if (stack) stacks.push(stack);
-		value = currentRecord.cause;
-		currentRecord = asRecord(value);
 	}
 	return stacks.join("\n");
-}
-
-function isConnectError(error: unknown, record: Record<string, unknown> | undefined): boolean {
-	const name = error instanceof Error ? error.name : getErrorStringField(record, "name");
-	return name === "ConnectError";
 }
 
 function isUnauthenticatedConnectCode(code: unknown): boolean {
@@ -185,14 +197,14 @@ export function isCursorSdkConnectionStalledError(error: unknown): boolean {
 // @cursor/sdk 1.0.34 bundles its Connect Node transport into its own dist files, so a transport
 // error's frames carry the SDK's `node_modules/@cursor/sdk/dist` path and never a
 // `@connectrpc/connect-node` one (1.0.32 imported that package from node_modules).
-function getCursorConnectSource(error: unknown, record: Record<string, unknown> | undefined): CursorConnectErrorSource {
-	const stack = getErrorStack(error, record);
-	if (stack.includes("@cursor/sdk")) return "cursor-sdk-stack";
-	const details = Array.isArray(record?.details) ? record.details : [];
-	const hasCursorBackendDetails = details.some((detail) => {
-		const type = getErrorStringField(asRecord(detail), "type");
-		return typeof type === "string" && type.startsWith("aiserver.");
-	});
+function getCursorConnectSource(chain: readonly CauseChainLink[], stackEvidence: string): CursorConnectErrorSource {
+	if (stackEvidence.includes("@cursor/sdk")) return "cursor-sdk-stack";
+	const hasCursorBackendDetails = chain.some(({ record }) =>
+		(Array.isArray(record.details) ? record.details : []).some((detail) => {
+			const type = getErrorStringField(asRecord(detail), "type");
+			return typeof type === "string" && type.startsWith("aiserver.");
+		}),
+	);
 	if (hasCursorBackendDetails) return "cursor-backend-details";
 	return "generic-connect";
 }
@@ -204,20 +216,30 @@ export type CursorConnectErrorClassification =
 	| { kind: "unauthenticated"; source: CursorConnectErrorSource }
 	| { kind: "network"; source: CursorConnectErrorSource };
 
+/**
+ * Classifies a ConnectError, or an error whose `cause` chain holds one (see `CAUSE_CHAIN_MAX_LINKS`), such as the
+ * NetworkError @cursor/sdk 1.0.34 wraps around an Unavailable ConnectError. Code and details come from the
+ * ConnectError, and SDK provenance (an `@cursor/sdk` stack frame or `aiserver.*` details) from any error in the chain.
+ * A wrapped ConnectError is never an abort: only the SDK transport's own canceled ConnectError has an observed shape.
+ */
 export function classifyCursorConnectError(error: unknown): CursorConnectErrorClassification | undefined {
 	const record = asRecord(error);
-	if (!isConnectError(error, record)) return undefined;
+	const chain = collectCauseChain(error, record);
+	const connectIndex = chain.findIndex((link) => getErrorName(link.value, link.record) === "ConnectError");
+	if (connectIndex < 0) return undefined;
 
 	const message = error instanceof Error ? error.message : getErrorStringField(record, "message") ?? "";
 	const rawMessage = getErrorStringField(record, "rawMessage") ?? message;
-	const code = record?.code;
+	const code = chain[connectIndex].record.code;
 	const cause = asRecord(record?.cause);
 	const causeName = getErrorStringField(cause, "name");
 	const stack = getErrorStack(error, record);
-	const evidence = collectConnectErrorEvidence(error, record);
-	const stackEvidence = collectConnectErrorStacks(error, record);
+	const evidence = collectConnectErrorEvidence(chain);
+	const stackEvidence = collectConnectErrorStacks(chain);
+	const source = getCursorConnectSource(chain, stackEvidence);
 
 	if (
+		connectIndex === 0 &&
 		(code === 1 || code === "canceled") &&
 		Boolean(rawMessage && /(?:operation was aborted|canceled)/i.test(rawMessage)) &&
 		(causeName === "AbortError" || /AbortError/.test(stack)) &&
@@ -227,19 +249,19 @@ export function classifyCursorConnectError(error: unknown): CursorConnectErrorCl
 	}
 
 	if (isCursorSdkStallAbortNetworkError(code, evidence, stackEvidence)) {
-		return { kind: "network", source: getCursorConnectSource(error, record) };
+		return { kind: "network", source };
 	}
 
 	if (isUnauthenticatedConnectCode(code) || isLikelyAuthError(evidence)) {
-		return { kind: "unauthenticated", source: getCursorConnectSource(error, record) };
+		return { kind: "unauthenticated", source };
 	}
 
 	if (isUnavailableConnectCode(code)) {
-		return { kind: "network", source: getCursorConnectSource(error, record) };
+		return { kind: "network", source };
 	}
 
 	if (isLikelyNetworkTimeout(evidence)) {
-		return { kind: "network", source: getCursorConnectSource(error, record) };
+		return { kind: "network", source };
 	}
 
 	return undefined;

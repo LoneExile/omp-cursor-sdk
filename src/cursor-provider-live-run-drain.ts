@@ -31,14 +31,32 @@ import { partitionNativeToolsByActiveContext } from "./cursor-native-replay-rout
 import type { CursorSdkEventDebugRecorder } from "./cursor-sdk-event-debug.js";
 import { isJsonObject } from "./cursor-record-utils.js";
 
-export const DEFAULT_CURSOR_NATIVE_REPLAY_IDLE_DISPOSE_MS = 5 * 60 * 1000;
+export const CURSOR_LIVE_RUN_IDLE_DISPOSE_MS_ENV = "PI_CURSOR_LIVE_RUN_IDLE_DISPOSE_MS";
+export const DEFAULT_CURSOR_LIVE_RUN_IDLE_DISPOSE_MS = 5 * 60 * 1000;
+/** Largest delay `setTimeout` accepts (a signed 32-bit integer); Node resets a larger delay to 1 ms. */
+const MAX_CURSOR_LIVE_RUN_IDLE_DISPOSE_MS = 2147483647;
+
+/**
+ * How long an idle live run waits before it is released. Only an ASCII decimal integer from 1 to
+ * 2147483647 is honored; anything else (unset, blank, signed, padded with whitespace or a newline,
+ * fractional, out of range) falls back to the five-minute default.
+ */
+export function resolveCursorLiveRunIdleDisposeMs(env: Record<string, string | undefined> = process.env): number {
+	const raw = env[CURSOR_LIVE_RUN_IDLE_DISPOSE_MS_ENV];
+	if (raw === undefined || !/^[0-9]+$/.test(raw)) return DEFAULT_CURSOR_LIVE_RUN_IDLE_DISPOSE_MS;
+	const value = Number(raw);
+	return value >= 1 && value <= MAX_CURSOR_LIVE_RUN_IDLE_DISPOSE_MS ? value : DEFAULT_CURSOR_LIVE_RUN_IDLE_DISPOSE_MS;
+}
+
 const CURSOR_NATIVE_REPLAY_TOOL_ID_PATTERN = /^(cursor-replay-\d+-\d+)-tool-\d+$/;
 
 interface CursorLiveTurnState {
 	emitter: CursorPartialContentEmitter;
 	emittedText: string;
 }
-let cursorNativeReplayIdleDisposeMs = DEFAULT_CURSOR_NATIVE_REPLAY_IDLE_DISPOSE_MS;
+
+/** Explicit test override of the idle disposal window; it outranks the environment variable. */
+let cursorLiveRunIdleDisposeMsOverride: number | undefined;
 
 type CursorLiveRunDrainMode = "emit" | "chain_user_input";
 type CursorLiveRunDrainOutcome = "tool_use" | "stop" | "error" | "aborted" | "chain_user_input";
@@ -52,7 +70,8 @@ export async function abandonSessionCursorAgent(scopeKey: string | undefined): P
 }
 
 export const cursorLiveRuns = createCursorLiveRunCoordinator({
-	getIdleDisposeMs: () => cursorNativeReplayIdleDisposeMs,
+	// Resolved each time the timer is armed, so the environment variable is read per arm.
+	getIdleDisposeMs: () => cursorLiveRunIdleDisposeMsOverride ?? resolveCursorLiveRunIdleDisposeMs(),
 	deleteNativeToolDisplay: deleteCursorNativeToolDisplay,
 	abandonSessionAgent: (scopeKey) => abandonSessionCursorAgent(scopeKey),
 });
@@ -498,12 +517,12 @@ export async function drainExistingCursorLiveRunBeforeSend(
 	}
 }
 
-export function setCursorNativeReplayIdleDisposeMs(value: number): void {
-	cursorNativeReplayIdleDisposeMs = value;
+export function setCursorLiveRunIdleDisposeMs(value: number): void {
+	cursorLiveRunIdleDisposeMsOverride = value;
 }
 
-export function resetCursorNativeReplayIdleDisposeMs(): void {
-	cursorNativeReplayIdleDisposeMs = DEFAULT_CURSOR_NATIVE_REPLAY_IDLE_DISPOSE_MS;
+export function resetCursorLiveRunIdleDisposeMs(): void {
+	cursorLiveRunIdleDisposeMsOverride = undefined;
 }
 
 export async function releaseAllPendingCursorLiveRunsForTests(): Promise<void> {

@@ -114,7 +114,7 @@ export interface CursorLiveRunCoordinator {
 type CursorLiveBridgeMatcher = Pick<CursorPiToolBridgeRun, "hasPendingPiToolCallId">;
 
 function isPendingBridgeToolRequest(run: CursorLiveRun, request: CursorPiBridgeToolRequest): boolean {
-	const bridgeRun = [run.bridgeRun, run.sessionBridgeRun].find((candidate) => candidate?.id === request.runId);
+	const bridgeRun = getOwnedBridgeRuns(run).find((candidate) => candidate.id === request.runId);
 	return bridgeRun?.hasPendingPiToolCallId(request.piToolCallId) === true;
 }
 
@@ -155,10 +155,23 @@ async function cancelCursorLiveSdkRun(run: CursorLiveRun): Promise<void> {
 interface CursorLiveRunPrivateState {
 	waiters: Set<ProgressWaiter>;
 	idleDisposeTimer?: ReturnType<typeof setTimeout>;
+	/** Idle disposal was asked for but is held back (a lease is open or an owned bridge call is executing) until that clears. */
 	idleDisposeRequested: boolean;
+	/** Detachers for the executing-call observers this run attached to its owned bridge runs. */
+	executingCallUnsubscribers: Array<() => void>;
 	leased: boolean;
 	leaseQueue: LeaseWaiter[];
 	releasing?: Promise<void>;
+}
+
+function createPrivateState(): CursorLiveRunPrivateState {
+	return {
+		waiters: new Set(),
+		idleDisposeRequested: false,
+		executingCallUnsubscribers: [],
+		leased: false,
+		leaseQueue: [],
+	};
 }
 
 export function hasTrailingUserMessagesAfterToolResults(context: Context): boolean {
@@ -192,6 +205,19 @@ function isSuccessfulCursorLiveRun(run: CursorLiveRun): boolean {
 	return run.done && !run.cancelled && !run.errorMessage;
 }
 
+/** Distinct bridge runs a live run owns: `bridgeRun` and `sessionBridgeRun` can be the same object. */
+function getOwnedBridgeRuns(run: CursorLiveRun): CursorPiToolBridgeRun[] {
+	const owned: CursorPiToolBridgeRun[] = [];
+	if (run.bridgeRun) owned.push(run.bridgeRun);
+	if (run.sessionBridgeRun && run.sessionBridgeRun !== run.bridgeRun) owned.push(run.sessionBridgeRun);
+	return owned;
+}
+
+/** Only this run's lease and the calls omp is still executing on its own bridges hold idle disposal back; other runs and sessions never do. */
+function isIdleDisposeBlocked(run: CursorLiveRun, state: CursorLiveRunPrivateState): boolean {
+	return state.leased || state.leaseQueue.length > 0 || getOwnedBridgeRuns(run).some((bridge) => bridge.hasExecutingToolCalls());
+}
+
 export function createCursorLiveRunCoordinator(deps: CursorLiveRunCoordinatorDeps): CursorLiveRunCoordinator {
 	const pendingRuns = new Map<string, CursorLiveRun>();
 	const pendingRunIdsByScopeKey = new Map<string, string>();
@@ -201,12 +227,7 @@ export function createCursorLiveRunCoordinator(deps: CursorLiveRunCoordinatorDep
 	function getPrivateState(run: CursorLiveRun): CursorLiveRunPrivateState {
 		let state = privateStates.get(run);
 		if (!state) {
-			state = {
-				waiters: new Set(),
-				idleDisposeRequested: false,
-				leased: false,
-				leaseQueue: [],
-			};
+			state = createPrivateState();
 			privateStates.set(run, state);
 		}
 		return state;
@@ -309,12 +330,17 @@ export function createCursorLiveRunCoordinator(deps: CursorLiveRunCoordinatorDep
 				chainUserInputAfterCompletion: false,
 				debugRecorder: params.debugRecorder,
 			};
-			privateStates.set(run, {
-				waiters: new Set(),
-				idleDisposeRequested: false,
-				leased: false,
-				leaseQueue: [],
-			});
+			const state = createPrivateState();
+			privateStates.set(run, state);
+			for (const bridge of getOwnedBridgeRuns(run)) {
+				state.executingCallUnsubscribers.push(
+					bridge.onExecutingToolCallsChanged(() => {
+						// Only a run already waiting to be idled out reacts: a new executing call cancels an armed
+						// timer, and the last one finishing arms the full window again.
+						if (state.idleDisposeRequested || state.idleDisposeTimer) coordinator.requestIdleDispose(run);
+					}),
+				);
+			}
 			pendingRuns.set(run.id, run);
 			pendingRunIdsByScopeKey.set(sessionAgentScopeKey, run.id);
 			return run;
@@ -499,7 +525,7 @@ export function createCursorLiveRunCoordinator(deps: CursorLiveRunCoordinatorDep
 			const state = getPrivateState(run);
 			clearIdleDisposeTimer(run);
 			state.idleDisposeRequested = true;
-			if (state.leased || state.leaseQueue.length > 0) return;
+			if (isIdleDisposeBlocked(run, state)) return;
 			state.idleDisposeRequested = false;
 			state.idleDisposeTimer = setTimeout(() => {
 				void coordinator.release(run).catch(() => {
@@ -516,6 +542,13 @@ export function createCursorLiveRunCoordinator(deps: CursorLiveRunCoordinatorDep
 				if (run.disposed) return;
 				const abandoned = !isSuccessfulCursorLiveRun(run);
 				run.disposed = true;
+				for (const unsubscribe of state.executingCallUnsubscribers.splice(0)) {
+					try {
+						unsubscribe();
+					} catch {
+						// Release must still cancel and dispose even if an observer cannot detach.
+					}
+				}
 				unregister(run);
 				clearIdleDisposeTimer(run);
 				state.idleDisposeRequested = false;

@@ -674,7 +674,7 @@ describe("streamCursor native replay live run", () => {
 
 	it("does not let idle disposal release an active run while pre-send drain owns it", async () => {
 		process.env.PI_CURSOR_NATIVE_TOOL_DISPLAY = "1";
-		cursorProviderTestUtils.setCursorNativeReplayIdleDisposeMs(10);
+		cursorProviderTestUtils.setCursorLiveRunIdleDisposeMs(10);
 		const registeredTools: RegisteredTool[] = [];
 		await registerNativeToolDisplayForTest(registeredTools);
 

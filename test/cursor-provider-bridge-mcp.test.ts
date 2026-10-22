@@ -508,10 +508,10 @@ describe("streamCursor bridge MCP", () => {
 		expect(hasEventType(events, "toolcall_start")).toBe(false);
 	});
 
-	it("rejects pending bridge MCP waits, clears live runs on idle disposal, and abandons the session agent", async () => {
+	it("rejects a pending bridge MCP wait on idle disposal once omp has produced its tool result, and abandons the session agent", async () => {
 		process.env.PI_CURSOR_EXPOSE_BUILTIN_TOOLS = "1";
-		cursorProviderTestUtils.setCursorNativeReplayIdleDisposeMs(1);
-		registerBridgeForProviderTest({
+		cursorProviderTestUtils.setCursorLiveRunIdleDisposeMs(1);
+		const { pi } = registerBridgeForProviderTest({
 			active: ["read"],
 			tools: [createTestToolInfo("read", Type.Object({ path: Type.String() }), "Read files")],
 		});
@@ -543,6 +543,18 @@ describe("streamCursor bridge MCP", () => {
 
 			expect(firstDone.reason).toBe("toolUse");
 			expect(cursorProviderTestUtils.pendingCursorNativeRunCount()).toBe(1);
+			// While omp is still executing the bridged call, the run is held against idle disposal.
+			// omp finishing it (here: aborted before a next provider request) releases that hold.
+			const [toolCall] = firstDone.message.content.filter(isToolCallBlock);
+			await pi.runToolResult({
+				type: "tool_result",
+				toolCallId: toolCall.id,
+				toolName: toolCall.name,
+				input: toolCall.arguments,
+				content: [{ type: "text", text: "aborted" }],
+				isError: true,
+				details: undefined,
+			});
 
 			await vi.waitFor(() => expect(cursorProviderTestUtils.pendingCursorNativeRunCount()).toBe(0));
 			const error = await callErrorPromise;

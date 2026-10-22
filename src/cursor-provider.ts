@@ -9,12 +9,12 @@ import {
 } from "@oh-my-pi/pi-ai";
 import {
 	cursorLiveRuns,
-	DEFAULT_CURSOR_NATIVE_REPLAY_IDLE_DISPOSE_MS,
+	DEFAULT_CURSOR_LIVE_RUN_IDLE_DISPOSE_MS,
 	getPendingCursorLiveRun,
 	hasTrailingUserMessagesAfterToolResults,
 	releaseAllPendingCursorLiveRunsForTests,
-	resetCursorNativeReplayIdleDisposeMs,
-	setCursorNativeReplayIdleDisposeMs,
+	resetCursorLiveRunIdleDisposeMs,
+	setCursorLiveRunIdleDisposeMs,
 } from "./cursor-provider-live-run-drain.js";
 import { disposeAllSessionCursorAgents, disposeSupersededSessionConversations } from "./cursor-session-agent.js";
 import { attachCursorSdkEventDebugPiStreamTap, type CursorSdkEventDebugSink } from "./cursor-sdk-event-debug.js";
@@ -138,13 +138,13 @@ function streamCursorInSession(
 }
 
 export const __testUtils = {
-	DEFAULT_CURSOR_NATIVE_REPLAY_IDLE_DISPOSE_MS,
+	DEFAULT_CURSOR_LIVE_RUN_IDLE_DISPOSE_MS,
 	pendingCursorNativeRunCount: cursorLiveRuns.count,
 	getPendingCursorLiveRun,
 	getActiveCursorLiveRunForScope: cursorLiveRuns.getActiveForScope,
 	hasTrailingUserMessagesAfterToolResults,
-	setCursorNativeReplayIdleDisposeMs,
-	resetCursorNativeReplayIdleDisposeMs,
+	setCursorLiveRunIdleDisposeMs,
+	resetCursorLiveRunIdleDisposeMs,
 	releaseAllPendingCursorLiveRunsForTests,
 	resetSessionCursorAgents: () => disposeAllSessionCursorAgents(),
 	resetSessionTurnQueue: cursorSessionTurnQueueTestUtils.reset,

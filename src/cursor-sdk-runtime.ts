@@ -1,34 +1,23 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { ensureCursorTreeSitterVendorDir } from "./cursor-ripgrep-path.js";
+import { installCursorSdkProcessOutputFilter } from "./cursor-sdk-output-filter.js";
 
 export type CursorSdkModule = typeof import("@cursor/sdk");
 
-export async function loadCursorSdk(): Promise<CursorSdkModule> {
-	return import("@cursor/sdk");
-}
-
 /**
- * Locate the `@cursor/sdk` package directory a module of this package resolves `@cursor/sdk` to.
+ * Every runtime load of the SDK goes through here (`test/cursor-sdk-lazy-import.test.ts` bans any
+ * other runtime `@cursor/sdk` import), so this is where the process is prepared for the SDK before it
+ * first evaluates:
  *
- * A Bun single-file compiled binary (the shipping `omp`) resolves a bare specifier for an on-disk
- * extension file against its embedded `$bunfs` root, so `import.meta.resolve` and
- * `createRequire(...).resolve` throw there even though the real import resolves normally. Walk the
- * `node_modules` chain by hand instead: that is the chain the runtime import resolves against.
+ * - the process-lifetime SDK output filter lease is taken, so SDK bootstrap and background work
+ *   (rules/skills loads, watchers) that log outside a provider turn are filtered from the first load
+ *   on;
+ * - the native shell-parser lookup is pointed at the installed platform package, which the SDK's own
+ *   search cannot find from a compiled binary.
+ *
+ * Both calls are idempotent and cheap once done.
  */
-export function findCursorSdkPackageDir(moduleUrl: string | URL): string | undefined {
-	let dir: string;
-	try {
-		dir = dirname(fileURLToPath(moduleUrl));
-	} catch {
-		// Not a file URL: treat the input as a filesystem path.
-		dir = dirname(String(moduleUrl));
-	}
-	for (;;) {
-		const packageDir = join(dir, "node_modules", "@cursor", "sdk");
-		if (existsSync(join(packageDir, "package.json"))) return packageDir;
-		const parent = dirname(dir);
-		if (parent === dir) return undefined;
-		dir = parent;
-	}
+export async function loadCursorSdk(): Promise<CursorSdkModule> {
+	installCursorSdkProcessOutputFilter();
+	ensureCursorTreeSitterVendorDir();
+	return import("@cursor/sdk");
 }
