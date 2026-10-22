@@ -190,7 +190,7 @@ export class CursorRunFinalizer {
 				applyCursorUsage(partial, model, context, prepared.meta.promptInputTokens, {
 					runtime: prepared.runtimeTarget,
 					turn: prepared.runtime.turnCoordinator.lastSdkTurnUsage,
-					billed: prepared.runtime.billedTurnUsage,
+					billed: prepared.runtimeTarget === "cloud" ? prepared.runtime.billedTurnUsage : undefined,
 				});
 				if (prepared.meta.resumeNotice) emitDisplayOnlyTraceBlock(stream, partial, prepared.meta.resumeNotice);
 				if (displayOnlyTraceBlock) emitDisplayOnlyTraceBlock(stream, partial, displayOnlyTraceBlock);

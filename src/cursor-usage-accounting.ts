@@ -93,14 +93,46 @@ function getCursorSdkUncachedInputTokens(turnUsage: CursorSdkTurnUsage): number 
 	return turnUsage.inputTokens - turnUsage.cacheReadTokens - turnUsage.cacheWriteTokens;
 }
 
-export function isCursorSdkUsagePartitionSafe(turnUsage: CursorSdkTurnUsage, model: Model<Api>): boolean {
+function hasNonNegativeFiniteCounts(turnUsage: CursorSdkTurnUsage): boolean {
 	const counts = [turnUsage.inputTokens, turnUsage.outputTokens, turnUsage.cacheReadTokens, turnUsage.cacheWriteTokens];
+	return counts.every((count) => Number.isFinite(count) && count >= 0);
+}
+
+/**
+ * False for an all-zero count. The Cloud Agents API documents that "runs without any recorded token usage report
+ * zeros across all fields" (such a run still appears in `runs`), and a capture on a reused cloud agent read a
+ * just-finished run as zeros while an earlier run's row had grown. Zeros therefore mean "not billed yet", never
+ * "this turn cost nothing". A safe rule: the production-shape reads (a fresh agent, `getUsage({ runId })` right after
+ * `wait()`) returned recorded rows both times they were captured, so it has not been seen to trigger there.
+ */
+function isCursorSdkTokenUsageRecorded(turnUsage: CursorSdkTurnUsage): boolean {
+	return turnUsage.inputTokens > 0 || turnUsage.outputTokens > 0 || turnUsage.cacheReadTokens > 0 || turnUsage.cacheWriteTokens > 0;
+}
+
+export function isCursorSdkUsagePartitionSafe(turnUsage: CursorSdkTurnUsage, model: Model<Api>): boolean {
 	const uncachedInput = getCursorSdkUncachedInputTokens(turnUsage);
 	return (
-		counts.every((count) => Number.isFinite(count) && count >= 0) &&
+		hasNonNegativeFiniteCounts(turnUsage) &&
+		(model.maxTokens === null || turnUsage.outputTokens <= model.maxTokens) &&
 		Number.isFinite(uncachedInput) &&
-		uncachedInput >= 0 &&
-		(model.maxTokens === null || turnUsage.outputTokens <= model.maxTokens)
+		uncachedInput >= 0
+	);
+}
+
+/**
+ * Whether a billed getUsage() row may fill the message's spend buckets. Besides plausible, recorded counts, its
+ * `input + cacheRead + cacheWrite` must fit the model's window: omp's overflow classifier
+ * (`isUsageBackedContextOverflow`, pi-ai error/flags.ts) treats exactly that sum above the window as authoritative
+ * overflow whatever the stop reason, and `checkCompaction` then drops the turn and compacts. A billed row is the
+ * run's spend, which can exceed one context window with no window actually overflowing, so such a row falls back
+ * to approximate usage. The output bound of a raw turn-ended count (`maxTokens`) does not apply: it is the
+ * run's output, not one response's.
+ */
+export function isCursorSdkBilledUsageSafe(billed: CursorSdkTurnUsage, model: Model<Api>): boolean {
+	return (
+		hasNonNegativeFiniteCounts(billed) &&
+		isCursorSdkTokenUsageRecorded(billed) &&
+		(model.contextWindow === null || billed.inputTokens + billed.cacheReadTokens + billed.cacheWriteTokens <= model.contextWindow)
 	);
 }
 
@@ -119,6 +151,23 @@ export function applyCursorSdkUsage(partial: AssistantMessage, turnUsage: Cursor
 	partial.usage.cacheWrite = turnUsage.cacheWriteTokens;
 	// totalTokens is context occupancy (full prompt + output), not the sum of spend components alone.
 	partial.usage.totalTokens = turnUsage.inputTokens + turnUsage.outputTokens;
+}
+
+/**
+ * Copy a billed getUsage() row into the spend buckets as reported. The Cloud Agents API that backs getUsage()
+ * documents the four counts as additive buckets: `GET /v1/agents/{id}/usage` defines `totalTokens` as the sum of
+ * the four, and both its example row (inputTokens 6320, cacheReadTokens 21300) and the Admin API
+ * `filtered-usage-events` example (inputTokens 126, cacheReadTokens 11964) have cache reads above input. So
+ * inputTokens is already the uncached input: subtracting the cache fields, as for a raw turn-ended count, would
+ * understate it and reject such rows. This is documented, not captured: no captured row has cache reads above
+ * input (see test/fixtures/cursor-sdk-billed-usage-1.0.34.json). Either way the buckets are the run's spend, not
+ * the size of the context.
+ */
+function applyCursorSdkBilledUsage(partial: AssistantMessage, billed: CursorSdkTurnUsage): void {
+	partial.usage.input = billed.inputTokens;
+	partial.usage.output = billed.outputTokens;
+	partial.usage.cacheRead = billed.cacheReadTokens;
+	partial.usage.cacheWrite = billed.cacheWriteTokens;
 }
 
 function isCompatibleCursorAssistantMeasurement(assistant: AssistantMessage, model: Model<Api>): boolean {
@@ -179,21 +228,31 @@ export function applyCursorUsage(
 	sessionInputTokens: number,
 	sdkUsage?: { runtime: CursorRuntime; turn?: CursorSdkTurnUsage; billed?: CursorSdkTurnUsage },
 ): void {
-	const billed = sdkUsage?.billed;
+	// Billed getUsage() rows exist only for finished cloud turns: a local turn is never read (fetchCursorCloudBilledTurnUsage).
+	const billed = sdkUsage?.runtime === "cloud" ? sdkUsage.billed : undefined;
 	const localTurn = sdkUsage?.runtime === "local" ? sdkUsage.turn : undefined;
-	// Billed getUsage() rows are spend. Host totalTokens stays context occupancy:
-	// a safe local turn-ended count when we have one, otherwise the existing estimate.
+	// Start from an unset anchor: a partial that already carries a billed pass's `contextTokens` must not keep it
+	// when this pass has no billed row, because its buckets then mean something else.
+	delete partial.usage.contextTokens;
+	// How omp reads a message: `calculatePromptTokens` (the /context anchor, compaction headroom, contextFitsModel)
+	// is `usage.contextTokens` when set, else input + cacheRead + cacheWrite; `calculateContextTokens` is
+	// `contextTokens` when set, else `totalTokens`.
+	// - A billed row fills the buckets with the run's spend, so their sum is not the context. The occupancy (the
+	//   estimate, which includes this turn's output because the next request's prefix carries it) goes into
+	//   `contextTokens` as well as `totalTokens`, as omp's own Cursor provider does with the checkpoint's used tokens.
+	// - A raw local turn needs no override: input + cacheRead + cacheWrite partition its full prompt.
+	// - The approximate path's input is an estimate of what this send carried (only the new messages on an
+	//   incremental send) and its cache buckets are 0, so its sum does not partition `totalTokens` either. It is
+	//   left as it was: both numbers are estimates, and this change is about keeping billed spend out of the anchor.
 	// Cent fields on AgentUsage are not copied; model rates are zero.
-	if (billed && isCursorSdkUsagePartitionSafe(billed, model)) {
-		applyCursorSdkUsage(partial, billed);
-		if (localTurn && isCursorSdkUsageSafeForPiMessage(localTurn, model)) {
-			partial.usage.totalTokens = localTurn.inputTokens + localTurn.outputTokens;
-		} else {
-			partial.usage.totalTokens = Math.max(
-				estimateCursorContextTotalTokens(partial, model, context),
-				getLastAcceptedContextOccupancy(context, model),
-			);
-		}
+	if (billed && isCursorSdkBilledUsageSafe(billed, model)) {
+		applyCursorSdkBilledUsage(partial, billed);
+		const occupancy = Math.max(
+			estimateCursorContextTotalTokens(partial, model, context),
+			getLastAcceptedContextOccupancy(context, model),
+		);
+		partial.usage.totalTokens = occupancy;
+		partial.usage.contextTokens = occupancy;
 		return;
 	}
 	// Only local raw turn-ended usage has a captured full-prompt/cache-partition contract.

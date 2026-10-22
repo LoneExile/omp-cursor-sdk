@@ -249,9 +249,12 @@ streamCursor(model, context, options)
 
 ### 5.3 Usage accounting
 
-Per-run SDK `TokenUsage` (input/output/cacheRead/cacheWrite/totalTokens) is
-applied to the assistant message so OMP's dashboard and `stats.db` see
-real usage. Context-window budget math null-guards OMP's `Model` fields
+Local turns apply the raw per-turn SDK `turn-ended` usage to the assistant
+message, and a finished cloud turn applies its billed `getUsage({ runId })` row
+when its `input + cacheRead + cacheWrite` fits the model window, with
+`usage.contextTokens` set to the occupancy so billed spend never becomes the
+context anchor. Either way OMP's dashboard and `stats.db` see real usage.
+Context-window budget math null-guards OMP's `Model` fields
 (`contextWindow`/`maxTokens` are nullable in OMP). When the SDK reports no
 usable usage, the estimate is floored at the newest same-model assistant usage
 accepted by the forward scan of OMP's `findRequestUsageAnchor` (`pi-agent-core`

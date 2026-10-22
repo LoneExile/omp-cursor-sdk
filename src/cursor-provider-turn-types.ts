@@ -50,8 +50,6 @@ export interface CursorProviderTurnSendMeta {
 
 interface CursorProviderTurnRuntimeBase {
 	turnCoordinator: CursorSdkTurnCoordinator;
-	/** Billed getUsage() token totals for this turn. Absent when getUsage failed or returned none. */
-	billedTurnUsage?: CursorSdkTurnUsage;
 }
 
 /**
@@ -78,6 +76,12 @@ export interface LiveCursorProviderTurnRuntime extends CursorProviderTurnRuntime
 	liveRun: CursorLiveRun;
 }
 
+/** The runtime of a cloud turn: direct, and the only one that carries billed usage. */
+export interface CloudCursorProviderTurnRuntime extends DirectCursorProviderTurnRuntime {
+	/** Billed token totals of this turn's run (`getUsage({ runId })`). Absent until a finished turn's read returns a row for the run (a failed or timed-out read leaves it unset). */
+	billedTurnUsage?: CursorSdkTurnUsage;
+}
+
 export type CursorProviderTurnRuntime = DirectCursorProviderTurnRuntime | LiveCursorProviderTurnRuntime;
 
 interface CursorProviderTurnPrepareResultBase {
@@ -100,7 +104,7 @@ export interface LocalCursorProviderTurnPrepareResult extends CursorProviderTurn
 
 export interface CloudCursorProviderTurnPrepareResult extends CursorProviderTurnPrepareResultBase {
 	runtimeTarget: "cloud";
-	runtime: DirectCursorProviderTurnRuntime;
+	runtime: CloudCursorProviderTurnRuntime;
 	sessionAgentScopeKey?: undefined;
 	sessionAgentLease?: undefined;
 }
