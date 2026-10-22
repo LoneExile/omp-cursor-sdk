@@ -144,6 +144,7 @@ Session summaries can hide per-message usage bugs. When investigating token or c
 - `usage.input`, `usage.output`, `usage.cacheRead`, and `usage.cacheWrite` are additive spend-style counters for the assistant turn.
 - `usage.totalTokens` is pi context occupancy for that turn, not a value to sum across all assistant messages.
 - Distinguish published SDK `TokenUsage` from observed raw local `turn-ended.usage`: installed `@cursor/sdk` `toTokenUsage` sets `totalTokens = input+output+cacheRead+cacheWrite`, but captured local raw `turn-ended.usage` keeps `inputTokens` as the full prompt while cache fields partition it (see `test/fixtures/cursor-sdk-turn-ended-usage-1.0.23.json` / issue #196). Map raw turn-ended samples to pi as uncached `input = inputTokens - cacheReadTokens - cacheWriteTokens` and `totalTokens = inputTokens + outputTokens`.
+- Billed `getUsage()` rows are additive spend, not occupancy. A row is applied only to a finished cloud turn and only when its `input + cacheRead + cacheWrite` fits the window, because omp classifies that sum above the window as a context overflow whatever the stop reason; `usage.contextTokens` carries the occupancy. Local turns never read `getUsage()`.
 - No single assistant message should persist SDK/full-agent-context-sized usage outside the selected model window.
 - Real bad-session evidence should be reduced to a sanitized fixture, like `test/fixtures/cursor-run-usage-compaction-poison.jsonl`, instead of committing raw session JSONL.
 

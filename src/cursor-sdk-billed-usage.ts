@@ -1,151 +1,58 @@
-import type { Api, AssistantMessage, Context, Model } from "@oh-my-pi/pi-ai";
 import type { SDKAgent } from "@cursor/sdk";
-import type { CursorRuntime } from "./cursor-config.js";
 import { asRecord, getArray, getString } from "./cursor-record-utils.js";
-import {
-	applyCursorUsage,
-	readCursorSdkTurnUsage,
-	type CursorSdkTurnUsage,
-} from "./cursor-usage-accounting.js";
+import { readCursorSdkTurnUsage, type CursorSdkTurnUsage } from "./cursor-usage-accounting.js";
 
 const BILLED_USAGE_TIMEOUT_MS = 5000;
 
-// Process-lifetime watermark of billed usage UUIDs per agentId. Reset on process exit.
-const seenBilledRunIdsByAgent = new Map<string, Set<string>>();
-
-/**
- * True for the SDK `run-<uuid>` form.
- * Installed `GetUsageOptions`: "For cloud agents, pass a `run-<uuid>` run ID. For local agents, pass a usage UUID from a previous `getUsage().runs[].runId`; client-side `run-<uuid>` labels throw a `ConfigurationError`."
- * Cloud with a `run-` id passes `{ runId }`. Local never passes a `run-` id.
- */
-export function isCursorSdkCloudRunId(runId: string): boolean {
-	return runId.startsWith("run-");
-}
-
-export function sumCursorSdkTurnUsage(usages: readonly CursorSdkTurnUsage[]): CursorSdkTurnUsage | undefined {
-	if (usages.length === 0) return undefined;
-	return usages.reduce(
-		(total, usage) => ({
-			inputTokens: total.inputTokens + usage.inputTokens,
-			outputTokens: total.outputTokens + usage.outputTokens,
-			cacheReadTokens: total.cacheReadTokens + usage.cacheReadTokens,
-			cacheWriteTokens: total.cacheWriteTokens + usage.cacheWriteTokens,
-		}),
-	);
-}
-
-function peekCursorBilledUsageRunIds(agentId: string): ReadonlySet<string> {
-	return seenBilledRunIdsByAgent.get(agentId) ?? new Set();
-}
-
-function rememberCursorBilledUsageRunIds(agentId: string, runIds: readonly string[]): void {
-	if (runIds.length === 0) return;
-	let seen = seenBilledRunIdsByAgent.get(agentId);
-	if (!seen) {
-		seen = new Set();
-		seenBilledRunIdsByAgent.set(agentId, seen);
-	}
-	for (const runId of runIds) seen.add(runId);
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs = BILLED_USAGE_TIMEOUT_MS): Promise<T | undefined> {
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const timeout = new Promise<undefined>((resolve) => {
 		timer = setTimeout(() => resolve(undefined), timeoutMs);
 		timer.unref?.();
 	});
 	return Promise.race([promise.catch(() => undefined), timeout]).finally(() => {
-		if (timer) clearTimeout(timer);
+		clearTimeout(timer);
 	});
 }
 
-export function selectCursorBilledTurnUsage(
-	agentUsage: unknown,
-	options: { runtime: CursorRuntime; runId?: string; seenRunIds?: ReadonlySet<string> },
-): { turn?: CursorSdkTurnUsage; runIds: string[] } {
-	const runs = (getArray(asRecord(agentUsage), "runs") ?? []).flatMap((item) => {
-		const record = asRecord(item);
-		const runId = getString(record, "runId");
-		const usage = readCursorSdkTurnUsage(record?.usage);
-		return runId && usage ? [{ runId, usage }] : [];
-	});
-	if (options.runtime === "cloud" && options.runId) {
-		const match = runs.find((run) => run.runId === options.runId);
-		return match ? { turn: match.usage, runIds: [match.runId] } : { runIds: [] };
+/** The token counts of the `getUsage().runs[]` row whose `runId` is `runId`, or undefined when there is none or it is unreadable. */
+export function selectCursorBilledTurnUsage(agentUsage: unknown, runId: string): CursorSdkTurnUsage | undefined {
+	for (const item of getArray(asRecord(agentUsage), "runs") ?? []) {
+		const row = asRecord(item);
+		if (getString(row, "runId") === runId) return readCursorSdkTurnUsage(row?.usage);
 	}
-	const unseen = runs.filter((run) => !options.seenRunIds?.has(run.runId));
-	return { turn: sumCursorSdkTurnUsage(unseen.map((run) => run.usage)), runIds: unseen.map((run) => run.runId) };
+	return undefined;
 }
 
-export async function fetchCursorSdkAgentUsage(
-	agent: SDKAgent,
-	options: { runtime: CursorRuntime; runId?: string },
-): Promise<unknown | undefined> {
-	if (typeof agent.getUsage !== "function") return undefined;
-	const query =
-		options.runtime === "cloud" && options.runId && isCursorSdkCloudRunId(options.runId)
-			? { runId: options.runId }
-			: undefined;
+/**
+ * Billed token counts of the cloud run `runId`, from `agent.getUsage({ runId })`. Undefined when there is nothing to
+ * use: a run id that is not a cloud `run-` id, a failed or timed-out read (`timeoutMs`, 5 s by default), no row for
+ * the run, or an unreadable row. It never throws, and the caller then keeps the turn's approximate usage.
+ *
+ * Cloud only, by decision, and only a finished cloud turn calls it (cursor-provider-turn-finalize.ts). A cloud turn
+ * runs on its own fresh agent (cursor-provider-turn-prepare.ts), so the agent's one run is the turn, and the row is
+ * selected by the SDK run id (`runs[].runId` is the id `agent.send()` returned, per the API documentation and the
+ * captures). Local agents are never read:
+ *  - `getUsage()` on a local agent answered 403 `feature_unavailable` on the account used for the capture (the SDK
+ *    documents local usage as enabled per account), so no local row was ever observed;
+ *  - the SDK describes local entries only as "per-turn groups keyed by usage UUID", and `GetUsageOptions.runId`
+ *    takes that UUID, not the run's id, so nothing maps a local run to its row;
+ *  - without that mapping every attribution rule either sums history (a resumed local agent returns every turn it
+ *    ever had) or double counts (a live run whose bridged tool-use turns already carry their raw turn-ended usage
+ *    would also carry the whole run's row on its final message).
+ * Local turns keep the raw `turn-ended` usage (see applyCursorUsage), so no local `getUsage()` request is made.
+ */
+export async function fetchCursorCloudBilledTurnUsage(options: {
+	agent: SDKAgent;
+	runId: string;
+	timeoutMs?: number;
+}): Promise<CursorSdkTurnUsage | undefined> {
+	const { agent, runId } = options;
+	if (!runId.startsWith("run-")) return undefined;
 	try {
-		return await withTimeout(Promise.resolve(agent.getUsage(query)));
+		const agentUsage = await withTimeout(agent.getUsage({ runId }), options.timeoutMs ?? BILLED_USAGE_TIMEOUT_MS);
+		return agentUsage === undefined ? undefined : selectCursorBilledTurnUsage(agentUsage, runId);
 	} catch {
 		return undefined;
 	}
 }
-
-export async function attachCursorSdkBilledTurnUsage(options: {
-	agent: SDKAgent;
-	agentId: string;
-	runtime: CursorRuntime;
-	runId?: string;
-}): Promise<{ agentUsage?: unknown; turn?: CursorSdkTurnUsage }> {
-	const agentUsage = await fetchCursorSdkAgentUsage(options.agent, {
-		runtime: options.runtime,
-		runId: options.runId,
-	});
-	if (!agentUsage) return {};
-	const selected = selectCursorBilledTurnUsage(agentUsage, {
-		runtime: options.runtime,
-		runId: options.runtime === "cloud" ? options.runId : undefined,
-		seenRunIds: peekCursorBilledUsageRunIds(options.agentId),
-	});
-	rememberCursorBilledUsageRunIds(options.agentId, selected.runIds);
-	return { agentUsage, turn: selected.turn };
-}
-
-/** Copy billed token totals onto host usage. A missing, failed, or empty getUsage leaves `partial.usage` unchanged. */
-export async function copyCursorSdkBilledTokenTotals(options: {
-	agent: SDKAgent;
-	agentId: string;
-	runtime: CursorRuntime;
-	runId?: string;
-	partial: AssistantMessage;
-	model: Model<Api>;
-	context: Context;
-	localTurn?: CursorSdkTurnUsage;
-}): Promise<void> {
-	let turn: CursorSdkTurnUsage | undefined;
-	try {
-		const attached = await attachCursorSdkBilledTurnUsage({
-			agent: options.agent,
-			agentId: options.agentId,
-			runtime: options.runtime,
-			runId: options.runId,
-		});
-		turn = attached.turn;
-	} catch {
-		return;
-	}
-	if (!turn) return;
-	applyCursorUsage(options.partial, options.model, options.context, 0, {
-		runtime: options.runtime,
-		turn: options.localTurn,
-		billed: turn,
-	});
-}
-
-export const __testUtils = {
-	reset(): void {
-		seenBilledRunIdsByAgent.clear();
-	},
-};

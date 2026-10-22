@@ -1,0 +1,179 @@
+{
+  "provenance": {
+    "sdkPackage": "@cursor/sdk",
+    "sdkVersion": "1.0.34",
+    "verified": "2026-10-22",
+    "model": "composer-2-5",
+    "captured": [
+      "Probe 1: a LOCAL agent (tools: [], temporary SQLite store, scratch cwd) sent three prompts (a ~6k-token reference list, then two short questions). The streamed turn-ended usage of each run was recorded (localTurnEnded), and agent.getUsage() was called after every run, at the end, and through the static Agent.getUsage(agentId). Every call answered 403 feature_unavailable (localGetUsageFailure).",
+      "Probe 2: one no-repo CLOUD agent (cloud: { repos: [] }) REUSED for two sends. Unfiltered agent.getUsage() was read right after each run and five more times over about 20 s (cloudReusedAgent). The agent was deleted afterwards (Agent.delete, then Agent.get answered 404 agent_not_found).",
+      "Probe 3 (cloudProductionShape): twice, a FRESH no-repo cloud agent with one prompt, then agent.getUsage({ runId }) right after run.wait() and once more about 5 s later, which is what production does. Each agent was deleted afterwards (Agent.delete, then Agent.get answered 404 agent_not_found).",
+      "Agent ids, run ids and usage ids are replaced by labels. No key is recorded."
+    ],
+    "documented": [
+      "https://cursor.com/docs/sdk/typescript#agentgetusage (local usage is enabled per account; 403 feature_unavailable until then)",
+      "https://cursor.com/docs/cloud-agent/api/endpoints#get-agent-usage (documentedExamples.getAgentUsage; getUsage() passes these rows through with runs[].id renamed runId)",
+      "https://cursor.com/docs/account/teams/admin-api#get-usage-events-data (documentedExamples.adminFilteredUsageEvents; the Get Agent Usage page says its token usage 'matches the tokenUsage reported by' that endpoint)"
+    ],
+    "notes": [
+      "Production reads getUsage({ runId }) once per finished cloud turn on a FRESH agent: cloudProductionShape is that read. The reused-agent capture (cloudReusedAgent) read unfiltered, so its row shapes, including the all-zero row, are not what production is known to see.",
+      "No captured cloud row has cacheReadTokens above inputTokens (12,565 vs 6,560; 21,301 vs 13,120; 7,966 vs 6,560; 13,334 vs 1,184). That the four counts are additive buckets (cache reads can exceed input, totalTokens is their sum) is documented, not captured.",
+      "No local getUsage row was ever observed: the capturing account got 403. The SDK documents local entries only as per-turn groups keyed by usage UUID, so the plugin never reads local usage.",
+      "Raw local turn-ended usage is a different source: inputTokens is the full prompt and the cache counts partition it."
+    ]
+  },
+  "localGetUsageFailure": {
+    "errorName": "UnknownAgentError",
+    "code": "feature_unavailable",
+    "status": 403,
+    "message": "[feature_unavailable] This feature is not available for your account",
+    "endpoint": "GET /v1/agents/<local-agent-id>/usage",
+    "calls": ["agent.getUsage() after run 1", "agent.getUsage() after run 2", "agent.getUsage() after run 3", "agent.getUsage() at the end", "Agent.getUsage(agentId)"]
+  },
+  "localTurnEnded": [
+    {
+      "label": "local-run-1 (reference list, cold cache)",
+      "usage": { "inputTokens": 6031, "outputTokens": 80, "cacheReadTokens": 448, "cacheWriteTokens": 0 },
+      "sdkRunUsageTotalTokens": 6559
+    },
+    {
+      "label": "local-run-2 (short question)",
+      "usage": { "inputTokens": 12409, "outputTokens": 229, "cacheReadTokens": 864, "cacheWriteTokens": 0 },
+      "sdkRunUsageTotalTokens": 13502
+    },
+    {
+      "label": "local-run-3 (short question, warm cache)",
+      "usage": { "inputTokens": 6474, "outputTokens": 44, "cacheReadTokens": 6400, "cacheWriteTokens": 0 },
+      "sdkRunUsageTotalTokens": 12918
+    }
+  ],
+  "cloudReusedAgent": {
+    "sendOrder": ["cloud-run-1", "cloud-run-2"],
+    "afterRun1": {
+      "usage": { "inputTokens": 12565, "outputTokens": 1217, "cacheWriteTokens": 0, "cacheReadTokens": 6560, "totalTokens": 20342 },
+      "cost": { "rawCostCents": 3.39021, "chargedCents": 0 },
+      "runs": [
+        {
+          "runId": "cloud-run-1",
+          "usage": { "inputTokens": 12565, "outputTokens": 1217, "cacheWriteTokens": 0, "cacheReadTokens": 6560, "totalTokens": 20342 },
+          "cost": { "rawCostCents": 3.39021, "chargedCents": 0 }
+        }
+      ]
+    },
+    "afterRun2": {
+      "usage": { "inputTokens": 21301, "outputTokens": 1288, "cacheWriteTokens": 0, "cacheReadTokens": 13120, "totalTokens": 35709 },
+      "cost": { "rawCostCents": 6.44551, "chargedCents": 0 },
+      "runs": [
+        {
+          "runId": "cloud-run-1",
+          "usage": { "inputTokens": 21301, "outputTokens": 1288, "cacheWriteTokens": 0, "cacheReadTokens": 13120, "totalTokens": 35709 },
+          "cost": { "rawCostCents": 6.44551, "chargedCents": 0 }
+        },
+        {
+          "runId": "cloud-run-2",
+          "usage": { "inputTokens": 0, "outputTokens": 0, "cacheWriteTokens": 0, "cacheReadTokens": 0, "totalTokens": 0 },
+          "cost": { "rawCostCents": 0, "chargedCents": 0 }
+        }
+      ]
+    },
+    "observations": [
+      "afterRun2 was identical on the immediate read and on five further reads over about 20 s: the earlier run's row had grown while the run that had just finished still read as all zeros.",
+      "Rows came back in send order (oldest first); the documented example lists them newest first, so run order is not a contract."
+    ]
+  },
+  "cloudProductionShape": {
+    "description": "What production does for a cloud turn: a FRESH no-repo cloud agent (composer-2-5), ONE short prompt ('Do not use any tools. Reply with exactly: OK'), await run.wait() (status finished), then agent.getUsage({ runId }) with that run's run- id right away, and once more about 5 s later. Each agent was deleted afterwards (Agent.delete, then Agent.get answered 404 agent_not_found).",
+    "captures": [
+      {
+        "label": "fresh-agent-1",
+        "sendRunId": "run-fresh-1",
+        "immediate": {
+          "readMs": 2499,
+          "result": {
+            "usage": { "inputTokens": 7966, "outputTokens": 1007, "cacheWriteTokens": 0, "cacheReadTokens": 6560, "totalTokens": 15533 },
+            "cost": { "rawCostCents": 2.89871, "chargedCents": 0 },
+            "runs": [
+              {
+                "runId": "run-fresh-1",
+                "usage": { "inputTokens": 7966, "outputTokens": 1007, "cacheWriteTokens": 0, "cacheReadTokens": 6560, "totalTokens": 15533 },
+                "cost": { "rawCostCents": 2.89871, "chargedCents": 0 }
+              }
+            ]
+          }
+        },
+        "retryAfter5s": {
+          "readMs": 2903,
+          "result": {
+            "usage": { "inputTokens": 7966, "outputTokens": 1007, "cacheWriteTokens": 0, "cacheReadTokens": 6560, "totalTokens": 15533 },
+            "cost": { "rawCostCents": 2.89871, "chargedCents": 0 },
+            "runs": [
+              {
+                "runId": "run-fresh-1",
+                "usage": { "inputTokens": 7966, "outputTokens": 1007, "cacheWriteTokens": 0, "cacheReadTokens": 6560, "totalTokens": 15533 },
+                "cost": { "rawCostCents": 2.89871, "chargedCents": 0 }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "fresh-agent-2 (cost not recorded)",
+        "sendRunId": "run-fresh-2",
+        "immediate": {
+          "readMs": 1149,
+          "result": {
+            "usage": { "inputTokens": 13334, "outputTokens": 1011, "cacheWriteTokens": 0, "cacheReadTokens": 1184, "totalTokens": 15529 },
+            "runs": [
+              {
+                "runId": "run-fresh-2",
+                "usage": { "inputTokens": 13334, "outputTokens": 1011, "cacheWriteTokens": 0, "cacheReadTokens": 1184, "totalTokens": 15529 }
+              }
+            ]
+          }
+        },
+        "retryAfter5s": {
+          "readMs": 781,
+          "result": {
+            "usage": { "inputTokens": 13334, "outputTokens": 1011, "cacheWriteTokens": 0, "cacheReadTokens": 1184, "totalTokens": 15529 },
+            "runs": [
+              {
+                "runId": "run-fresh-2",
+                "usage": { "inputTokens": 13334, "outputTokens": 1011, "cacheWriteTokens": 0, "cacheReadTokens": 1184, "totalTokens": 15529 }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "observations": [
+      "Both immediate reads returned the run's row with recorded (non-zero) counts, and the retry about 5 s later returned the identical row.",
+      "A single run had one row, keyed by the run id agent.send() returned. Its counts were about 8k to 13k input and about 1k output for a one-word answer; what they cover is not established.",
+      "The reads took 0.8 s to 2.9 s against the plugin's 5 s cap.",
+      "No row has cacheReadTokens above inputTokens, so these captures do not show additivity either."
+    ]
+  },
+  "documentedExamples": {
+    "getAgentUsage": {
+      "source": "https://cursor.com/docs/cloud-agent/api/endpoints#get-agent-usage (response of GET /v1/agents/{id}/usage; the SDK renames runs[].id to runId)",
+      "totalTokensDefinition": "Sum of the four token counts above.",
+      "totalUsage": { "inputTokens": 12480, "outputTokens": 3110, "cacheWriteTokens": 18200, "cacheReadTokens": 42600, "totalTokens": 76390 },
+      "runs": [
+        {
+          "runId": "documented-run-2",
+          "usage": { "inputTokens": 6320, "outputTokens": 1450, "cacheWriteTokens": 7100, "cacheReadTokens": 21300, "totalTokens": 36170 }
+        },
+        {
+          "runId": "documented-run-1",
+          "usage": { "inputTokens": 6160, "outputTokens": 1660, "cacheWriteTokens": 11100, "cacheReadTokens": 21300, "totalTokens": 40220 }
+        }
+      ]
+    },
+    "adminFilteredUsageEvents": {
+      "source": "https://cursor.com/docs/account/teams/admin-api#get-usage-events-data (POST /teams/filtered-usage-events, usageEvents[].tokenUsage; totalCents omitted)",
+      "tokenUsage": [
+        { "inputTokens": 126, "outputTokens": 450, "cacheWriteTokens": 6112, "cacheReadTokens": 11964 },
+        { "inputTokens": 5805, "outputTokens": 311, "cacheWriteTokens": 11964, "cacheReadTokens": 0 }
+      ]
+    }
+  }
+}
