@@ -81,7 +81,7 @@ function getCursorToolBoundaryText(
 		"Do not claim pi-side or WebSearch/WebFetch tools unless Cursor ran an equivalent tool.",
 		includePiAskQuestionGuidance ? "Use pi__cursor_ask_question for material choices if exposed." : undefined,
 		getCursorPlanModeToolGuidanceText(options.agentMode, { includePiBridgeGuidance, builtInTools: options.builtInTools }),
-		"Images: only latest user images are sent; ask to reattach prior images.",
+		"Images: only images from the latest user input are sent; ask to reattach prior images.",
 	].filter((line): line is string => line !== undefined);
 	if (options.hasToolManifest) {
 		lines.push("See callable surfaces below.");
@@ -119,22 +119,18 @@ function isToolCallBlock(block: { type: string }): block is ToolCall {
 	return block.type === "toolCall";
 }
 
-function extractLatestImages(messages: Message[]): SDKImage[] {
-	// Find the last user message and extract images only from it
-	for (let i = messages.length - 1; i >= 0; i--) {
-		const msg = messages[i];
-		if (msg.role !== "user") continue;
-		if (typeof msg.content === "string") return [];
-
-		const images: SDKImage[] = [];
+/** Images of the user messages at `requiredIndexes`, in transcript order. */
+function extractRequiredImages(messages: Message[], requiredIndexes: ReadonlySet<number>): SDKImage[] {
+	const images: SDKImage[] = [];
+	messages.forEach((msg, index) => {
+		if (msg.role !== "user" || !requiredIndexes.has(index) || typeof msg.content === "string") return;
 		for (const block of msg.content) {
 			if (isImageBlock(block) && block.data && block.mimeType) {
 				images.push({ data: block.data, mimeType: block.mimeType });
 			}
 		}
-		return images;
-	}
-	return [];
+	});
+	return images;
 }
 
 function formatContentBlocks(content: string | { type: string; text?: string; data?: string; mimeType?: string }[]): string {
@@ -212,11 +208,63 @@ function formatMessage(msg: Message): string | undefined {
 	}
 }
 
-function getLatestUserMessageIndex(messages: Message[]): number {
+function getLatestUserMessageIndex(messages: readonly { role: string }[]): number {
 	for (let index = messages.length - 1; index >= 0; index -= 1) {
 		if (messages[index].role === "user") return index;
 	}
 	return -1;
+}
+
+/** A compaction or branch summary: omp's converted `user` message (`historyRewriteAt`) or the raw role. */
+function isHistoryRewriteSummary(message: Message): boolean {
+	const role: string = message.role;
+	return role === "branchSummary" || role === "compactionSummary" || (message.role === "user" && message.historyRewriteAt !== undefined);
+}
+
+/**
+ * Index of the first message of the pending input: every message after the last `assistant`
+ * message, or all of them when there is none. omp sends a turn's input as one such run: notices
+ * before the prompt, the prompt, next-turn messages, `@file` messages, and a synthetic `user`
+ * message for each image-bearing custom message.
+ */
+function getPendingInputStart(messages: readonly { role: string }[]): number {
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		if (messages[index].role === "assistant") return index + 1;
+	}
+	return 0;
+}
+
+/**
+ * Messages a prompt never trims, even over its budget, and whose images it sends: the pending
+ * input from `pendingStart` on without compaction or branch summaries (history, not input), plus
+ * `anchorIndex`, the latest user request. The anchor is kept even when it is a summary, and when
+ * a tool-result continuation leaves it before the last assistant message.
+ */
+function getRequiredMessageIndexes(
+	messages: readonly Message[],
+	{ pendingStart, anchorIndex }: { pendingStart: number; anchorIndex: number },
+): Set<number> {
+	const indexes = new Set<number>();
+	for (let index = pendingStart; index < messages.length; index += 1) {
+		if (!isHistoryRewriteSummary(messages[index])) indexes.add(index);
+	}
+	if (anchorIndex >= 0) indexes.add(anchorIndex);
+	return indexes;
+}
+
+/**
+ * The input of the turn being sent, as a Cursor Cloud `fresh` handoff carries it: the user and
+ * developer messages after the last assistant message, plus the latest user message when none
+ * follows it (a tool-result continuation, or a turn a hook message started). Never compaction or
+ * branch summaries, which only `bootstrap` sends, nor tool results, which answer the assistant's
+ * tool calls.
+ */
+export function getCursorTurnInput(messages: Message[]): Message[] {
+	const required = getRequiredMessageIndexes(messages, {
+		pendingStart: getPendingInputStart(messages),
+		anchorIndex: getLatestUserMessageIndex(messages),
+	});
+	return messages.filter((message, index) => required.has(index) && isCursorInputMessage(message) && !isHistoryRewriteSummary(message));
 }
 
 function getSectionCost(section: string): number {
@@ -227,7 +275,7 @@ function applyPromptBudget(
 	sectionsBeforeMessages: string[],
 	messageSections: Array<{ index: number; text: string }>,
 	sectionsAfterMessages: string[],
-	latestUserMessageIndex: number,
+	requiredMessageIndexes: ReadonlySet<number>,
 	options: CursorPromptOptions,
 ): string[] {
 	const maxInputTokens = options.maxInputTokens;
@@ -237,7 +285,7 @@ function applyPromptBudget(
 
 	const charsPerToken = options.charsPerToken ?? CURSOR_APPROX_CHARS_PER_TOKEN;
 	const maxChars = Math.max(1, Math.floor(maxInputTokens * charsPerToken));
-	const requiredMessageSections = messageSections.filter((section) => section.index === latestUserMessageIndex);
+	const requiredMessageSections = messageSections.filter((section) => requiredMessageIndexes.has(section.index));
 	const requiredCost = [...sectionsBeforeMessages, ...requiredMessageSections.map((section) => section.text), ...sectionsAfterMessages].reduce(
 		(total, section) => total + getSectionCost(section),
 		0,
@@ -416,13 +464,9 @@ export function getCursorIncrementalSendStart(
 	for (let index = 0; index < start; index += 1) {
 		if (current.messageHashes[index] !== previous.messageHashes[index]) return undefined;
 	}
-	const appendedRaw = context.messages.slice(start);
-	if (appendedRaw.some((message) => {
-		const role: string = message.role;
-		return role === "branchSummary" || role === "compactionSummary";
-	})) return undefined;
-	const appended = normalizePiContextMessages(appendedRaw);
-	if (appended.some((message) => message.role === "user" && message.historyRewriteAt !== undefined)) return undefined;
+	// The normalized slice carries raw summary roles too, so one check covers the converted and raw shapes.
+	const appended = normalizePiContextMessages(context.messages.slice(start));
+	if (appended.some(isHistoryRewriteSummary)) return undefined;
 	if (appended.some((message) => message.role === "assistant" && message.api !== CURSOR_SDK_API)) return undefined;
 	if (appended.length > 0 && !appended.some(isCursorInputMessage)) return undefined;
 	return start;
@@ -440,7 +484,10 @@ export function shouldBootstrapCursorContext(
  * user and developer message appended since the last send, in order (OMP adds plan/goal
  * context, `!` output, @file mentions, before_agent_start and nextTurn messages around
  * the prompt). Assistant and tool-result messages in that slice are the agent's own
- * output and are not repeated. Without new inputs it repeats the latest user message.
+ * output and are not repeated. The slice's pending input (everything after its last
+ * assistant message) is never trimmed by the budget, and its user messages' images are sent.
+ * Without new inputs it repeats the context's own pending input: its user and developer
+ * messages and its user messages' images, and the latest user message.
  */
 export function buildCursorIncrementalPrompt(
 	context: Context,
@@ -453,14 +500,19 @@ export function buildCursorIncrementalPrompt(
 	const messages = hasAppendedInputs ? appended : normalizePiContextMessages(context.messages);
 	const latestUserMessageIndex = getLatestUserMessageIndex(messages);
 	const inputSections = messages.flatMap((message, index) => {
-		if (hasAppendedInputs ? !isCursorInputMessage(message) : index !== latestUserMessageIndex) return [];
+		if (!isCursorInputMessage(message)) return [];
 		const text = formatMessage(message);
 		return text ? [{ index, text }] : [];
 	});
 	const sectionsBeforeMessages = [
 		"Continue the conversation using Cursor SDK capabilities only. Do not list, promise, or call pi-only tools from earlier context as if they were available.",
 	];
-	const images = extractLatestImages(messages);
+	const requiredIndexes = getRequiredMessageIndexes(messages, {
+		pendingStart: getPendingInputStart(messages),
+		anchorIndex: latestUserMessageIndex >= 0 ? latestUserMessageIndex : (inputSections.at(-1)?.index ?? -1),
+	});
+	const sentSections = hasAppendedInputs ? inputSections : inputSections.filter((section) => requiredIndexes.has(section.index));
+	const images = extractRequiredImages(messages, requiredIndexes);
 	const imageTokenReserve = images.length * (options.imageTokenEstimate ?? 0);
 	const budgetOptions =
 		options.maxInputTokens === undefined
@@ -468,9 +520,9 @@ export function buildCursorIncrementalPrompt(
 			: { ...options, maxInputTokens: Math.max(1, options.maxInputTokens - imageTokenReserve) };
 	const parts = applyPromptBudget(
 		sectionsBeforeMessages,
-		inputSections,
+		sentSections,
 		[getCursorToolTailGuardText(options)],
-		latestUserMessageIndex >= 0 ? latestUserMessageIndex : (inputSections.at(-1)?.index ?? -1),
+		requiredIndexes,
 		budgetOptions,
 	);
 	return { text: parts.join(SECTION_SEPARATOR), images };
@@ -501,7 +553,11 @@ export function buildCursorPrompt(context: Context, options: CursorPromptOptions
 		})
 		.filter((section): section is { index: number; text: string } => section !== undefined);
 	const sectionsAfterMessages = getCursorBootstrapTailSections(options);
-	const images = extractLatestImages(messages);
+	const requiredIndexes = getRequiredMessageIndexes(messages, {
+		pendingStart: getPendingInputStart(messages),
+		anchorIndex: getLatestUserMessageIndex(messages),
+	});
+	const images = extractRequiredImages(messages, requiredIndexes);
 	const imageTokenReserve = images.length * (options.imageTokenEstimate ?? 0);
 	const budgetOptions =
 		options.maxInputTokens === undefined
@@ -511,7 +567,7 @@ export function buildCursorPrompt(context: Context, options: CursorPromptOptions
 		sectionsBeforeMessages,
 		messageSections,
 		sectionsAfterMessages,
-		getLatestUserMessageIndex(messages),
+		requiredIndexes,
 		budgetOptions,
 	);
 	const text = parts.join(SECTION_SEPARATOR);

@@ -43,7 +43,7 @@ export const CURSOR_RUNTIME_ENTRY_TYPE = "cursor-runtime-state";
 
 export const CURSOR_CLOUD_ACK_DISCLOSURE = [
 	"Cursor Cloud executes this work remotely.",
-	"Fresh context is used by default; prior Pi context is included only with explicit bootstrap opt-in.",
+	"Fresh context is used by default and sends only the input since the last assistant reply: your prompt and its attachments, ! and Python command output you ran since then, and the notices, @file contents and hook messages omp attaches. When a hook or a tool result, not a new prompt, started the turn, your latest prompt is sent again. Earlier conversation and summaries are sent only with explicit bootstrap opt-in.",
 	"Pi-local tools and the Pi bridge are unavailable, and Pi environment variables are not forwarded.",
 	"Cursor may create branches, commit, push, and open pull requests.",
 	"Cloud agents remain until you archive or delete them.",

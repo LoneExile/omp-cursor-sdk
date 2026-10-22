@@ -17,7 +17,7 @@ import {
 	type CursorSessionSendPlan,
 } from "./cursor-session-agent.js";
 import type { CursorPiBridgeToolRequest } from "./cursor-pi-tool-bridge.js";
-import { buildCursorPrompt, estimateCursorPromptTokens } from "./context.js";
+import { buildCursorPrompt, estimateCursorPromptTokens, getCursorTurnInput } from "./context.js";
 import { getCursorPromptOptions } from "./cursor-usage-accounting.js";
 import { getActiveContextToolNames } from "./cursor-context-tools.js";
 import type { CursorLiveRun } from "./cursor-live-run-coordinator.js";
@@ -35,7 +35,7 @@ import {
 } from "./cursor-state.js";
 import { assertImportedCursorSdkMaxModePatched, applyCursorMaxModeSelection } from "./cursor-max-mode.js";
 import { resolveEffectiveCursorConfig } from "./cursor-runtime-state.js";
-import type { CursorResolvedSdkConfig } from "./cursor-config.js";
+import type { CursorCloudContextHandoff, CursorResolvedSdkConfig } from "./cursor-config.js";
 import { buildCursorModelSelection } from "./model-discovery.js";
 import { getEffectiveCursorSettingSources } from "./cursor-setting-sources.js";
 import {
@@ -99,8 +99,20 @@ interface PrepareCursorLocalProviderTurnContext extends PrepareCursorProviderTur
 const CURSOR_CLOUD_ADVISOR_REFUSED_MESSAGE =
 	"Cursor cloud agents cannot serve an omp advisor: the Cursor SDK cannot limit a cloud agent to the read-only tools an advisor may use. Run the advisor on another provider (its WATCHDOG.yml `model` or the advisor model role).";
 
-function buildCursorCloudPromptContext(context: Context, handoff: "fresh" | "bootstrap" | "never"): Context {
+const CURSOR_CLOUD_NO_INPUT_MESSAGE =
+	"Cursor cloud runtime has nothing to send for this turn: the context holds no prompt or notice apart from compaction and branch summaries, which only --cursor-cloud-context=bootstrap sends. No cloud agent was created.";
+
+/**
+ * The context a Cursor Cloud agent's prompt is built from. `bootstrap` replays the whole context.
+ * `fresh` sends only the input since the last assistant reply (`getCursorTurnInput`): the prompt
+ * and its attachments, `!` and Python command output run since then, and the notices, `@file`
+ * messages and hook messages omp attaches; when a hook or a tool result, not a new prompt, started
+ * the turn, the latest prompt is sent again. It never sends earlier conversation or summaries.
+ * `never` keeps the latest user message; cloud preflight refuses it for a context with prior messages.
+ */
+export function buildCursorCloudPromptContext(context: Context, handoff: CursorCloudContextHandoff): Context {
 	if (handoff === "bootstrap") return context;
+	if (handoff === "fresh") return { ...context, messages: getCursorTurnInput(context.messages) };
 	for (let index = context.messages.length - 1; index >= 0; index -= 1) {
 		const message = context.messages[index];
 		if (message.role === "user") return { ...context, messages: [message] };
@@ -172,6 +184,10 @@ async function prepareCursorCloudProviderTurn(
 			throw new Error("Cursor cloud runtime cannot start while a local Cursor live run is pending; finish or abort the local run, then retry.");
 		}
 
+		// A cloud agent started without input is billable and may push, so refuse before it exists.
+		const cloudContext = buildCursorCloudPromptContext(context, resolvedConfig.cloud.contextHandoff.value);
+		if (cloudContext.messages.length === 0) throw new Error(CURSOR_CLOUD_NO_INPUT_MESSAGE);
+
 		const { Agent } = await loadCursorSdk();
 		const promptOptions = {
 			...getCursorPromptOptions(model),
@@ -179,10 +195,7 @@ async function prepareCursorCloudProviderTurn(
 			includePiBridgeGuidance: false,
 			includePiAskQuestionGuidance: false,
 		};
-		const prompt = buildCursorPrompt(
-			buildCursorCloudPromptContext(context, resolvedConfig.cloud.contextHandoff.value),
-			promptOptions,
-		);
+		const prompt = buildCursorPrompt(cloudContext, promptOptions);
 		const promptInputTokens = estimateCursorPromptTokens(prompt, promptOptions);
 		const agent = await suppressCursorSdkOutput(() =>
 			Agent.create(buildCursorCloudAgentOptions({
