@@ -23,6 +23,7 @@ import {
 type SdkBuild = "bundled" | "esm" | "cjs";
 
 const SDK_BUILDS: readonly SdkBuild[] = ["bundled", "esm", "cjs"];
+const SDK_BUILD_SCAN_TIMEOUT_MS = 30_000;
 const SDK_PACKAGE_DIR = join(process.cwd(), "node_modules", "@cursor", "sdk");
 const CLASS_HEADER = /class ([\w$]+)(?: extends ([\w$.]+))?\{/g;
 const SDK_DEFAULT_MS = cursorMcpToolTimeoutOverrideDefaults.cursorSdkDefaultTimeoutMs;
@@ -492,15 +493,20 @@ describe("Cursor SDK MCP layout contract", () => {
 		);
 	});
 
+	// Scanning a multi-megabyte SDK build takes about 3 s unloaded, close to bun's 5 s default.
 	for (const build of SDK_BUILDS) {
-		it(`pins the installed ${build} build's MCP protocol layout the matchers rely on`, () => {
-			const layout = readSdkMcpLayout(build);
+		it(
+			`pins the installed ${build} build's MCP protocol layout the matchers rely on`,
+			() => {
+				const layout = readSdkMcpLayout(build);
 
-			// The class names the old matcher looked for do not exist as classes in any build.
-			for (const staleName of ["Client", "McpSdkClient", "Protocol"]) {
-				expect([layout.baseClass, layout.clientClass, layout.wrapperClass]).not.toContain(staleName);
-			}
-		});
+				// The class names the old matcher looked for do not exist as classes in any build.
+				for (const staleName of ["Client", "McpSdkClient", "Protocol"]) {
+					expect([layout.baseClass, layout.clientClass, layout.wrapperClass]).not.toContain(staleName);
+				}
+			},
+			SDK_BUILD_SCAN_TIMEOUT_MS,
+		);
 	}
 });
 
@@ -520,7 +526,7 @@ describe("Cursor SDK MCP stack classification", () => {
 		const hostUrl = writeModule(join(root, "host", "mcp-host.js"), HOST_MODULE_SOURCE);
 		const hostModule: { Host: new () => SyntheticHost } = await import(hostUrl);
 		HostClass = hostModule.Host;
-	});
+	}, SDK_BUILD_SCAN_TIMEOUT_MS);
 
 	afterAll(() => {
 		restoreCursorMcpToolTimeoutOverride();
