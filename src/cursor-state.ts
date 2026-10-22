@@ -29,7 +29,8 @@ import { registerCursorModelLifecycle } from "./cursor-model-lifecycle.js";
 import { asRecord } from "./cursor-record-utils.js";
 import { getCursorSessionScopeKey } from "./cursor-session-scope.js";
 import { refreshSessionCursorAgentConfig } from "./cursor-session-agent.js";
-import { getCursorModelMetadata } from "./model-discovery.js";
+import { buildCursorModelSelection, getCursorModelMetadata } from "./model-discovery.js";
+import { formatCursorMaxModeOffWarning } from "./cursor-max-mode.js";
 import {
 	CURSOR_MAX_MODE_ENV,
 	cursorFastDefaultsFromConfig,
@@ -332,6 +333,17 @@ function updateCursorStatus(ctx: CursorStatusContext & Pick<ExtensionContext, "m
 	);
 }
 
+// The warning for switching Max Mode off while the current model would then be refused: only a local turn
+// is refused, and a Max Mode only variant stays Max Mode only at every thinking level of the live catalog,
+// so "off" stands for the level of the next turn.
+function getCursorMaxModeOffWarning(ctx: CursorStatusContext & Pick<ExtensionContext, "model">): string | undefined {
+	const model = ctx.model;
+	if (!model || !isCursorModel(model)) return undefined;
+	const resolution = resolveCursorStatusRuntime(ctx);
+	if (resolution.kind === "invalid" || resolution.runtime.value !== "local") return undefined;
+	return formatCursorMaxModeOffWarning(model.id, buildCursorModelSelection(model.id, "off", getEffectiveFast(model.id)));
+}
+
 function getCurrentCursorMetadata(ctx: Pick<ExtensionContext, "model">) {
 	const model = ctx.model;
 	if (!model || !isCursorModel(model)) return undefined;
@@ -503,7 +515,7 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 	});
 
 	pi.registerFlag("cursor-max-mode", {
-		description: "Force Cursor Max Mode for this run. Bills higher; requires the patched @cursor/sdk.",
+		description: "Force Cursor Max Mode for this run. Bills higher. Local runtime only; Cursor Cloud ignores it.",
 		type: "boolean",
 		default: false,
 	});
@@ -570,7 +582,7 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 	});
 
 	pi.registerCommand("cursor-max-mode", {
-		description: "Set Cursor Max Mode for this session: on, off, or toggle. Optional --save-user persists to user config. Bills higher.",
+		description: "Set Cursor Max Mode for this session: on, off, or toggle. Optional --save-user persists to user config. Bills higher. Local runtime only.",
 		handler: async (args, ctx) => {
 			const usage = "Usage: /cursor-max-mode [on|off|toggle] [--save-user]";
 			const tokens = args.trim().split(/\s+/).filter(Boolean);
@@ -635,11 +647,12 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 				);
 				return;
 			}
+			const offWarning = next ? undefined : getCursorMaxModeOffWarning(ctx);
 			ctx.ui.notify(
 				next
 					? `Cursor Max Mode enabled. Long context bills higher.${saveUser ? " Saved to user config." : ""}`
-					: `Cursor Max Mode disabled.${saveUser ? " Saved to user config." : ""}`,
-				"info",
+					: `Cursor Max Mode disabled.${saveUser ? " Saved to user config." : ""}${offWarning ? ` ${offWarning}` : ""}`,
+				offWarning ? "warning" : "info",
 			);
 		},
 	});

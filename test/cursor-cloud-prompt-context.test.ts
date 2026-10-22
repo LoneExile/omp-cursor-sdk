@@ -206,8 +206,6 @@ describe("Cursor Cloud prompt from the turn input", () => {
 	let create: MockInstance<typeof Agent.create>;
 
 	beforeEach(() => {
-		// Max Mode would require the patched SDK; this suite only reads the prompt.
-		process.env.PI_CURSOR_MAX_MODE = "0";
 		cursorSessionScopeTestUtils.set("/tmp/project", SCOPE);
 		cloudLifecycleTestUtils.reset();
 		registerCursorCloudLifecycleLedger({ on: () => {}, appendEntry: () => {} } as never);
@@ -217,7 +215,6 @@ describe("Cursor Cloud prompt from the turn input", () => {
 
 	afterEach(() => {
 		create.mockRestore();
-		delete process.env.PI_CURSOR_MAX_MODE;
 		cloudLifecycleTestUtils.reset();
 		cursorSessionScopeTestUtils.reset();
 	});

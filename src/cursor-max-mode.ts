@@ -1,114 +1,74 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ModelSelection } from "@cursor/sdk";
-import { findCursorSdkPackageDir } from "./cursor-sdk-package-dir.js";
+import type { CursorRuntime } from "./cursor-config.js";
+import { CURSOR_PROVIDER } from "./cursor-model.js";
+import { getCursorNonMaxModeAlternatives, isCursorSelectionMaxModeOnly } from "./model-discovery.js";
 
-export const CURSOR_MAX_MODE_PATCH_MARKER = "/* omp-cursor-sdk:max-mode-patch */";
-export const CURSOR_MAX_MODE_PARAM = { id: "max_mode", value: "true" } as const;
-export const CURSOR_SDK_MAX_MODE_BUILD_FILES = [
-	"dist/esm/479.js",
-	"dist/cjs/479.js",
-	"dist/bundled/index.js",
-] as const;
+const MAX_ALTERNATIVES_LISTED = 4;
 
+/**
+ * Apply the Cursor Max Mode toggle to a model selection.
+ *
+ * `@cursor/sdk` 1.0.40 carries Max Mode natively as `ModelSelection.maxMode` and copies it onto the
+ * local agent's request. A disabled toggle returns the selection untouched.
+ */
 export function applyCursorMaxModeSelection(selection: ModelSelection, enabled: boolean): ModelSelection {
-	if (!enabled) return selection;
-	const params = selection.params ?? [];
-	if (params.some((param) => param.id === CURSOR_MAX_MODE_PARAM.id && param.value === CURSOR_MAX_MODE_PARAM.value)) {
-		return selection;
-	}
-	return { ...selection, params: [...params, { ...CURSOR_MAX_MODE_PARAM }] };
+	if (!enabled || selection.maxMode === true) return selection;
+	return { ...selection, maxMode: true };
 }
 
-export function cursorSdkPackageRootFromResolved(resolvedSpecifier: string): string {
-	const filePath = resolvedSpecifier.startsWith("file:") ? fileURLToPath(resolvedSpecifier) : resolvedSpecifier;
-	let dir = dirname(filePath);
-	for (let depth = 0; depth < 8; depth += 1) {
-		const packagePath = join(dir, "package.json");
-		if (existsSync(packagePath)) {
-			try {
-				const parsed = JSON.parse(readFileSync(packagePath, "utf8")) as { name?: unknown };
-				if (parsed.name === "@cursor/sdk") return dir;
-			} catch {
-				// Keep walking; a non-package.json along the path is not the SDK root.
-			}
-		}
-		const parent = dirname(dir);
-		if (parent === dir) break;
-		dir = parent;
-	}
-	throw new Error(
-		`Cursor Max Mode is enabled, but ${resolvedSpecifier} is not inside an @cursor/sdk package. Run \`npm run patch:cursor-sdk\` against the SDK this process imports.`,
-	);
+function formatSelectionParams(selection: ModelSelection): string {
+	return (selection.params ?? []).map((param) => `${param.id}=${param.value}`).join(", ");
 }
 
-export function missingCursorSdkMaxModePatchFiles(packageRoot: string): string[] {
-	const existing = CURSOR_SDK_MAX_MODE_BUILD_FILES.filter((rel) => existsSync(join(packageRoot, rel)));
-	if (existing.length === 0) return [...CURSOR_SDK_MAX_MODE_BUILD_FILES];
-	return existing.filter((rel) => !readFileSync(join(packageRoot, rel), "utf8").includes(CURSOR_MAX_MODE_PATCH_MARKER));
+function formatAvoidanceAdvice(piModelId: string, selection: ModelSelection): string {
+	const alternatives = getCursorNonMaxModeAlternatives(piModelId, selection).slice(0, MAX_ALTERNATIVES_LISTED);
+	return alternatives.length > 0
+		? `pick a variant that does not need it: ${alternatives.map((id) => `${CURSOR_PROVIDER}/${id}`).join(", ")}`
+		: "pick another variant of this model that Cursor does not list as Max Mode only";
 }
 
-export function staleCursorSdkMaxModePatchFiles(packageRoot: string, processStartedAtMs: number): string[] {
-	return CURSOR_SDK_MAX_MODE_BUILD_FILES.filter((rel) => {
-		const path = join(packageRoot, rel);
-		if (!existsSync(path)) return false;
-		try {
-			return statSync(path).mtimeMs > processStartedAtMs;
-		} catch {
-			return false;
-		}
-	});
-}
-
-export function assertCursorSdkMaxModePatched(
-	resolvedSpecifier: string,
-	options: { processStartedAtMs?: number } = {},
-): void {
-	const packageRoot = cursorSdkPackageRootFromResolved(resolvedSpecifier);
-	const missing = missingCursorSdkMaxModePatchFiles(packageRoot);
-	if (missing.length === 0) {
-		const stale = staleCursorSdkMaxModePatchFiles(
-			packageRoot,
-			// A build file patched after this process started is not the module this process loaded.
-			options.processStartedAtMs ?? Date.now() - Math.round(process.uptime() * 1000),
-		);
-		if (stale.length === 0) return;
-		throw new Error(
-			`Cursor Max Mode is enabled, but the resolved @cursor/sdk at ${resolvedSpecifier} was patched after this process started (${stale.join(", ")}; package ${packageRoot}). Restart omp so the patched SDK is loaded, then send the turn again.`,
-		);
-	}
-	throw new Error(
-		`Cursor Max Mode is enabled, but the resolved @cursor/sdk at ${resolvedSpecifier} is not patched (package ${packageRoot}; missing marker in ${missing.join(", ")}). Run \`npm run patch:cursor-sdk\` from the omp-cursor-sdk checkout, or \`node scripts/patch-cursor-sdk.mjs --sdk ${packageRoot}\`. Re-apply the patch after \`omp plugin install\` or reinstall.`,
+export function formatCursorMaxModeOnlyRefusal(piModelId: string, selection: ModelSelection): string {
+	return (
+		`Cursor Max Mode is off, but ${CURSOR_PROVIDER}/${piModelId} selects a variant Cursor lists as Max Mode only (${formatSelectionParams(selection)}). ` +
+		`@cursor/sdk would run it in Max Mode and bill Max Mode rates anyway, so this turn was not sent. ` +
+		`Turn Max Mode on (--cursor-max-mode, /cursor-max-mode on, or PI_CURSOR_MAX_MODE=1), or ${formatAvoidanceAdvice(piModelId, selection)}.`
 	);
 }
 
 /**
- * Resolve the `@cursor/sdk` path this process imports, falling back to the on-disk `node_modules`
- * chain when the runtime cannot resolve a bare specifier for this file.
- *
- * `import.meta.resolve` throws for an extension file inside a Bun single-file compiled binary (the
- * shipping `omp`); `findCursorSdkPackageDir` supplies the package the real import resolves to.
+ * The warning for turning Max Mode off while the current local model is Max Mode only, or undefined when
+ * that model's next turn would not be refused.
  */
-export function resolveImportedCursorSdkPath(
-	moduleUrl: string | URL = import.meta.url,
-	resolveBareSpecifier?: (specifier: string) => string,
-): string {
-	try {
-		const resolve =
-			resolveBareSpecifier ??
-			((specifier: string) =>
-				(import.meta as ImportMeta & { resolve: (specifier: string) => string }).resolve(specifier));
-		return resolve("@cursor/sdk");
-	} catch {
-		const packageDir = findCursorSdkPackageDir(moduleUrl);
-		if (packageDir) return pathToFileURL(join(packageDir, "package.json")).href;
-		throw new Error(
-			`Cursor Max Mode is enabled, but @cursor/sdk could not be located from ${String(moduleUrl)}. Run \`npm run patch:cursor-sdk\` against the SDK this process imports.`,
-		);
-	}
+export function formatCursorMaxModeOffWarning(piModelId: string, selection: ModelSelection): string | undefined {
+	if (!isCursorSelectionMaxModeOnly(piModelId, selection)) return undefined;
+	return (
+		`${CURSOR_PROVIDER}/${piModelId} is a variant Cursor lists as Max Mode only, so its next turn will be refused while Max Mode is off. ` +
+		`Turn Max Mode back on, or ${formatAvoidanceAdvice(piModelId, selection)}.`
+	);
 }
 
-export function assertImportedCursorSdkMaxModePatched(): void {
-	assertCursorSdkMaxModePatched(resolveImportedCursorSdkPath());
+/**
+ * The model selection a turn sends for the Max Mode setting.
+ *
+ * - Cursor Cloud: the selection unchanged. The Cloud Agents API's model object (`ModelRef`) has only `id` and
+ *   `params`, and it rejects any other key (a run request carrying `maxMode` answers 400 `validation_error:
+ *   Unrecognized key(s) in object: 'maxMode'`), while @cursor/sdk 1.0.40 passes the selection to the REST
+ *   request whole. The toggle has no effect on a Cloud turn.
+ * - Local, toggle on: `maxMode: true`.
+ * - Local, toggle off: the selection unchanged, unless the catalog lists every variant matching it as Max
+ *   Mode only. `@cursor/sdk` 1.0.40 then sets `maxMode` itself and bills Max Mode rates, which the user
+ *   switched off, so that selection is refused before any agent exists. A model whose catalog has no variant
+ *   information is never refused.
+ */
+export function selectCursorMaxModeSelection(
+	piModelId: string,
+	selection: ModelSelection,
+	options: { runtime: CursorRuntime; enabled: boolean },
+): ModelSelection {
+	if (options.runtime === "cloud") return selection;
+	if (options.enabled) return applyCursorMaxModeSelection(selection, true);
+	if (isCursorSelectionMaxModeOnly(piModelId, selection)) {
+		throw new Error(formatCursorMaxModeOnlyRefusal(piModelId, selection));
+	}
+	return selection;
 }

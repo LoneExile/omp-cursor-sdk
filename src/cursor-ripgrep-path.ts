@@ -1,6 +1,6 @@
 import { accessSync, constants, existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { findCursorSdkPackageDir } from "./cursor-sdk-package-dir.js";
 
 export const CURSOR_RIPGREP_ENV = "CURSOR_RIPGREP_PATH";
@@ -92,7 +92,7 @@ const treeSitterVendorMisses = new Set<string>();
 /**
  * Point the SDK's native shell parser at the installed platform package before the SDK first loads.
  *
- * The SDK (1.0.34) takes `CURSOR_TREE_SITTER_VENDOR_DIR` as the directory holding `tree-sitter/` and
+ * The SDK (1.0.40) takes `CURSOR_TREE_SITTER_VENDOR_DIR` as the directory holding `tree-sitter/` and
  * `tree-sitter-bash/` only when it is an absolute path, and otherwise searches just the ancestors of
  * the entry script and of the executable for `node_modules/@cursor/sdk-<platform>-<arch>`. A plugin
  * installed beside a compiled `omp` binary is in neither chain, so the lookup misses and the SDK
@@ -119,34 +119,4 @@ export function ensureCursorTreeSitterVendorDir(fromModuleUrl: string | URL = im
 	const vendorDirectory = join(packageDirectory, "vendor");
 	process.env[CURSOR_TREE_SITTER_VENDOR_DIR_ENV] = vendorDirectory;
 	return vendorDirectory;
-}
-
-/**
- * Whether `file` is the `bin/rg` of the SDK's platform package for this platform
- * (`@cursor/sdk-<platform>-<arch>`), the binary `ensureCursorRipgrepPath` writes into
- * `CURSOR_RIPGREP_PATH`. It reads the path only, so it also holds when that binary is missing or not
- * executable, the failures `resolveBundledCursorRipgrepPath` cannot name because it requires an
- * executable file.
- */
-export function isBundledCursorRipgrepPath(file: string): boolean {
-	const suffix = `/@cursor/${platformPackageDirName}/bin/${ripgrepBinaryName}`;
-	const normalized = file.replaceAll("\\", "/");
-	return (process.platform === "win32" ? normalized.toLowerCase() : normalized).endsWith(suffix);
-}
-
-/**
- * Whether `file` can be the ripgrep binary Cursor's local runtime spawns. The SDK (1.0.34, in its
- * local runtime bootstrap) picks one path and spawns it for every unsandboxed ripgrep run (a sandboxed
- * run spawns the SDK's sandbox helper and hands ripgrep to it as an argument): `CURSOR_RIPGREP_PATH`
- * when it is an absolute path, whatever the file is called; else the `bin/rg` (`bin/rg.exe` on
- * Windows) of the `@cursor/sdk-<platform>-<arch>` or `@cursor/february-<platform>-<arch>` package,
- * found by walking up from the entry script and from the executable; else `rg` from PATH. This
- * accepts the union of those: the configured absolute path, or any file named `rg` (`rg.exe` on
- * Windows). It does not model which one the SDK picked, so it can also accept an `rg` the SDK did not
- * pick; that only widens a check that also requires SDK stack provenance and a `spawn <file>` error.
- */
-export function isCursorRipgrepBinary(file: string, env: NodeJS.ProcessEnv = process.env): boolean {
-	const configuredPath = env[CURSOR_RIPGREP_ENV];
-	if (configuredPath && isAbsolute(configuredPath) && file === configuredPath) return true;
-	return (process.platform === "win32" ? /^rg\.exe$/i : /^rg$/).test(basename(file));
 }

@@ -100,45 +100,63 @@ Cursor's catalog publishes **no context window** for any model. The
 extension resolves each id's window (`getContextWindow()` in
 `src/model-discovery.ts`) from the bundled map in
 `src/bundled-context-windows.ts` (measured from SDK checkpoints on
-2026-09-27), overlaid by `~/.omp/agent/cursor-sdk-context-windows.json`
+2026-09-27; the `@1m` rows on 2026-10-22 with `@cursor/sdk` 1.0.40), overlaid by `~/.omp/agent/cursor-sdk-context-windows.json`
 (written automatically from each completed run's
 `checkpoint.tokenDetails.maxTokens`, used from the next registration). Keys are
 tried in order: the exact id, its canonical default-lane id, the same model and
 context without `@fast`/`@slow` (the lane does not change the window), then the
 catalog context label (`@1m` → 1000000), the base id, and `"default"`.
 
-Cursor Max Mode windows are reachable only with the opt-in patch and toggle.
-`@cursor/sdk` `ModelSelection` is still `{ id, params }`; the plugin appends
-`{ id: "max_mode", value: "true" }` when Max Mode is on, and
-`scripts/patch-cursor-sdk.mjs` makes the SDK set `RequestedModel.maxMode` and
-drop that sentinel. Without both, measured `@1m` variants stay at 200k–300k
-(GPT `@1m` at 272000) and `grok-4.7@500k` is refused with
-`Invalid parameters for registry model`. The provider error names the patch
-command and the next smaller catalog context (`@256k`).
+Cursor Max Mode needs no patched SDK, and it applies to the local runtime only.
+`@cursor/sdk` (since 1.0.38) has `ModelSelection.maxMode` and the local agent copies it
+onto its request; the plugin sets `maxMode: true` on the selection when Max Mode
+is on (the default). Cursor Cloud never carries it: the Cloud Agents API's model
+object takes only `id` and `params` and answers 400 for another key
+(`Unrecognized key(s) in object: 'maxMode'`), and the SDK passes the selection to
+the REST request whole. A cloud turn therefore sends the selection unchanged, and
+the status line shows `cursor:cloud · fast:n/a` without `max:on`.
+
+On a local turn the SDK also sets `maxMode` itself when every catalog variant
+consistent with the selection's `params` has `ModelVariant.isMaxMode`, for
+example every `@1m` variant the catalog lists, `grok-4.7@500k` and the fast 300k
+Opus variants. It then bills Max Mode rates whatever the toggle says. So with Max
+Mode off, `selectCursorMaxModeSelection` (`src/cursor-max-mode.ts`) applies the
+same rule (`isCursorSelectionMaxModeOnly` in `src/model-discovery.ts`: params
+non-empty, at least one matching catalog variant, all matching variants
+`isMaxMode`) and refuses such a selection before any agent exists. The error
+names the model and the params and lists registered ids of the same model that
+do not need Max Mode (`getCursorNonMaxModeAlternatives`). A model whose catalog
+has no variants, or a param combination the catalog does not list, is never
+refused. That is why the bundled `@1m` windows were re-measured on 1.0.40
+(1,000,000; `gpt-5.4@1m` 922,000) and do not depend on the toggle. The exceptions
+are `gpt-5.4@1m@fast`, `gpt-5.5@1m@fast` and `gpt-5-5@1m@fast`: the catalog lists
+no such variant, so they run outside Max Mode when it is off, and their rows are
+an explicit 272,000. By the same rule a `/cursor-fast` preference that picks a
+lane the catalog does not list for plain `gpt-5.4@1m`, `gpt-5.5@1m` or
+`gpt-5-5@1m` is not refused and runs outside Max Mode when it is off, at that
+smaller window. A larger context that Cursor still refuses with `Invalid
+parameters for registry model` gets a hint that names the next smaller catalog
+context (`@256k`); on a local turn that did not already carry `maxMode` it also
+names `--cursor-max-mode` / `/cursor-max-mode`. Long context bills higher.
 
 Precedence, highest first: `--cursor-max-mode` / `--cursor-no-max-mode` (no-max
 wins if both are set), `PI_CURSOR_MAX_MODE`, the session entry from
 `/cursor-max-mode [on|off|toggle]`, then `maxMode` in
 `~/.omp/agent/cursor-sdk.json` when saved with `--save-user`, then on.
-Project config is never read. Before a Max Mode turn the plugin resolves
-`import.meta.resolve("@cursor/sdk")`, walks to that package root, and requires
-the patch marker in every existing build file (`dist/esm/479.js`,
-`dist/cjs/479.js`, `dist/bundled/index.js`). Bun loads the bundled file; Node
-loads the ESM chunk. An unpatched copy fails the turn and names the resolved
-path; a copy patched after the process started also fails, because the loaded
-module is the older one, and asks for a restart. Patch this checkout with
-`npm run patch:cursor-sdk`, then restart omp. An omp install
-hoists `@cursor/sdk` to `~/.omp/plugins/node_modules/@cursor/sdk` and must be
-patched with `node scripts/patch-cursor-sdk.mjs --sdk` that path; re-apply
-after `omp plugin install` and restart. Long context bills higher.
+Project config is never read.
 
-The same patch turns off the local agent's default commit trailer
-`Co-authored-by: Cursor <cursoragent@cursor.com>`. `@cursor/sdk` 1.0.34's
-local executor never sets an attribution provider, so
+The optional patch `scripts/patch-cursor-sdk.mjs` turns off the local agent's
+default commit trailer `Co-authored-by: Cursor <cursoragent@cursor.com>`.
+`@cursor/sdk` 1.0.40's local executor never sets an attribution provider, so
 `attributeCommitsToAgent` defaults on and `~/.cursor/cli-config.json` has no
-effect. The patch changes that default to off. An explicit provider value
-still wins. Cloud agents do not load this build, so they still add the trailer.
-Re-apply the patch and restart omp.
+effect. The patch changes that default to off in the one file of each of
+`dist/esm`, `dist/cjs` and `dist/bundled` that holds it, found by content because
+chunk names change between SDK releases. An explicit provider value still wins.
+Cloud agents do not load this build, so they still add the trailer. A turn never
+checks for the patch. In a checkout run `npm run patch:cursor-sdk`. An omp
+install hoists `@cursor/sdk` to `~/.omp/plugins/node_modules/@cursor/sdk` and is
+patched with `node scripts/patch-cursor-sdk.mjs --sdk` that path. Re-apply after
+`omp plugin install` and restart omp.
 
 ## 4. Authentication and key resolution
 
@@ -187,10 +205,11 @@ open from the plugin.
 
 ### 4.4 Why a finished Cursor shell must not be collected
 
-`@cursor/sdk` 1.0.34's local shell (`jL0` bash, `RL0` zsh, `Yi0` zsh-light in
-`dist/bundled/index.js`) spawns through `node:child_process` with
-`stdio: [stdin, "pipe", "pipe", "pipe", "pipe"]`. The last two pipes carry
-shell state on fds 3 and 4. Bun implements that spawn as `Bun.spawn` and stores
+`@cursor/sdk`'s local shell spawns through `node:child_process` with
+`stdio: [stdin, "pipe", "pipe", "pipe", "pipe"]` (1.0.34). Its three shell spawns
+in 1.0.40's `dist/bundled/index.js` pass those slots plus a sixth that is `"pipe"`
+or `"ignore"`. On 1.0.34 the last two pipes carry shell state on fds 3 and 4; the
+sixth slot was not measured. Bun implements that spawn as `Bun.spawn` and stores
 the extra pipes as owned descriptors. On Bun 1.3.14, `Subprocess` finalization
 closes every owned extra descriptor. The streams already closed them when the
 shell exited, and SQLite (omp's `agent.db` / `models.db` / `history.db`, or the
@@ -218,8 +237,9 @@ streamCursor(model, context, options)
                effort/reasoning_effort/reasoning/thinking param
             -> fastEnabled from the model's fast override (@fast/@slow) or
                --cursor-fast/--cursor-no-fast or the model default
-            -> when Max Mode is on, append max_mode=true and refuse the turn
-               if the resolved @cursor/sdk build files are unpatched
+            -> local runtime: when Max Mode is on, set maxMode: true on the
+               selection; when it is off, refuse a catalog Max Mode only
+               variant. Cloud: selection unchanged
        -> load @cursor/sdk, Agent.create({ apiKey, model: selection, mode, local })
             -> local agent loop (session, tools, thinking) runs on the machine
        -> agent.send(payload, { mode, model, onDelta, onStep })
@@ -515,15 +535,16 @@ controls reasoning depth on both variants.
 
 - `/cursor-refresh-models` — refresh the live catalog (bypasses cache)
 - `/cursor-fast` — toggle fast mode for the current Cursor model
-- `/cursor-max-mode [on|off|toggle] [--save-user]` — opt into Cursor Max Mode.
-  `--save-user` writes user `cursor-sdk.json` only, never project config
+- `/cursor-max-mode [on|off|toggle] [--save-user]` — opt into Cursor Max Mode
+  (local runtime only). `--save-user` writes user `cursor-sdk.json` only, never
+  project config
 - `/cursor-tools` — live tool-surface debug report
 - `/cursor-mode <agent|plan>` — agent/plan mode
 
 ### Flags
 
 - `--cursor-fast` / `--cursor-no-fast` — force fast mode on/off
-- `--cursor-max-mode` / `--cursor-no-max-mode` — force Max Mode on/off for this run
+- `--cursor-max-mode` / `--cursor-no-max-mode` — force Max Mode on/off for this run (local runtime only)
 - `--cursor-mode <agent|plan>` — CLI mode override
 - `--thinking <level>` — one of the model's advertised efforts (the
   `thinking` column of `omp models cursor-sdk`), or `off` where Cursor has an
@@ -539,7 +560,7 @@ entries and `~/.omp/agent/cursor-sdk.json` defaults.
 ### Environment
 
 - `CURSOR_API_KEY` — API key (`~/.omp/.env` is loaded once at omp startup)
-- `PI_CURSOR_MAX_MODE` — `1`/`true`/`on` or `0`/`false`/`off`; forces Max Mode below the CLI flags
+- `PI_CURSOR_MAX_MODE` — `1`/`true`/`on` or `0`/`false`/`off`; forces Max Mode below the CLI flags (local runtime only)
 - `PI_CURSOR_RUNTIME=cloud` — opt into cloud agents
 - `PI_CURSOR_CLOUD_ACK=1` (+ `PI_CURSOR_CLOUD_REPO`, ...) — cloud ack/config
 - `fastDefaults` and `maxMode` in `~/.omp/agent/cursor-sdk.json` — saved fast defaults and the optional Max Mode user preference. `maxMode` is never read from project config

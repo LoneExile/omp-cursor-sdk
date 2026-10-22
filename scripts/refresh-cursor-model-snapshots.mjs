@@ -5,6 +5,7 @@ import { defaultApiKeyFromEnv, parseArgv } from "./lib/cursor-cli-args.mjs";
 import { scrubSensitiveText } from "../shared/cursor-sensitive-text.mjs";
 import { createScriptFail } from "./lib/cursor-script-fail.mjs";
 import { normalizeCursorContextWindowEntries } from "../shared/cursor-model-selection-identities.mjs";
+import { formatBundledContextWindowsHeader } from "../shared/cursor-bundled-context-windows-header.mjs";
 
 const FALLBACK_MODELS_PATH = "src/cursor-fallback-models.generated.ts";
 const CONTEXT_WINDOWS_PATH = "src/bundled-context-windows.ts";
@@ -109,6 +110,7 @@ function sanitizeModelItem(item) {
 						displayName: variant.displayName,
 						description: variant.description,
 						isDefault: variant.isDefault,
+						isMaxMode: variant.isMaxMode,
 					}),
 				)
 			: undefined,
@@ -171,7 +173,7 @@ function formatContextWindows(models, checkpointWindows, fallbackContextWindow) 
 	const date = new Date().toISOString().slice(0, 10);
 	const sorted = [...merged.entries()].sort(([a], [b]) => (a === "default" ? -1 : b === "default" ? 1 : a.localeCompare(b)));
 	const lines = sorted.map(([modelId, contextWindow]) => `\t${JSON.stringify(modelId)}: ${contextWindow},`);
-	return `// Generated from Cursor SDK checkpoint tokenDetails.maxTokens on ${date}.\n// Refresh with: npm run refresh:cursor-snapshots -- --write --context-windows ~/.omp/agent/cursor-sdk-context-windows.json\n// Keys are current selectable model IDs. Equivalent default :fast/:slow selections\n// collapse to one key; stale and ambiguous aliases are omitted. Values are observed\n// or conservative default/non-Max-mode limits and may override a catalog context\n// label when the completed SDK checkpoint reports a different effective limit.\nexport const BUNDLED_CONTEXT_WINDOWS = {\n${lines.join("\n")}\n} as const satisfies Record<string, number>;\n`;
+	return `${formatBundledContextWindowsHeader(date)}export const BUNDLED_CONTEXT_WINDOWS = {\n${lines.join("\n")}\n} as const satisfies Record<string, number>;\n`;
 }
 
 const args = parseRefreshArgs(process.argv.slice(2));

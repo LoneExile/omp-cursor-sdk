@@ -16,7 +16,7 @@ import {
 	type CursorSessionAgentResumeScope,
 } from "./cursor-session-agent-resume.js";
 import {
-	cursorSessionStoreIdentitiesEqual,
+	admitRecordedCursorSessionStoreIdentity,
 	getCursorSessionStoreIdentities,
 	openCursorSessionStore,
 } from "./cursor-session-store.js";
@@ -313,11 +313,12 @@ export async function runCursorSessionAgentCleanupCommand(pi: LocalResumeCleanup
 		for (const candidate of plan.candidates) {
 			const { agentId } = candidate;
 			try {
-				const identity = candidate.storeIdentity ?? identities.defaultStore;
-				if (
-					!cursorSessionStoreIdentitiesEqual(identity, identities.defaultStore) &&
-					!cursorSessionStoreIdentitiesEqual(identity, identities.sessionStore)
-				) throw new InvalidCursorSessionStoreIdentityError("Recorded Cursor local store identity is not valid for this pi session");
+				const identity = await admitRecordedCursorSessionStoreIdentity(
+					candidate.storeIdentity ?? identities.defaultStore,
+					identities,
+					["defaultStore", "sessionStore"],
+				);
+				if (!identity) throw new InvalidCursorSessionStoreIdentityError("Recorded Cursor local store identity is not valid for this pi session");
 				let openedStore = openedStores.get(identity.stateRoot);
 				if (!openedStore) {
 					openedStore = await openCursorSessionStore(ctx.cwd, identity);

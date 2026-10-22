@@ -8,24 +8,22 @@ import {
 	isCursorSdkHookWarning,
 	isCursorSdkStartupNoise,
 } from "../src/cursor-sdk-output-filter.js";
-import { loadInstalledSdkLogger, readInstalledSdkBundleText, SDK_BUILDS, type SdkBuild } from "./helpers/cursor-sdk-installed-logger.js";
+import { CURSOR_SDK_BUILDS, CURSOR_SDK_ROOT, readCursorSdkBuildSource } from "./helpers/cursor-sdk-build-source.js";
+import { loadInstalledSdkLogger } from "./helpers/cursor-sdk-installed-logger.js";
+import { escapeRegExp } from "./helpers/cursor-sdk-minified-source.js";
 import {
 	COLORED_INFO_FRAME,
 	PLAIN_INFO_FRAME,
 	SAMPLE_INFO_CALL,
 	SAMPLE_INFO_TIMESTAMP,
 } from "./helpers/cursor-sdk-output-frames.js";
-import { readInstalledPackageVersion, resolveInstalledPackageRoot } from "./helpers/installed-package.js";
+import { readInstalledPackageVersion } from "./helpers/installed-package.js";
 import { captureProcessOutput, type ProcessOutputCapture } from "./helpers/process-output-capture.js";
 
 // The filter acts on exact frames, so every template it matches is pinned to the installed SDK's own
 // text, in every build the package ships: omp (Bun) loads `dist/bundled`, Node ESM `dist/esm`, CommonJS
 // `dist/cjs`. An SDK upgrade that changes a template, adds a new variant of one, or adds a new log site of
 // the same family fails here and forces a review instead of silently leaking noise or hiding a warning.
-
-function escapeRegExp(text: string): string {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function distinctMatches(text: string, pattern: RegExp): string[] {
 	return [...new Set(text.match(pattern) ?? [])].sort();
@@ -69,11 +67,11 @@ function instantiate(template: string, args: readonly string[]): string {
 
 describe("installed Cursor SDK output contract: package", () => {
 	it("is the SDK version these templates were verified against", () => {
-		expect(readInstalledPackageVersion("@cursor/sdk")).toBe("1.0.34");
+		expect(readInstalledPackageVersion("@cursor/sdk")).toBe("1.0.40");
 	});
 
 	it("loads the bundled build under Bun, which is the runtime omp uses", () => {
-		const manifest = JSON.parse(readFileSync(join(resolveInstalledPackageRoot("@cursor/sdk"), "package.json"), "utf8")) as {
+		const manifest = JSON.parse(readFileSync(join(CURSOR_SDK_ROOT, "package.json"), "utf8")) as {
 			exports: Record<string, Record<string, string>>;
 		};
 		expect(manifest.exports["."]).toMatchObject({
@@ -84,11 +82,11 @@ describe("installed Cursor SDK output contract: package", () => {
 	});
 });
 
-for (const build of SDK_BUILDS) {
+for (const build of CURSOR_SDK_BUILDS) {
 	describe(`installed Cursor SDK ${build} build: bundle templates`, () => {
 		let bundle: string;
 		beforeAll(() => {
-			bundle = readInstalledSdkBundleText(build);
+			bundle = readCursorSdkBuildSource(build);
 		}, 30_000);
 
 		for (const message of CURSOR_SDK_STARTUP_NOISE_PATTERNS) {

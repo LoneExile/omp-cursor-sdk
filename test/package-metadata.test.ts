@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FALLBACK_MODEL_ITEMS } from "../src/cursor-fallback-models.generated.js";
+import { CURSOR_SDK_BUILDS, CURSOR_SDK_ROOT, readCursorSdkBuildFiles } from "./helpers/cursor-sdk-build-source.js";
 
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json") as {
@@ -69,8 +70,8 @@ describe("package metadata cutover baselines", () => {
 	});
 
 	it("pins Cursor SDK exactly", () => {
-		expect(packageJson.dependencies["@cursor/sdk"]).toBe("1.0.34");
-		expect(lockPackageVersion("@cursor/sdk")).toBe("1.0.34");
+		expect(packageJson.dependencies["@cursor/sdk"]).toBe("1.0.40");
+		expect(lockPackageVersion("@cursor/sdk")).toBe("1.0.40");
 	});
 
 	it("ships an exact MCP/Hono bundledDependencies closure for published installs", () => {
@@ -88,11 +89,10 @@ describe("package metadata cutover baselines", () => {
 	});
 
 	it("relies on the Node ConnectRPC transport bundled inside Cursor SDK's own dist files", () => {
-		// 1.0.32 imported `@connectrpc/connect-node` from node_modules; 1.0.34 inlines it, so a transport error's
+		// 1.0.32 imported `@connectrpc/connect-node` from node_modules; 1.0.34 and later inline it, so a transport error's
 		// stack carries `@cursor/sdk/dist` frames and never a `@connectrpc/connect-node` path. The provider error
 		// classifier keys on SDK provenance for that reason, and would stop matching if an SDK moved it back out.
-		const sdkRoot = join(process.cwd(), "node_modules/@cursor/sdk");
-		const sdkTransportDts = readFileSync(join(sdkRoot, "dist/esm/transport.d.ts"), "utf8");
+		const sdkTransportDts = readFileSync(join(CURSOR_SDK_ROOT, "dist/esm/transport.d.ts"), "utf8");
 
 		expect(sdkTransportDts).toContain("Node");
 		expect(sdkTransportDts).toContain("`@connectrpc/connect-node`");
@@ -101,17 +101,10 @@ describe("package metadata cutover baselines", () => {
 		expect(lockPackageVersion("@connectrpc/connect-node")).toBeUndefined();
 
 		const externalImport = /(?:import\(|require\(|from)\s*["']@connectrpc\/connect-node["']/;
-		const buildFiles = [
-			"dist/bundled/index.js",
-			...["esm", "cjs"].flatMap((dir) =>
-				readdirSync(join(sdkRoot, "dist", dir))
-					.filter((name) => name.endsWith(".js"))
-					.map((name) => `dist/${dir}/${name}`),
-			),
-		];
+		const buildFiles = CURSOR_SDK_BUILDS.flatMap((build) => readCursorSdkBuildFiles(build).map((file) => ({ ...file, build })));
 		expect(buildFiles.length).toBeGreaterThan(3);
-		for (const file of buildFiles) {
-			expect(readFileSync(join(sdkRoot, file), "utf8"), file).not.toMatch(externalImport);
+		for (const { build, name, source } of buildFiles) {
+			expect(source, `${build}/${name}`).not.toMatch(externalImport);
 		}
 	});
 

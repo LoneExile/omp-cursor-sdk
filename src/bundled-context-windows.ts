@@ -1,24 +1,28 @@
-// Generated from Cursor SDK checkpoint tokenDetails.maxTokens on 2026-09-27.
+// Generated from Cursor SDK checkpoint tokenDetails.maxTokens on 2026-10-22.
 // Refresh with: npm run refresh:cursor-snapshots -- --write --context-windows ~/.omp/agent/cursor-sdk-context-windows.json
 // Keys are current selectable model IDs. Equivalent default :fast/:slow selections
 // collapse to one key; stale and ambiguous aliases are omitted. Values are observed
-// or conservative default/non-Max-mode limits. Max Mode windows are reachable only
-// with scripts/patch-cursor-sdk.mjs plus the Max Mode toggle; they are not in this
-// table. A completed SDK checkpoint may override a catalog context label.
+// or conservative default limits and may override a catalog context label when the
+// completed SDK checkpoint reports a different effective limit.
+// @cursor/sdk 1.0.40 runs every variant the catalog lists as Max Mode only (ModelVariant.isMaxMode,
+// for example every `@1m` variant the catalog lists) in Max Mode on its own, so those windows do not
+// depend on the Max Mode toggle. A variant the catalog does not list is not forced to Max Mode, so it
+// runs at the non-Max window and keeps an explicit conservative row (the `@1m@fast` lanes of gpt-5.4,
+// gpt-5.5 and gpt-5-5).
 export const BUNDLED_CONTEXT_WINDOWS = {
 	"default": 200000,
 	"claude-fable-5@300k": 300000,
 	"claude-haiku-4-5": 200000,
 	"claude-opus-4-5": 200000,
-	"claude-opus-4-6@1m": 200000,
-	"claude-opus-4-7@1m": 300000,
-	"claude-opus-4-8@1m": 300000,
-	"claude-opus-5-5@1m": 300000,
-	"claude-opus-5@1m": 300000,
+	"claude-opus-4-6@1m": 1000000,
+	"claude-opus-4-7@1m": 1000000,
+	"claude-opus-4-8@1m": 1000000,
+	"claude-opus-5-5@1m": 1000000,
+	"claude-opus-5@1m": 1000000,
 	"claude-sonnet-4-5@200k": 200000,
-	"claude-sonnet-4-6@1m": 200000,
+	"claude-sonnet-4-6@1m": 1000000,
 	"claude-sonnet-4@200k": 200000,
-	"claude-sonnet-5@1m": 300000,
+	"claude-sonnet-5@1m": 1000000,
 	"composer-2": 200000,
 	"composer-2.5": 200000,
 	"gemini-2.5-flash": 200000,
@@ -29,6 +33,7 @@ export const BUNDLED_CONTEXT_WINDOWS = {
 	"gemini-3.7-flash": 200000,
 	"gemini-3.8-flash": 200000,
 	"glm-5.2": 200000,
+	"gpt-5-5@1m@fast": 272000,
 	"gpt-5-5@272k": 272000,
 	"gpt-5-mini": 272000,
 	"gpt-5.1": 272000,
@@ -36,19 +41,21 @@ export const BUNDLED_CONTEXT_WINDOWS = {
 	"gpt-5.3-codex": 272000,
 	"gpt-5.4-mini": 272000,
 	"gpt-5.4-nano": 272000,
-	"gpt-5.4@1m": 272000,
-	"gpt-5.5@1m": 272000,
+	"gpt-5.4@1m": 922000,
+	"gpt-5.4@1m@fast": 272000,
+	"gpt-5.5@1m": 1000000,
+	"gpt-5.5@1m@fast": 272000,
 	"gpt-5.5@272k": 272000,
-	"gpt-5.6-luna@1m": 272000,
-	"gpt-5.6-sol@1m": 272000,
-	"gpt-5.6-terra@1m": 272000,
-	"gpt-5.6@1m": 272000,
+	"gpt-5.6-luna@1m": 1000000,
+	"gpt-5.6-sol@1m": 1000000,
+	"gpt-5.6-terra@1m": 1000000,
+	"gpt-5.6@1m": 1000000,
 	"grok-4.5": 256000,
 	"grok-4.5@slow": 256000,
 	"grok-4.6": 256000,
 	"kimi-k2.7-code": 200000,
 	"kimi-k3": 200000,
-	"muse-spark-1.3@1m": 300000,
-	"opus-4.8@1m": 300000,
+	"muse-spark-1.3@1m": 1000000,
+	"opus-4.8@1m": 1000000,
 	"opus-4.8@300k": 300000,
 } as const satisfies Record<string, number>;

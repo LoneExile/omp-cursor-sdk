@@ -3,6 +3,7 @@ import type {
 	ModelParameterDefinition,
 	ModelParameterValue,
 	ModelSelection,
+	ModelVariant,
 } from "@cursor/sdk";
 import type { Effort } from "@oh-my-pi/pi-ai";
 import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
@@ -79,6 +80,9 @@ export interface CursorModelMetadata {
 }
 
 const metadataByPiModelId = new Map<string, CursorModelMetadata>();
+// The catalog's variants per base model id, kept whole so a selection can be checked against
+// `ModelVariant.isMaxMode` the way @cursor/sdk does when it resolves a model.
+const catalogVariantsByBaseModelId = new Map<string, readonly ModelVariant[]>();
 
 function cloneParams(params: ModelParameterValue[]): ModelParameterValue[] {
 	return params.map((param) => ({ ...param }));
@@ -282,9 +286,11 @@ function toModelConfig(metadata: CursorModelMetadata, name: string): ProviderMod
 
 function registerModelItems(items: ModelListItem[]): ProviderModelConfig[] {
 	metadataByPiModelId.clear();
+	catalogVariantsByBaseModelId.clear();
 	const contextWindowCache = loadContextWindowCache();
 	return getCursorModelSelectionIdentities(items).map(({ model: item, selectionModelId, context, fastOverride, piModelId, contextWindowKey, baseContextWindowKey }) => {
 		const defaultParams = getDefaultParams(item);
+		if (item.variants?.length) catalogVariantsByBaseModelId.set(item.id, item.variants);
 		const contextParams = context ? replaceParam(defaultParams, "context", context) : defaultParams;
 		const params = fastOverride === undefined ? contextParams : replaceParam(contextParams, "fast", fastOverride ? "true" : "false");
 		const metadata = toMetadata(
@@ -339,6 +345,63 @@ export function getSmallerCursorContextVariant(selectionModelId: string, context
 		if (size !== undefined && size < refused && (!best || size > best.size)) best = { context: metadata.context, size };
 	}
 	return best?.context;
+}
+
+function matchingCatalogVariants(variants: readonly ModelVariant[], params: readonly ModelParameterValue[]): ModelVariant[] {
+	return variants.filter((variant) =>
+		params.every((wanted) =>
+			variant.params.some((candidate) => candidate.id.trim() === wanted.id.trim() && candidate.value.trim() === wanted.value.trim()),
+		),
+	);
+}
+
+function areAllMatchingVariantsMaxMode(variants: readonly ModelVariant[], params: readonly ModelParameterValue[]): boolean {
+	if (params.length === 0) return false;
+	const matching = matchingCatalogVariants(variants, params);
+	return matching.length > 0 && matching.every((variant) => variant.isMaxMode === true);
+}
+
+/**
+ * Whether the catalog lists every variant matching `selection` as Max Mode only (`ModelVariant.isMaxMode`).
+ * This is the rule @cursor/sdk 1.0.40 applies in its local catalog resolver, which then sends `maxMode`
+ * whatever the caller asked for. False when the catalog has no variant information for the model, so
+ * a model discovered without variants is never reported as Max Mode only.
+ */
+export function isCursorSelectionMaxModeOnly(piModelId: string, selection: ModelSelection): boolean {
+	const metadata = metadataByPiModelId.get(piModelId);
+	const variants = metadata ? catalogVariantsByBaseModelId.get(metadata.baseModelId) : undefined;
+	return variants !== undefined && areAllMatchingVariantsMaxMode(variants, selection.params ?? []);
+}
+
+/**
+ * Registered ids of the same model, in the same selection form, that a Max Mode only `selection` could be
+ * swapped for: the context and fast lane change, every other parameter stays, and the catalog lists the
+ * resulting variant without marking it Max Mode only.
+ */
+export function getCursorNonMaxModeAlternatives(piModelId: string, selection: ModelSelection): string[] {
+	const metadata = metadataByPiModelId.get(piModelId);
+	const variants = metadata ? catalogVariantsByBaseModelId.get(metadata.baseModelId) : undefined;
+	if (!metadata || !variants) return [];
+	// One entry per variant. `@256k` and `@256k@fast` select the same variant when 256k's default lane is fast;
+	// the explicit lane id is listed, because it keeps that variant when a /cursor-fast preference changes the lane.
+	const byVariant = new Map<string, { id: string; explicitLane: boolean }>();
+	for (const candidate of metadataByPiModelId.values()) {
+		if (
+			candidate.piModelId === piModelId ||
+			candidate.baseModelId !== metadata.baseModelId ||
+			candidate.selectionModelId !== metadata.selectionModelId
+		) {
+			continue;
+		}
+		let params = cloneParams(selection.params ?? []);
+		if (candidate.context) params = replaceParam(params, "context", candidate.context);
+		if (candidate.fastOverride !== undefined) params = replaceParam(params, "fast", candidate.fastOverride ? "true" : "false");
+		if (matchingCatalogVariants(variants, params).length === 0 || areAllMatchingVariantsMaxMode(variants, params)) continue;
+		const variantKey = JSON.stringify(params);
+		const explicitLane = candidate.fastOverride !== undefined;
+		if (!byVariant.get(variantKey)?.explicitLane) byVariant.set(variantKey, { id: candidate.piModelId, explicitLane });
+	}
+	return [...byVariant.values()].map((entry) => entry.id);
 }
 
 function setParam(params: ModelParameterValue[], id: string, value: string): void {

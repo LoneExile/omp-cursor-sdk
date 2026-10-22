@@ -73,18 +73,24 @@ export function resolveCursorMcpConnectTimeoutMs(
 	return DEFAULT_CURSOR_MCP_CONNECT_TIMEOUT_MS;
 }
 
-// The SDK minifies its class names (`class y extends d` in the webpack esm/cjs chunks,
-// `class R11 extends L11` in the Bun bundle), so a timeout's purpose is classified from
-// frames by method name and SDK path, never by a class name. A stack is the protocol
-// timer, `_setupTimeout`, armed by the base class's `request`; the purpose is the
-// protocol method that called `request`, which is the frame right after it:
-//   Bun/JSC  at request (…/node_modules/@cursor/sdk/dist/bundled/index.js:L:C)
-//            at async listTools (…/node_modules/@cursor/sdk/dist/bundled/index.js:L:C)
-//   V8       at y.request (file:///…/@cursor/sdk/dist/esm/458.js:L:C)
-//            at async y.listTools (file:///…/@cursor/sdk/dist/esm/458.js:L:C)
+// The SDK minifies its class names and splits its builds into numbered chunks, so a timeout's
+// purpose is classified from frames by method name and SDK path, never by a class name or a
+// chunk file name. A stack is the protocol timer, `_setupTimeout`, armed by the protocol base
+// class's `request`; the purpose is the protocol client method that called `request`, which is
+// the frame right after it. Bun (JavaScriptCore) prints bare method names, V8 prefixes the
+// minified class name, and the path is the SDK build the runtime loaded (`dist/bundled/index.js`
+// under Bun, a numbered chunk of `dist/esm` or `dist/cjs` under Node):
+//   Bun/JSC  at request (…/node_modules/@cursor/sdk/dist/<build>/<file>.js:L:C)
+//            at async listTools (…/node_modules/@cursor/sdk/dist/<build>/<file>.js:L:C)
+//   V8       at <Class>.request (file:///…/@cursor/sdk/dist/<build>/<file>.js:L:C)
+//            at async <Class>.listTools (file:///…/@cursor/sdk/dist/<build>/<file>.js:L:C)
 // Requiring that adjacency keeps an unknown request (`listPrompts`, `ping`, …) on the SDK
 // default even when a `connect`, `listTools` or `callTool` frame sits further up the
-// stack, and a `connect` resumed inside a `callTool` keeps the connect timeout.
+// stack, and a `connect` resumed inside a `callTool` keeps the connect timeout. A tool call
+// is the `callTool` frame of the protocol client: the agent-side wrapper reaches it through a
+// plain `sendToolCall`, which only calls `client.callTool` unless the SDK itself sets a tool-call
+// request option or the output-schema passthrough (nothing in the package does;
+// `test/cursor-mcp-timeout-sdk-stack.test.ts` fails if that changes).
 const CURSOR_SDK_PATH_PATTERN = String.raw`(?:node_modules[/\\]@cursor[/\\]sdk|@cursor/sdk/dist)`;
 
 function cursorSdkFramePattern(methods: string): string {

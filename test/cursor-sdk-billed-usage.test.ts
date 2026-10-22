@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentUsage, GetUsageOptions, RunUsage, SDKAgent, TokenUsage } from "@cursor/sdk";
@@ -18,6 +18,7 @@ import { awaitFinalizeCursorRunOutcome } from "../src/cursor-provider-turn-final
 import { CursorRunFinalizer, type CursorRunFinalizerParams } from "../src/cursor-provider-run-finalizer.js";
 import type { CursorProviderTurnPrepareResult } from "../src/cursor-provider-turn-types.js";
 import { readInstalledPackageVersion, resolveInstalledPackageRoot } from "./helpers/installed-package.js";
+import { readCursorSdkBuildSource } from "./helpers/cursor-sdk-build-source.js";
 import { makeAssistantMessage } from "./helpers/pi-harness.js";
 import { makeModel } from "./helpers/model-fixtures.js";
 
@@ -32,7 +33,7 @@ const _copiedTokenFieldsPresent: _AssertCopiedTokenFields = true;
 void _copiedTokenFieldsPresent;
 
 interface BilledUsageContractFixture {
-	provenance: { sdkPackage: string; sdkVersion: string };
+	provenance: { sdkPackage: string; sdkVersion: string; contractVerifiedSdkVersions: string[] };
 	localGetUsageFailure: { errorName: string; code: string; status: number; message: string };
 	localTurnEnded: Array<{ label: string; usage: CursorSdkTurnUsage; sdkRunUsageTotalTokens: number }>;
 	cloudReusedAgent: { sendOrder: string[]; afterRun1: AgentUsage; afterRun2: AgentUsage };
@@ -114,9 +115,11 @@ describe("installed Cursor SDK getUsage contract", () => {
 	// Declaration comments wrap lines with ` * `; fold them so a sentence can be matched whole.
 	const readDeclaration = (file: string) => readFileSync(join(sdkRoot, file), "utf8").replace(/\s*\n\s*(?:\*\s*)?/g, " ");
 
-	it("was captured against the installed SDK version", () => {
+	it("was captured with, or re-verified against, the installed SDK version", () => {
 		expect(fixture.provenance.sdkPackage).toBe("@cursor/sdk");
-		expect(fixture.provenance.sdkVersion).toBe(readInstalledPackageVersion("@cursor/sdk"));
+		expect(fixture.provenance.contractVerifiedSdkVersions).toContain(fixture.provenance.sdkVersion);
+		// An SDK bump must re-check the getUsage declarations and mapper contract below, then record the version.
+		expect(fixture.provenance.contractVerifiedSdkVersions).toContain(readInstalledPackageVersion("@cursor/sdk"));
 	});
 
 	it("declares the token fields the billed-usage copy reads and the run-id semantics the cloud selection relies on", () => {
@@ -148,11 +151,7 @@ describe("installed Cursor SDK getUsage contract", () => {
 	// a server-side filter (`?runId=`). Every shipped build (Node ESM/CJS chunks, the flat Bun build) must do both.
 	for (const build of ["esm", "cjs", "bundled"] as const) {
 		it(`maps the usage response and sends the run-id filter in the ${build} build`, () => {
-			const directory = join(sdkRoot, "dist", build);
-			const source = readdirSync(directory)
-				.filter((file) => file.endsWith(".js") && file !== "sqlite.js")
-				.map((file) => readFileSync(join(directory, file), "utf8"))
-				.join("\n");
+			const source = readCursorSdkBuildSource(build);
 			expect(source).toMatch(
 				/\{usage:[\w$]+\.totalUsage,.{0,80}runs:[\w$]+\.runs\.map\(\(?[\w$]+\)?=>\(\{runId:[\w$]+\.id,usage:[\w$]+\.usage/,
 			);

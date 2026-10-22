@@ -174,7 +174,8 @@ export function formatCursorStatus(
 	maxMode = false,
 ): string {
 	const parts = [`cursor:${runtime}`, fast === true ? "fast:on" : fast === false ? "fast:off" : "fast:n/a"];
-	if (maxMode) parts.push("max:on");
+	// Only a local turn sends Max Mode: the Cloud Agents API rejects a `maxMode` field.
+	if (maxMode && runtime === "local") parts.push("max:on");
 	if (runtime === "local" && useHttp1ForAgent) parts.push("http1");
 	if (mode === "invalid") parts.push("mode invalid");
 	else if (mode === "plan") parts.push("plan");

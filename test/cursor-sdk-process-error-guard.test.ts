@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
@@ -172,8 +171,8 @@ function makeCursorSdkStallAbortWrapperConnectError(): Error & { rawMessage: str
 		cause: new DOMException("This operation was aborted", "AbortError"),
 	});
 	// The `AbortSignal.r` and `Y.onStall` frames are the stall path observed on 1.0.23. The classifier keys on the
-	// `onStall` and `reportStall` names, which 1.0.34's dist/bundled/index.js still contains (its detector method is
-	// `onStallDetected`, which that pattern does not match).
+	// `onStall` and `reportStall` names, which 1.0.40's dist/bundled/index.js still contains (its detector method
+	// `onStallDetected` does not match that pattern, and `reportStall` is the frame that runs the `onStall` callback).
 	cause.stack =
 		`ConnectError: [canceled] This operation was aborted\n${SDK_BUNDLED_TRANSPORT_FRAMES}\n` +
 		"    at AbortSignal.r (file:///repo/node_modules/@cursor/sdk/dist/esm/996.js:1:5705)\n" +
@@ -339,14 +338,8 @@ describe("Cursor SDK process error guard", () => {
 		}
 	});
 
-	it("tracks the installed Cursor SDK closed-writable error contract", () => {
-		const sdkChunk = readFileSync("node_modules/@cursor/sdk/dist/esm/479.js", "utf8");
-		expect(sdkChunk).toContain('this.name="WriteIterableClosedError"');
-		expect(sdkChunk).toContain('"WritableIterable is closed"');
-		expect(sdkChunk).toContain("SimpleControlledExecManager");
-		expect(sdkChunk).toContain("catch(e){if(e instanceof p.W2)return;");
-		expect(sdkChunk).toContain('await a.write(new h.$Y({message:{case:"throw"');
-	});
+	// The SDK premises behind the closed-writable and closed-pipe containment above are pinned for every SDK build
+	// in the maintained test/cursor-sdk-host-rejection-containment.test.ts ("Cursor SDK local-executor stdio errors").
 
 	it("contains delayed exact SDK failures after the provider-turn guard is disposed in real Node", () => {
 		const result = runNodeProcessErrorProbe(`
@@ -634,21 +627,10 @@ setTimeout(() => {
 		expect(result.stderr).not.toContain("SURVIVED_UNEXPECTEDLY");
 	});
 
-	it("tracks the installed Cursor SDK local-executor stdin write contract", () => {
-		// Premise behind the closed-pipe containment: the shell executor writes spawned
-		// child stdin without a stream 'error' listener, so a mid-write child exit
-		// surfaces as an uncaught raw `write EPIPE`. The MCP stdio transport, by
-		// contrast, attaches its own stdin error listener and needs no containment.
-		const shellExecChunk = readFileSync("node_modules/@cursor/sdk/dist/esm/479.js", "utf8");
-		expect(shellExecChunk).toContain("writeCommandHookStdinPayload");
-		expect(shellExecChunk).toContain("stdin.write(e,(e=>{e?o(e):t(void 0)}))");
-		expect(shellExecChunk).toContain("s.stdin.write(`${t.join(\"\\n\")}\\n`),s.stdin.end()");
-		expect(shellExecChunk).not.toContain('stdin.on("error"');
-		expect(shellExecChunk).not.toContain('stdin?.on("error"');
-		expect(shellExecChunk).not.toContain('stdin.once("error"');
-		const mcpStdioChunk = readFileSync("node_modules/@cursor/sdk/dist/esm/458.js", "utf8");
-		expect(mcpStdioChunk).toContain('stdin?.on("error"');
-	});
+	// The SDK premise behind the closed-pipe containment above (children's stdin is written without an
+	// 'error' listener, except by the MCP stdio transport) is pinned for every SDK build in the maintained
+	// test/cursor-sdk-host-rejection-containment.test.ts, describe "Cursor SDK local-executor stdio errors (the
+	// closed-pipe and closed-writable premises)".
 
 	it("matches local Cursor SDK abort ConnectError shape", () => {
 		expect(isCursorSdkAbortConnectError(makeCursorSdkAbortConnectError())).toBe(true);
