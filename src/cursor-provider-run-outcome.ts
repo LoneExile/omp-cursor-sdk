@@ -98,6 +98,7 @@ export function resolveCursorRunOutcome(params: ResolveCursorRunOutcomeParams): 
 			waitResult,
 			params.runResultFallback,
 			params.runErrorFallback,
+			params.runtimeTarget,
 		);
 		return {
 			kind: "error",

@@ -4,8 +4,6 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
-	readdirSync,
-	readFileSync,
 	realpathSync,
 	rmSync,
 	writeFileSync,
@@ -21,6 +19,8 @@ import {
 	ensureCursorTreeSitterVendorDir,
 	resolveBundledCursorRipgrepPath,
 } from "../src/cursor-ripgrep-path.js";
+import { CURSOR_SDK_BUILDS, readCursorSdkBuildSource } from "./helpers/cursor-sdk-build-source.js";
+import { escapeRegExp, IDENT, onlyMatch } from "./helpers/cursor-sdk-minified-source.js";
 
 const require = createRequire(import.meta.url);
 const platformPackage = `@cursor/sdk-${process.platform}-${process.arch}`;
@@ -28,7 +28,6 @@ const rgBinaryName = process.platform === "win32" ? "rg.exe" : "rg";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const firstLoadChildScript = join(repoRoot, "test", "helpers", "cursor-sdk-first-load-child.ts");
 const originalVendorDir = process.env[CURSOR_TREE_SITTER_VENDOR_DIR_ENV];
-const sdkRoot = join(dirname(require.resolve("@cursor/sdk")), "..", "..");
 
 /** The installed platform package for this machine, or `undefined` when the optional dependency is absent. */
 function findInstalledPlatformPackageDir(): string | undefined {
@@ -238,21 +237,8 @@ describe("platform package resolution shared with ripgrep", () => {
 });
 
 describe("installed @cursor/sdk native parser lookup", () => {
-	const IDENTIFIER = "[\\w$]+";
-
-	function escapeRegExp(text: string): string {
-		return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	}
-
 	function countOf(text: string, anchor: string): number {
 		return text.split(anchor).length - 1;
-	}
-
-	/** The one match of `pattern`; the SDK's minifier-assigned names are captured, never spelled out. */
-	function onlyMatch(text: string, pattern: string, fact: string): RegExpMatchArray {
-		const matches = [...text.matchAll(new RegExp(pattern, "g"))];
-		expect(matches.length, fact).toBe(1);
-		return matches[0]!;
 	}
 
 	function loadedParserPackageNames(text: string): string[] {
@@ -266,37 +252,40 @@ describe("installed @cursor/sdk native parser lookup", () => {
 	// why an empty or relative value counts as unset.
 	const ENV_READ = "process\\.env\\.CURSOR_TREE_SITTER_VENDOR_DIR";
 
-	it("dist/esm/index.js (the build Node imports) honors an absolute vendor dir and joins <vendor>/<packageName>/index.js", () => {
-		const bundle = readFileSync(join(sdkRoot, "dist", "esm", "index.js"), "utf8");
+	it.each(["esm", "cjs"] as const)(
+		"dist/%s (the build Node loads) honors an absolute vendor dir and joins <vendor>/<packageName>/index.js",
+		(build) => {
+			const bundle = readCursorSdkBuildSource(build);
 
-		const envRead = onlyMatch(
-			bundle,
-			`const (${IDENTIFIER})=${ENV_READ};return \\1&&\\(0,(${IDENTIFIER})\\.isAbsolute\\)\\(\\1\\)\\?\\1:\\(0,${IDENTIFIER}\\.${IDENTIFIER}\\)\\(\\{relativePath:"vendor",`,
-			"the variable is taken only when it is absolute, else the SDK's own search runs",
-		);
-		const parserRequire = onlyMatch(
-			bundle,
-			`\\{available:!0,module:${IDENTIFIER}\\.nativeRequire\\(\\(0,(${IDENTIFIER})\\.join\\)\\(${IDENTIFIER},${IDENTIFIER}\\.packageName,"index\\.js"\\)\\)\\}`,
-			"the parser is required from <vendor>/<packageName>/index.js",
-		);
-		// `isAbsolute` and `join` are the members of node:path, not of some other module.
-		for (const alias of new Set([envRead[2]!, parserRequire[1]!])) {
-			expect(bundle, `${alias} is node:path`).toMatch(new RegExp(`${escapeRegExp(alias)}=${IDENTIFIER}\\("node:path"\\)`));
-		}
-		expect(countOf(bundle, "process.env.CURSOR_TREE_SITTER_VENDOR_DIR"), "single read of the variable").toBe(1);
-	});
+			const envRead = onlyMatch(
+				bundle,
+				`const (${IDENT})=${ENV_READ};return \\1&&\\(0,(${IDENT})\\.isAbsolute\\)\\(\\1\\)\\?\\1:\\(0,${IDENT}\\.${IDENT}\\)\\(\\{relativePath:"vendor",`,
+				"the variable is taken only when it is absolute, else the SDK's own search runs",
+			);
+			const parserRequire = onlyMatch(
+				bundle,
+				`\\{available:!0,module:${IDENT}\\.nativeRequire\\(\\(0,(${IDENT})\\.join\\)\\(${IDENT},${IDENT}\\.packageName,"index\\.js"\\)\\)\\}`,
+				"the parser is required from <vendor>/<packageName>/index.js",
+			);
+			// `isAbsolute` and `join` are the members of node:path, not of some other module.
+			for (const alias of new Set([envRead[2]!, parserRequire[1]!])) {
+				expect(bundle, `${alias} is node:path`).toMatch(new RegExp(`${escapeRegExp(alias)}=${IDENT}\\("node:path"\\)`));
+			}
+			expect(countOf(bundle, "process.env.CURSOR_TREE_SITTER_VENDOR_DIR"), "single read of the variable").toBe(1);
+		},
+	);
 
 	it("dist/bundled/index.js (the build Bun, and so omp, imports) honors an absolute vendor dir and joins <vendor>/<packageName>/index.js", () => {
-		const bundle = readFileSync(join(sdkRoot, "dist", "bundled", "index.js"), "utf8");
+		const bundle = readCursorSdkBuildSource("bundled");
 
 		const envRead = onlyMatch(
 			bundle,
-			`let (${IDENTIFIER})=${ENV_READ};if\\(\\1&&(${IDENTIFIER})\\(\\1\\)\\)return \\1;return ${IDENTIFIER}\\(\\{relativePath:"vendor",`,
+			`let (${IDENT})=${ENV_READ};if\\(\\1&&(${IDENT})\\(\\1\\)\\)return \\1;return ${IDENT}\\(\\{relativePath:"vendor",`,
 			"the variable is taken only when it is absolute, else the SDK's own search runs",
 		);
 		const parserRequire = onlyMatch(
 			bundle,
-			`\\{available:!0,module:${IDENTIFIER}\\.nativeRequire\\((${IDENTIFIER})\\(${IDENTIFIER},${IDENTIFIER}\\.packageName,"index\\.js"\\)\\)\\}`,
+			`\\{available:!0,module:${IDENT}\\.nativeRequire\\((${IDENT})\\(${IDENT},${IDENT}\\.packageName,"index\\.js"\\)\\)\\}`,
 			"the parser is required from <vendor>/<packageName>/index.js",
 		);
 		// The local names are `isAbsolute` and `join` imported from "path", not some other function.
@@ -310,15 +299,11 @@ describe("installed @cursor/sdk native parser lookup", () => {
 	});
 
 	it("loads exactly the parser packages ensureCursorTreeSitterVendorDir requires entrypoints for", () => {
-		const esmDir = join(sdkRoot, "dist", "esm");
-		const esmNames = readdirSync(esmDir)
-			.filter((entry) => entry.endsWith(".js"))
-			.flatMap((entry) => loadedParserPackageNames(readFileSync(join(esmDir, entry), "utf8")));
-		const bundledNames = loadedParserPackageNames(readFileSync(join(sdkRoot, "dist", "bundled", "index.js"), "utf8"));
 		const expected = [...CURSOR_TREE_SITTER_VENDOR_PACKAGE_NAMES].sort();
 
-		expect(esmNames.sort()).toEqual(expected);
-		expect(bundledNames.sort()).toEqual(expected);
+		for (const build of CURSOR_SDK_BUILDS) {
+			expect(loadedParserPackageNames(readCursorSdkBuildSource(build)).sort(), build).toEqual(expected);
+		}
 	});
 
 	it.skipIf(installedPlatformPackageDir === undefined)(

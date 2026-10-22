@@ -1,5 +1,6 @@
 import { AuthenticationError, IntegrationNotConnectedError } from "@cursor/sdk";
 import { describe, expect, it } from "vitest";
+import { resolveCursorRunOutcome } from "../src/cursor-provider-run-outcome.js";
 import {
 	classifyCursorConnectError,
 	isCursorSdkConnectionStalledError,
@@ -85,8 +86,8 @@ function makeCursorSdkStallAbortWrapperConnectError(): Error & { rawMessage: str
 		cause: new DOMException("This operation was aborted", "AbortError"),
 	});
 	// The `AbortSignal.r` and `Y.onStall` frames are the stall path observed on 1.0.23. The classifier keys on the
-	// `onStall` and `reportStall` names, which 1.0.34's dist/bundled/index.js still contains (its detector method is
-	// `onStallDetected`, which that pattern does not match).
+	// `onStall` and `reportStall` names, which 1.0.40's dist/bundled/index.js still contains (its detector method
+	// `onStallDetected` does not match that pattern, and `reportStall` is the frame that runs the `onStall` callback).
 	cause.stack =
 		`ConnectError: [canceled] This operation was aborted\n${SDK_BUNDLED_TRANSPORT_FRAMES}\n` +
 		"    at AbortSignal.r (file:///repo/node_modules/@cursor/sdk/dist/esm/996.js:1:5705)\n" +
@@ -104,6 +105,41 @@ function makeCursorSdkStallAbortWrapperConnectError(): Error & { rawMessage: str
 		"ConnectError: [unknown] [canceled] This operation was aborted\n" +
 		"    at a.from (file:///repo/node_modules/@cursor/sdk/dist/esm/index.js:1:1125976)\n" +
 		"    at file:///repo/node_modules/@cursor/sdk/dist/esm/996.js:1:5832";
+	return error;
+}
+
+// The wrapped abort @cursor/sdk's bundled builds raise (1.0.34, 1.0.37 and 1.0.40 all do): an Unknown ConnectError around
+// a canceled ConnectError around the AbortError. test/cursor-sdk-network-error-wrapper.test.ts builds it from the
+// installed bundled build's own code; this fixture is that shape with the repo prefix normalized. `stallFrames` leaves
+// the stall detector's `reportStall` frame on the AbortError, where the detector's `abort()` call is.
+function makeCursorSdkWrappedAbortConnectError(
+	options: { code?: number | string; stallFrames?: boolean } = {},
+): Error & { rawMessage: string; code: number | string; cause: Error & { cause: DOMException } } {
+	const abort = new DOMException("This operation was aborted", "AbortError");
+	abort.stack =
+		"AbortError: This operation was aborted\n" +
+		"    at abort (native:1:1)\n" +
+		(options.stallFrames ? "    at reportStall (file:///repo/node_modules/@cursor/sdk/dist/bundled/index.js:3:2383206)\n" : "") +
+		"    at <anonymous> (file:///repo/src/cursor-provider-turn-send.ts:1:1)";
+	const canceled = Object.assign(new Error("[canceled] This operation was aborted"), {
+		name: "ConnectError",
+		rawMessage: "This operation was aborted",
+		code: 1,
+		cause: abort,
+	});
+	canceled.stack =
+		"ConnectError: [canceled] This operation was aborted\n" +
+		"    at from (file:///repo/node_modules/@connectrpc/connect/dist/esm/connect-error.js:69:28)\n" +
+		"    at e2 (file:///repo/node_modules/@cursor/sdk/dist/bundled/index.js:3:1739338)";
+	const error = Object.assign(new Error("[unknown] [canceled] This operation was aborted"), {
+		name: "ConnectError",
+		rawMessage: "[canceled] This operation was aborted",
+		code: options.code ?? 2,
+		cause: canceled,
+	});
+	error.stack =
+		"ConnectError: [unknown] [canceled] This operation was aborted\n" +
+		"    at from (file:///repo/node_modules/@cursor/sdk/dist/bundled/index.js:3:1713883)";
 	return error;
 }
 
@@ -281,10 +317,51 @@ describe("cursor-provider-errors", () => {
 		const detail = formatCursorSdkRunFailureDetail(refusedContextResult);
 		expect(detail).toBe(
 			'AI Model Not Found Invalid parameters for registry model: "grok-4.7"\n' +
-				"Hint: larger context variants require Cursor Max Mode (`--cursor-max-mode` or `/cursor-max-mode` after `npm run patch:cursor-sdk`); otherwise use the @256k variant instead of @500k.",
+				"Hint: larger context variants require Cursor Max Mode (`--cursor-max-mode` or `/cursor-max-mode`); otherwise use the @256k variant instead of @500k.",
 		);
 		// The provider error path must surface it verbatim, not as auth/network/generic guidance.
 		expect(sanitizeCursorProviderError(detail, "test-key")).toBe(detail);
+	});
+
+	it("advises only the smaller context when the refused local selection already carried maxMode", () => {
+		registerGrokContexts();
+		const detail = formatCursorSdkRunFailureDetail({
+			...refusedContextResult,
+			model: { ...refusedContextResult.model, maxMode: true },
+		});
+		expect(detail).toBe(
+			'AI Model Not Found Invalid parameters for registry model: "grok-4.7"\n' +
+				"Hint: use the @256k variant instead of @500k.",
+		);
+		expect(detail).not.toContain("Max Mode");
+	});
+
+	it("advises only the smaller context on Cursor Cloud, where Max Mode is ignored", () => {
+		registerGrokContexts();
+		const detail = formatCursorSdkRunFailureDetail(refusedContextResult, undefined, undefined, "cloud");
+		expect(detail).toBe(
+			'AI Model Not Found Invalid parameters for registry model: "grok-4.7"\n' +
+				"Hint: use the @256k variant instead of @500k.",
+		);
+		expect(detail).not.toContain("Max Mode");
+		// An explicit local runtime keeps the Max Mode advice.
+		expect(formatCursorSdkRunFailureDetail(refusedContextResult, undefined, undefined, "local")).toContain("--cursor-max-mode");
+	});
+
+	it("passes the turn's runtime from the run outcome to the hint", () => {
+		registerGrokContexts();
+		const outcome = (runtimeTarget: "local" | "cloud") =>
+			resolveCursorRunOutcome({
+				waitResult: refusedContextResult as never,
+				textDeltas: [],
+				emittedText: "",
+				runtimeTarget,
+			});
+		const local = outcome("local");
+		const cloud = outcome("cloud");
+		expect(local.kind === "error" && local.errorMessage).toContain("`--cursor-max-mode` or `/cursor-max-mode`");
+		expect(cloud.kind === "error" && cloud.errorMessage).toContain("Hint: use the @256k variant instead of @500k.");
+		expect(cloud.kind === "error" && cloud.errorMessage).not.toContain("Max Mode");
 	});
 
 	it("adds no Max-mode hint without a smaller context, a context parameter, or a refusal", () => {
@@ -489,6 +566,45 @@ describe("cursor-provider-errors", () => {
 		expect(isCursorSdkAbortConnectError(makeCursorSdkStallAbortWrapperConnectError())).toBe(false);
 		expect(classifyCursorConnectError(makeForeignConnectNodeAbortConnectError())).toBeUndefined();
 		expect(isCursorSdkAbortConnectError(makeForeignConnectNodeAbortConnectError())).toBe(false);
+	});
+
+	it.each([2, "unknown"] as const)("classifies the wrapped Cursor SDK abort (outer code %s) as an abort, not as a network failure", (code) => {
+		const error = makeCursorSdkWrappedAbortConnectError({ code });
+
+		expect(classifyCursorConnectError(error)).toEqual({ kind: "abort", source: "cursor-sdk-stack" });
+		expect(isCursorSdkAbortConnectError(error)).toBe(true);
+		expect(sanitizeCursorProviderError(error, "test-key")).not.toContain("Network error");
+	});
+
+	it("keeps a wrapped abort without Cursor SDK provenance unclassified", () => {
+		const error = makeCursorSdkWrappedAbortConnectError();
+		error.stack = "ConnectError: [unknown] [canceled] This operation was aborted\n    at from (file:///repo/node_modules/other-client/index.js:1:1)";
+
+		expect(classifyCursorConnectError(error)).toBeUndefined();
+		expect(isCursorSdkAbortConnectError(error)).toBe(false);
+	});
+
+	it("classifies a wrapped abort the stall detector raised as a retryable network failure, not as an abort", () => {
+		const error = makeCursorSdkWrappedAbortConnectError({ stallFrames: true });
+
+		expect(classifyCursorConnectError(error)).toEqual({ kind: "network", source: "cursor-sdk-stack" });
+		expect(isCursorSdkAbortConnectError(error)).toBe(false);
+		expect(sanitizeCursorProviderError(error, "test-key")).toContain("Network error");
+	});
+
+	it.each([2, "unknown"] as const)("does not classify incomplete wrapped abort causes as cancellation (outer code %s)", (code) => {
+		for (const cause of [
+			// A canceled ConnectError that is not caused by an AbortError.
+			{ name: "ConnectError", code: 1 },
+			// An AbortError beneath a ConnectError that is not canceled.
+			{ name: "ConnectError", code: 14, cause: { name: "AbortError" } },
+			// A canceled cause that is not a ConnectError.
+			{ name: "Error", code: 1, cause: { name: "AbortError" } },
+		]) {
+			const error = Object.assign(makeCursorSdkWrappedAbortConnectError({ code }), { cause });
+
+			expect(isCursorSdkAbortConnectError(error), JSON.stringify(cause)).toBe(false);
+		}
 	});
 
 	it("does not treat connect-node frames outside the SDK as Cursor provenance", () => {

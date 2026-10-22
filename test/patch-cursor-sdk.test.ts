@@ -1,42 +1,34 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { TARGETS } from "../scripts/patch-cursor-sdk.mjs";
+import { CURSOR_SDK_BUILDS, CURSOR_SDK_ROOT, readCursorSdkBuildSource } from "./helpers/cursor-sdk-build-source.js";
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(TEST_DIR, "../scripts/patch-cursor-sdk.mjs");
-const MARKER = "/* omp-cursor-sdk:max-mode-patch */";
 const COMMIT_ATTRIBUTION_MARKER = "/* omp-cursor-sdk:commit-attribution-patch */";
 const COMMIT_ATTRIBUTION_ANCHOR = "attributeCommitsToAgent??!0";
+const COMMIT_ATTRIBUTION_PATCHED = `attributeCommitsToAgent??!1${COMMIT_ATTRIBUTION_MARKER}`;
+const PR_ATTRIBUTION_DEFAULT = "attributePRsToAgent??!0";
 
-const SDK_ROOT = join(TEST_DIR, "../node_modules/@cursor/sdk");
-const INSTALLED_BUILD_FILES = TARGETS.filter((target) => existsSync(join(SDK_ROOT, target.rel)));
+// The two shapes the SDK writes the local executor's attribution default in: webpack + terser for
+// esm/cjs, esbuild for the bundled build. Only the anchor and the property names are stable.
+const WEBPACK_CHUNK = `O=this.attributionConfigProvider?.get(),N=!S&&(O?.attribution?.${COMMIT_ATTRIBUTION_ANCHOR}),$=!S&&(O?.attribution?.${PR_ATTRIBUTION_DEFAULT}),F=1`;
+const BUNDLED_CHUNK = `let m=this.attributionConfigProvider?.get();let u=A?!1:m?.attribution?.${COMMIT_ATTRIBUTION_ANCHOR};let p=A?!1:m?.attribution?.${PR_ATTRIBUTION_DEFAULT};let e=1`;
 
-function evaluatePatchedCall(expression: string, model: { id: string; params: Array<{ id: string; value: string }> }) {
-	const source = `
-		const t = { model };
-		const m = t;
-		function ctor(value) { return value; }
-		const nx = { G4: ctor, SR: ctor };
-		const ax = nx;
-		const r5 = ctor;
-		const j$ = ctor;
-		return ${expression};
-	`;
-	return new Function("model", source)(model) as { maxMode: boolean; parameters: Array<{ id: string; value: string }> };
-}
-
+// Chunk names differ per build on purpose: the anchor is found by content, never by file name.
 const FIXTURES = {
-	"dist/esm/479.js":
-		"const m=void 0!==t.model?new nx.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new nx.SR({id:e.id,value:e.value})))}):void 0;C=!y&&(E?.attribution?.attributeCommitsToAgent??!0),",
-	"dist/cjs/479.js":
-		"const m=void 0!==t.model?new ax.G4({modelId:t.model.id,parameters:(t.model.params??[]).map((e=>new ax.SR({id:e.id,value:e.value})))}):void 0;C=!y&&(E?.attribution?.attributeCommitsToAgent??!0),",
-	"dist/bundled/index.js":
-		"F0=m.model!==void 0?new r5({modelId:m.model.id,parameters:(m.model.params??[]).map((W1)=>new j$({id:W1.id,value:W1.value}))}):void 0,H0=;let T=L?!1:j?.attribution?.attributeCommitsToAgent??!0;let M=",
+	"dist/esm/index.js": "export const entry = 1;",
+	"dist/esm/331.js": WEBPACK_CHUNK,
+	"dist/esm/native/extra.js": "export const unrelated = 2;",
+	"dist/cjs/index.js": "module.exports = 1;",
+	"dist/cjs/9999.js": WEBPACK_CHUNK,
+	"dist/bundled/index.js": BUNDLED_CHUNK,
 } as const;
+const ANCHOR_FILES = ["dist/esm/331.js", "dist/cjs/9999.js", "dist/bundled/index.js"] as const;
 
 function writeFixture(root: string, files: Record<string, string> = FIXTURES): void {
 	for (const [rel, content] of Object.entries(files)) {
@@ -48,6 +40,18 @@ function writeFixture(root: string, files: Record<string, string> = FIXTURES): v
 
 function runPatch(args: string[]) {
 	return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
+}
+
+function countOf(text: string, needle: string): number {
+	return text.split(needle).length - 1;
+}
+
+function filesUnder(directory: string, suffix: string): string[] {
+	return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+		const path = join(directory, entry.name);
+		if (entry.isDirectory()) return filesUnder(path, suffix);
+		return entry.name.endsWith(suffix) ? [path] : [];
+	});
 }
 
 // The script's shebang and every documented command run it under Node, and only Node leaves symlinks
@@ -68,65 +72,95 @@ describe("patch-cursor-sdk", () => {
 		return root;
 	}
 
-	it("patches every existing build file, is idempotent, and --check reports drift", () => {
+	it("targets the three builds the SDK ships, one patch each", () => {
+		expect(TARGETS.map((target) => target.build)).toEqual(["dist/esm", "dist/cjs", "dist/bundled"]);
+		for (const target of TARGETS) {
+			expect(target.from).toBe(COMMIT_ATTRIBUTION_ANCHOR);
+			expect(target.to).toBe(COMMIT_ATTRIBUTION_PATCHED);
+			expect(target.marker).toBe(COMMIT_ATTRIBUTION_MARKER);
+		}
+	});
+
+	it("patches the file that holds the anchor in every build whatever its name, is idempotent, and --check reports drift", () => {
 		const root = tempSdk();
 		writeFixture(root);
 
 		const before = runPatch(["--check", "--sdk", root]);
 		expect(before.status).not.toBe(0);
-		expect(before.stdout + before.stderr).toContain("dist/esm/479.js");
-		expect(before.stdout + before.stderr).toContain("unpatched");
+		for (const file of ANCHOR_FILES) expect(before.stdout, file).toContain(`${file}: unpatched`);
 
 		const patched = runPatch(["--sdk", root]);
 		expect(patched.status).toBe(0);
-		for (const target of TARGETS) {
-			const text = readFileSync(join(root, target.rel), "utf8");
-			expect(text).toContain(MARKER);
-			expect(text).toContain("maxMode:");
-			expect(text).toContain(".filter(");
-			expect(text).not.toContain(target.from);
+		for (const file of ANCHOR_FILES) expect(patched.stdout, file).toContain(`${file}: patched`);
+		const afterPatch = Object.fromEntries(Object.keys(FIXTURES).map((rel) => [rel, readFileSync(join(root, rel), "utf8")]));
+		for (const file of ANCHOR_FILES) {
+			const text = afterPatch[file] ?? "";
+			expect(countOf(text, COMMIT_ATTRIBUTION_PATCHED), file).toBe(1);
+			expect(countOf(text, COMMIT_ATTRIBUTION_MARKER), file).toBe(1);
+			expect(text, file).not.toContain(COMMIT_ATTRIBUTION_ANCHOR);
+			// Only the commit trailer default changes; the PR attribution default is left alone.
+			expect(text, file).toContain(PR_ATTRIBUTION_DEFAULT);
 		}
-		const esm = readFileSync(join(root, "dist/esm/479.js"), "utf8");
-		expect(esm).toContain('.filter((e=>!(e.id==="max_mode"&&e.value==="true")))');
-		expect(esm.split(MARKER).length - 1).toBe(1);
-		expect(esm.split(COMMIT_ATTRIBUTION_MARKER).length - 1).toBe(1);
-		expect(esm).toContain("attributeCommitsToAgent??!1");
-		expect(esm).not.toContain(COMMIT_ATTRIBUTION_ANCHOR);
+		// Files without the anchor are not touched.
+		for (const rel of ["dist/esm/index.js", "dist/esm/native/extra.js", "dist/cjs/index.js"] as const) {
+			expect(afterPatch[rel], rel).toBe(FIXTURES[rel]);
+		}
 
-		const again = runPatch(["--sdk", root]);
-		expect(again.status).toBe(0);
-		expect(readFileSync(join(root, "dist/esm/479.js"), "utf8")).toBe(esm);
+		expect(runPatch(["--sdk", root]).status).toBe(0);
+		for (const rel of Object.keys(FIXTURES)) expect(readFileSync(join(root, rel), "utf8"), rel).toBe(afterPatch[rel]);
 
 		const checked = runPatch(["--check", "--sdk", root]);
 		expect(checked.status).toBe(0);
-		expect(checked.stdout).toContain("dist/bundled/index.js");
-		expect(checked.stdout).toContain("patched");
+		for (const file of ANCHOR_FILES) expect(checked.stdout, file).toContain(`${file}: patched`);
 
-		writeFileSync(join(root, "dist/cjs/479.js"), `drifted ${MARKER} but not the expression`);
+		writeFileSync(join(root, "dist/cjs/9999.js"), `drifted ${COMMIT_ATTRIBUTION_MARKER} but not the expression`);
 		const drifted = runPatch(["--check", "--sdk", root]);
 		expect(drifted.status).not.toBe(0);
-		expect(drifted.stderr).toContain("dist/cjs/479.js");
+		expect(drifted.stderr).toContain("dist/cjs/9999.js");
+		expect(drifted.stdout).toContain("dist/cjs: drifted");
 	});
 
-	it("fails loudly when an existing build file has no patch anchor", () => {
+	it("fails loudly when an existing build has no file with the anchor, and writes nothing there", () => {
 		const root = tempSdk();
-		writeFixture(root, { "dist/esm/479.js": "no model constructor here" });
+		writeFixture(root, { ...FIXTURES, "dist/esm/331.js": "no attribution default here" });
 		const result = runPatch(["--sdk", root]);
 		expect(result.status).not.toBe(0);
-		expect(result.stderr).toContain("dist/esm/479.js");
-		expect(readFileSync(join(root, "dist/esm/479.js"), "utf8")).toBe("no model constructor here");
+		expect(result.stderr).toContain("dist/esm");
+		expect(result.stderr).toContain(COMMIT_ATTRIBUTION_ANCHOR);
+		expect(readFileSync(join(root, "dist/esm/331.js"), "utf8")).toBe("no attribution default here");
+		// The builds that do have it are still patched.
+		expect(readFileSync(join(root, "dist/bundled/index.js"), "utf8")).toContain(COMMIT_ATTRIBUTION_MARKER);
 	});
 
-	it("patches repeated --sdk roots and does not require absent build files", () => {
+	it("fails loudly when the anchor appears in more than one file of a build, and patches neither", () => {
+		const root = tempSdk();
+		writeFixture(root, { ...FIXTURES, "dist/esm/duplicate.js": WEBPACK_CHUNK });
+		const result = runPatch(["--sdk", root]);
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain("dist/esm/331.js");
+		expect(result.stderr).toContain("dist/esm/duplicate.js");
+		expect(readFileSync(join(root, "dist/esm/331.js"), "utf8")).toBe(WEBPACK_CHUNK);
+		expect(readFileSync(join(root, "dist/esm/duplicate.js"), "utf8")).toBe(WEBPACK_CHUNK);
+	});
+
+	it("patches repeated --sdk roots and does not require absent builds", () => {
 		const first = tempSdk();
 		const second = tempSdk();
-		writeFixture(first, { "dist/bundled/index.js": FIXTURES["dist/bundled/index.js"] });
-		writeFixture(second, { "dist/esm/479.js": FIXTURES["dist/esm/479.js"] });
+		writeFixture(first, { "dist/bundled/index.js": BUNDLED_CHUNK });
+		writeFixture(second, { "dist/esm/331.js": WEBPACK_CHUNK });
 		const result = runPatch(["--sdk", first, "--sdk", second]);
 		expect(result.status).toBe(0);
-		expect(readFileSync(join(first, "dist/bundled/index.js"), "utf8")).toContain(MARKER);
-		expect(readFileSync(join(second, "dist/esm/479.js"), "utf8")).toContain(MARKER);
+		expect(result.stdout).toContain("dist/cjs: absent");
+		expect(readFileSync(join(first, "dist/bundled/index.js"), "utf8")).toContain(COMMIT_ATTRIBUTION_MARKER);
+		expect(readFileSync(join(second, "dist/esm/331.js"), "utf8")).toContain(COMMIT_ATTRIBUTION_MARKER);
 		expect(runPatch(["--check", "--sdk", first, "--sdk", second]).status).toBe(0);
+	});
+
+	it("fails when the SDK root has no build directory at all", () => {
+		const root = tempSdk();
+		const result = runPatch(["--sdk", root]);
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain("has none of dist/esm, dist/cjs, dist/bundled");
 	});
 
 	// macOS /tmp is a symlink, so a script path under it reaches Node as a symlinked path.
@@ -144,7 +178,7 @@ describe("patch-cursor-sdk", () => {
 		expect(before.status).toBe(1);
 
 		expect(viaLink(["--sdk", root]).status).toBe(0);
-		expect(readFileSync(join(root, "dist/bundled/index.js"), "utf8")).toContain(MARKER);
+		expect(readFileSync(join(root, "dist/bundled/index.js"), "utf8")).toContain(COMMIT_ATTRIBUTION_MARKER);
 		expect(viaLink(["--check", "--sdk", root]).status).toBe(0);
 	}
 
@@ -155,57 +189,68 @@ describe("patch-cursor-sdk", () => {
 	it.skipIf(!nodeAvailable)("runs through a symlinked path under --preserve-symlinks-main too", () => {
 		runThroughSymlink(["--preserve-symlinks-main"]);
 	});
+
+	// Copies only the SDK's `.js` files: the script writes into whatever root it is given, and the
+	// installed package under node_modules must not be patched or unpatched by the suite.
+	function copyOfInstalledSdk(): string {
+		const root = tempSdk();
+		for (const build of CURSOR_SDK_BUILDS) {
+			cpSync(join(CURSOR_SDK_ROOT, "dist", build), join(root, "dist", build), {
+				recursive: true,
+				filter: (source) => statSync(source).isDirectory() || source.endsWith(".js"),
+			});
+		}
+		return root;
+	}
+
+	it("finds, patches, and re-checks the anchor in the real installed SDK layout", () => {
+		const root = copyOfInstalledSdk();
+		// Start from the unpatched shape whatever state the installed package is in.
+		for (const path of filesUnder(join(root, "dist"), ".js")) {
+			const text = readFileSync(path, "utf8");
+			if (text.includes(COMMIT_ATTRIBUTION_PATCHED)) writeFileSync(path, text.replace(COMMIT_ATTRIBUTION_PATCHED, () => COMMIT_ATTRIBUTION_ANCHOR));
+		}
+		const before = runPatch(["--check", "--sdk", root]);
+		expect(before.stderr).toBe("");
+		expect(before.status).toBe(1);
+		for (const target of TARGETS) expect(before.stdout, target.build).toMatch(new RegExp(`${target.build}/[^\\s:]+: unpatched`));
+
+		const patched = runPatch(["--sdk", root]);
+		expect(patched.stderr).toBe("");
+		expect(patched.status).toBe(0);
+		const after = runPatch(["--check", "--sdk", root]);
+		expect(after.stderr).toBe("");
+		expect(after.status).toBe(0);
+		for (const target of TARGETS) expect(after.stdout, target.build).toMatch(new RegExp(`${target.build}/[^\\s:]+: patched`));
+	});
 });
 
-describe("installed Cursor SDK max-mode anchor", () => {
-	it.skipIf(INSTALLED_BUILD_FILES.length === 0)("contains each build file's exact unpatched or patched constructor", () => {
-		for (const target of INSTALLED_BUILD_FILES) {
-			const text = readFileSync(join(SDK_ROOT, target.rel), "utf8");
-			expect(text.includes(target.from) || text.includes(target.to), target.rel).toBe(true);
-		}
+describe("installed Cursor SDK commit attribution", () => {
+	for (const build of CURSOR_SDK_BUILDS) {
+		it(`has exactly one attribution default in the ${build} build, read from the attribution provider`, () => {
+			const source = readCursorSdkBuildSource(build);
+			expect(countOf(source, COMMIT_ATTRIBUTION_ANCHOR) + countOf(source, COMMIT_ATTRIBUTION_PATCHED), build).toBe(1);
+			const providerDefault =
+				/this\.attributionConfigProvider\?\.get\(\)[,;][^]{0,80}?[\w$]+\?\.attribution\?\.attributeCommitsToAgent\?\?!(?:0|1\/\* omp-cursor-sdk:commit-attribution-patch \*\/)/g;
+			expect([...source.matchAll(providerDefault)], build).toHaveLength(1);
+		});
+	}
+
+	it("exposes no public attribution control, so the patch is still the only way to turn the trailer off", () => {
+		const declarations = filesUnder(join(CURSOR_SDK_ROOT, "dist", "esm"), ".d.ts");
+		expect(declarations.length).toBeGreaterThan(0);
+		for (const path of declarations) expect(readFileSync(path, "utf8"), path).not.toMatch(/attribution/i);
 	});
 
 	it("turns the missing attribution provider into commit attribution off, and keeps an explicit value", () => {
-		const targets = TARGETS.filter((entry) => entry.marker === COMMIT_ATTRIBUTION_MARKER);
-		expect(targets).toHaveLength(3);
 		const evaluate = (expression: string, provider: unknown) =>
 			new Function("provider", `const E = provider; return E?.attribution?.${expression}`)(provider) as boolean;
-		for (const target of targets) {
-			expect(evaluate(target.to, undefined), target.rel).toBe(false);
-			expect(evaluate(target.to, {}), target.rel).toBe(false);
-			expect(evaluate(target.to, { attribution: {} }), target.rel).toBe(false);
-			expect(evaluate(target.to, { attribution: { attributeCommitsToAgent: false } }), target.rel).toBe(false);
-			expect(evaluate(target.to, { attribution: { attributeCommitsToAgent: true } }), target.rel).toBe(true);
-		}
-	});
-
-	it("evaluates the patch script's own call shape: maxMode on, sentinel dropped, other params kept", () => {
-		const model = {
-			id: "grok-4.7",
-			params: [
-				{ id: "context", value: "500k" },
-				{ id: "max_mode", value: "true" },
-				{ id: "fast", value: "true" },
-			],
-		};
-		const plain = {
-			id: "grok-4.7",
-			params: [
-				{ id: "context", value: "256k" },
-				{ id: "fast", value: "false" },
-			],
-		};
-		for (const target of TARGETS.filter((entry) => entry.to.includes("maxMode:"))) {
-			const enabled = evaluatePatchedCall(target.to, model);
-			expect(enabled.maxMode, target.rel).toBe(true);
-			expect(enabled.parameters.map((param) => param.id), target.rel).not.toContain("max_mode");
-			expect(enabled.parameters, target.rel).toEqual([
-				{ id: "context", value: "500k" },
-				{ id: "fast", value: "true" },
-			]);
-			const disabled = evaluatePatchedCall(target.to, plain);
-			expect(disabled.maxMode, target.rel).toBe(false);
-			expect(disabled.parameters, target.rel).toEqual(plain.params);
+		for (const target of TARGETS) {
+			expect(evaluate(target.to, undefined), target.build).toBe(false);
+			expect(evaluate(target.to, {}), target.build).toBe(false);
+			expect(evaluate(target.to, { attribution: {} }), target.build).toBe(false);
+			expect(evaluate(target.to, { attribution: { attributeCommitsToAgent: false } }), target.build).toBe(false);
+			expect(evaluate(target.to, { attribution: { attributeCommitsToAgent: true } }), target.build).toBe(true);
 		}
 	});
 });

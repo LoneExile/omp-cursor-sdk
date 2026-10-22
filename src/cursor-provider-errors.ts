@@ -168,9 +168,17 @@ function isUnavailableConnectCode(code: unknown): boolean {
 	return code === 14 || (typeof code === "string" && /^(?:14|unavailable)$/i.test(code));
 }
 
+function isUnknownConnectCode(code: unknown): boolean {
+	return code === 2 || (typeof code === "string" && /^(?:2|unknown)$/i.test(code));
+}
+
+function isCanceledConnectCode(code: unknown): boolean {
+	return code === 1 || code === "canceled";
+}
+
 function isCursorSdkStallAbortNetworkError(code: unknown, evidence: string, stackEvidence: string): boolean {
 	return (
-		(code === 2 || (typeof code === "string" && /^(?:2|unknown)$/i.test(code))) &&
+		isUnknownConnectCode(code) &&
 		/(?:operation was aborted|canceled)/i.test(evidence) &&
 		/(?:AbortError|operation was aborted)/i.test(`${evidence}\n${stackEvidence}`) &&
 		stackEvidence.includes("@cursor/sdk") &&
@@ -194,8 +202,8 @@ export function isCursorSdkConnectionStalledError(error: unknown): boolean {
 	return /(?:^|[\\/])node_modules[\\/]@cursor[\\/]sdk[\\/]dist[\\/]/.test(stack) || stack.includes("@cursor/sdk");
 }
 
-// @cursor/sdk 1.0.34 bundles its Connect Node transport into its own dist files, so a transport
-// error's frames carry the SDK's `node_modules/@cursor/sdk/dist` path and never a
+// @cursor/sdk 1.0.34 and later (1.0.40 checked) bundle their Connect Node transport into their own dist files, so a
+// transport error's frames carry the SDK's `node_modules/@cursor/sdk/dist` path and never a
 // `@connectrpc/connect-node` one (1.0.32 imported that package from node_modules).
 function getCursorConnectSource(chain: readonly CauseChainLink[], stackEvidence: string): CursorConnectErrorSource {
 	if (stackEvidence.includes("@cursor/sdk")) return "cursor-sdk-stack";
@@ -218,9 +226,15 @@ export type CursorConnectErrorClassification =
 
 /**
  * Classifies a ConnectError, or an error whose `cause` chain holds one (see `CAUSE_CHAIN_MAX_LINKS`), such as the
- * NetworkError @cursor/sdk 1.0.34 wraps around an Unavailable ConnectError. Code and details come from the
- * ConnectError, and SDK provenance (an `@cursor/sdk` stack frame or `aiserver.*` details) from any error in the chain.
- * A wrapped ConnectError is never an abort: only the SDK transport's own canceled ConnectError has an observed shape.
+ * NetworkError @cursor/sdk wraps around an Unavailable ConnectError (1.0.34 and 1.0.40 checked). Code and details come
+ * from the ConnectError, and SDK provenance (an `@cursor/sdk` stack frame or `aiserver.*` details) from any error in
+ * the chain. A ConnectError wrapped in another error is never an abort. Only the SDK transport's own error shapes are:
+ * its canceled ConnectError, and the Unknown ConnectError that @cursor/sdk puts around it (the bundled builds of 1.0.34,
+ * 1.0.37 and 1.0.40 all do; no earlier build was available to check). That transport turns an abort reason into a
+ * Canceled ConnectError of the `@connectrpc/connect` copy it resolves, keeping the AbortError as that error's `cause`;
+ * the SDK's own ConnectError class does not recognize that instance, so its `ConnectError.from` wraps it as Unknown.
+ * Only that whole chain (Unknown -> canceled ConnectError -> AbortError) counts, not any Unknown ConnectError that
+ * happens to have a canceled one for a cause.
  */
 export function classifyCursorConnectError(error: unknown): CursorConnectErrorClassification | undefined {
 	const record = asRecord(error);
@@ -238,18 +252,25 @@ export function classifyCursorConnectError(error: unknown): CursorConnectErrorCl
 	const stackEvidence = collectConnectErrorStacks(chain);
 	const source = getCursorConnectSource(chain, stackEvidence);
 
+	// The stall detector cancels a request the same way, so its wrapper has the wrapped abort's shape and is told apart
+	// by the detector's frames: a retryable network failure, not a cancellation. It has to be decided first.
+	if (isCursorSdkStallAbortNetworkError(code, evidence, stackEvidence)) {
+		return { kind: "network", source };
+	}
+
+	const directAbort = isCanceledConnectCode(code) && (causeName === "AbortError" || /AbortError/.test(stack));
+	const wrappedAbort =
+		isUnknownConnectCode(code) &&
+		causeName === "ConnectError" &&
+		isCanceledConnectCode(cause?.code) &&
+		asRecord(cause?.cause)?.name === "AbortError";
 	if (
 		connectIndex === 0 &&
-		(code === 1 || code === "canceled") &&
+		(directAbort || wrappedAbort) &&
 		Boolean(rawMessage && /(?:operation was aborted|canceled)/i.test(rawMessage)) &&
-		(causeName === "AbortError" || /AbortError/.test(stack)) &&
 		stack.includes("@cursor/sdk")
 	) {
 		return { kind: "abort", source: "cursor-sdk-stack" };
-	}
-
-	if (isCursorSdkStallAbortNetworkError(code, evidence, stackEvidence)) {
-		return { kind: "network", source };
 	}
 
 	if (isUnauthenticatedConnectCode(code) || isLikelyAuthError(evidence)) {
@@ -307,24 +328,31 @@ function withRunErrorCode(message: string, code: string | undefined): string {
 
 // Cursor's catalog lists some larger context variants that its backend refuses unless
 // RequestedModel.maxMode is set (observed: grok-4.7 context=500k on @cursor/sdk 1.0.32).
-// The public ModelSelection type has no maxMode field; the opt-in patch reads a
-// max_mode=true param and sets that field. Without the patch and toggle, the variant is refused.
+// @cursor/sdk 1.0.40 sets it itself on local turns when every catalog variant matching the params is
+// a Max Mode variant, and on the local runtime the Max Mode toggle sends ModelSelection.maxMode for
+// the rest. Cloud turns never carry maxMode (the Cloud Agents API rejects the key). A refusal that
+// still reaches this hint is a variant nothing flagged as Max Mode.
 const REFUSED_MODEL_PARAMETERS_PATTERN = /invalid parameters for registry model/i;
 
-function withRefusedContextVariantHint(detail: string, model: ModelSelection | undefined): string {
+// Max Mode is only worth suggesting for a local turn that did not already run with it. On Cursor Cloud it
+// is ignored, and a refusal of a selection that already carried maxMode is not a Max Mode problem.
+function withRefusedContextVariantHint(detail: string, model: ModelSelection | undefined, runtime: CursorRuntime): string {
 	const context = model?.params?.find((param) => param.id === "context")?.value;
 	if (!model || !context || !REFUSED_MODEL_PARAMETERS_PATTERN.test(detail)) return detail;
 	const smaller = getSmallerCursorContextVariant(model.id, context);
 	if (!smaller) return detail;
-	return `${detail}\nHint: larger context variants require Cursor Max Mode (\`--cursor-max-mode\` or \`/cursor-max-mode\` after \`npm run patch:cursor-sdk\`); otherwise use the @${smaller} variant instead of @${context}.`;
+	const smallerAdvice = `use the @${smaller} variant instead of @${context}`;
+	if (runtime === "cloud" || model.maxMode === true) return `${detail}\nHint: ${smallerAdvice}.`;
+	return `${detail}\nHint: larger context variants require Cursor Max Mode (\`--cursor-max-mode\` or \`/cursor-max-mode\`); otherwise ${smallerAdvice}.`;
 }
 
 export function formatCursorSdkRunFailureDetail(
 	result: CursorSdkRunFailureSource,
 	runResult?: string,
 	runError?: RunError,
+	runtime: CursorRuntime = "local",
 ): string {
-	return withRefusedContextVariantHint(formatRunFailureMessage(result, runResult, runError), result.model);
+	return withRefusedContextVariantHint(formatRunFailureMessage(result, runResult, runError), result.model, runtime);
 }
 
 function formatRunFailureMessage(

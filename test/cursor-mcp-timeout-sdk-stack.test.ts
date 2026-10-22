@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,21 +10,31 @@ import {
 	isCursorSdkMcpToolTimeoutStack,
 	restoreCursorMcpToolTimeoutOverride,
 } from "../src/cursor-mcp-timeout-override.js";
+import {
+	type InstalledBundledSdkInternals,
+	lazyInitializerBefore,
+	loadInstalledBundledSdkInternals,
+} from "./helpers/cursor-sdk-bundled-internals.js";
+import {
+	CURSOR_SDK_BUILDS,
+	CURSOR_SDK_ROOT,
+	type CursorSdkBuild,
+	readCursorSdkBuildFiles,
+	readCursorSdkEntrySource,
+} from "./helpers/cursor-sdk-build-source.js";
+import { escapeRegExp } from "./helpers/cursor-sdk-minified-source.js";
 
-// The SDK minifies its MCP client (`class y extends d` in the webpack esm/cjs chunks,
-// `class R11 extends L11` in the Bun bundle), so the override cannot recognize a timeout by
+// The SDK minifies its MCP client (`class g extends d` in the webpack esm/cjs chunks,
+// `class DQ1 extends KQ1` in the Bun bundle), so the override cannot recognize a timeout by
 // class name. These tests (1) pin, for every build of the installed SDK, the layout the
-// matchers rely on, and (2) run minified-shaped code, built from the class names read out of
+// matchers rely on, (2) run minified-shaped code, built from the class names read out of
 // that build and loaded from the build's own SDK-looking path, and classify the stacks Bun
-// actually produces. Bun resolves `@cursor/sdk` to the bundled build (package.json
-// `exports["."].bun`), so that build is the one omp runs; esm and cjs are what Node consumers
-// load and are covered because they ship in the same package.
+// actually produces, and (3) run the bundled build's own protocol classes, which is what omp
+// loads, against a transport that never answers. Bun resolves `@cursor/sdk` to the bundled build
+// (package.json `exports["."].bun`); esm and cjs are what Node consumers load and are covered
+// because they ship in the same package.
 
-type SdkBuild = "bundled" | "esm" | "cjs";
-
-const SDK_BUILDS: readonly SdkBuild[] = ["bundled", "esm", "cjs"];
 const SDK_BUILD_SCAN_TIMEOUT_MS = 30_000;
-const SDK_PACKAGE_DIR = join(process.cwd(), "node_modules", "@cursor", "sdk");
 const CLASS_HEADER = /class ([\w$]+)(?: extends ([\w$.]+))?\{/g;
 const SDK_DEFAULT_MS = cursorMcpToolTimeoutOverrideDefaults.cursorSdkDefaultTimeoutMs;
 // Distinct from the SDK default and from each other so a recorded delay names its matcher.
@@ -40,6 +50,7 @@ const METHOD = {
 	callTool: "callTool",
 	listPrompts: "listPrompts",
 	getTools: "getTools",
+	sendToolCall: "sendToolCall",
 } as const;
 
 interface ClassHeader {
@@ -54,7 +65,7 @@ interface MethodDefinition {
 }
 
 interface SdkMcpLayout {
-	build: SdkBuild;
+	build: CursorSdkBuild;
 	protocolFileName: string;
 	wrapperFileName: string;
 	baseClass: string;
@@ -66,29 +77,12 @@ function layoutError(message: string): never {
 	throw new Error(`Installed @cursor/sdk MCP layout drifted: ${message}`);
 }
 
-function escapeRegExp(text: string): string {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-const sourceCache = new Map<string, string>();
-
-function readSdkChunk(build: SdkBuild, markers: readonly string[]): { fileName: string; source: string } {
-	const dir = join(SDK_PACKAGE_DIR, "dist", build);
-	const hits = readdirSync(dir)
-		.filter((fileName) => fileName.endsWith(".js"))
-		.map((fileName) => {
-			const filePath = join(dir, fileName);
-			let source = sourceCache.get(filePath);
-			if (source === undefined) {
-				source = readFileSync(filePath, "utf8");
-				sourceCache.set(filePath, source);
-			}
-			return { fileName, source };
-		})
-		.filter(({ source }) => markers.every((marker) => source.includes(marker)));
+/** The one chunk of `build` that holds every marker, found by content: chunk numbers change between SDK releases. */
+function readSdkChunk(build: CursorSdkBuild, markers: readonly string[]): { name: string; source: string } {
+	const hits = readCursorSdkBuildFiles(build).filter(({ source }) => markers.every((marker) => source.includes(marker)));
 	if (hits.length !== 1) {
 		layoutError(
-			`${build}: expected exactly one chunk containing ${JSON.stringify(markers)}, found ${hits.map((hit) => hit.fileName).join(", ") || "none"}`,
+			`${build}: expected exactly one chunk containing ${JSON.stringify(markers)}, found ${hits.map((hit) => hit.name).join(", ") || "none"}`,
 		);
 	}
 	return hits[0]!;
@@ -138,9 +132,9 @@ function resolveDefaultTimeoutMs(source: string, token: string): number {
 	return Number(definitions[0]![1]);
 }
 
-const layoutCache = new Map<SdkBuild, SdkMcpLayout>();
+const layoutCache = new Map<CursorSdkBuild, SdkMcpLayout>();
 
-function readSdkMcpLayout(build: SdkBuild): SdkMcpLayout {
+function readSdkMcpLayout(build: CursorSdkBuild): SdkMcpLayout {
 	const cached = layoutCache.get(build);
 	if (cached) return cached;
 
@@ -200,11 +194,13 @@ function readSdkMcpLayout(build: SdkBuild): SdkMcpLayout {
 	expectWindow(source, listPrompts.index, 200, 'this.request({method:"prompts/list"', `${build}: client listPrompts`);
 
 	// The agent-side McpSdkClient wrapper reaches those protocol methods; "McpSdkClient"
-	// itself only appears as a tracing span name, never as a class.
+	// itself only appears as a tracing span name, never as a class. Since 1.0.37 its callTool
+	// hands the request to a plain (non-async) sendToolCall(), which calls the protocol client's
+	// callTool, so the protocol frame that issues `tools/call` is still callTool.
 	const wrapperChunk = readSdkChunk(build, [
 		'withName("McpSdkClient.getTools")',
 		"this.client.listTools({cursor:",
-		"this.client.callTool({name:",
+		"this.sendToolCall({name:",
 	]);
 	const wrapperSource = wrapperChunk.source;
 	if (/class McpSdkClient\b/.test(wrapperSource)) layoutError(`${build}: McpSdkClient is a class name now`);
@@ -217,14 +213,52 @@ function readSdkMcpLayout(build: SdkBuild): SdkMcpLayout {
 		wrapperSource,
 		wrapperCallTool.index,
 		4000,
-		/this\.client\.callTool\(\{name:[\w$]+,arguments:[\w$]+\}\)/,
+		/await this\.sendToolCall\(\{name:[\w$]+,arguments:[\w$]+\},[\w$]+\.signal\)/,
 		`${build}: wrapper callTool`,
 	);
+	// sendToolCall is the only place the wrapper reaches the protocol for `tools/call`. Its default exit is the
+	// client's callTool; the other exit, `request` straight from sendToolCall, is taken only after
+	// setToolCallOutputSchemaPassthrough(true). It also spreads whatever setToolCallRequestOptions() supplied
+	// into the call's request options, and a `timeout` there replaces the SDK's 60000 default that the override
+	// intercepts. The matcher reads the frame that called `request`, so the passthrough exit would not be a tool
+	// call to it, and an injected timeout would bypass the interception. Both setters are therefore pinned below
+	// as definitions that nothing in the package calls.
+	const sendToolCall = onlyMethodIn(wrapperSource, wrapperHeader, METHOD.sendToolCall, false);
+	expectWindow(
+		wrapperSource,
+		sendToolCall.index,
+		500,
+		/this\._toolCallRequestOptions\?\.\([\w$]+\.name\)/,
+		`${build}: wrapper sendToolCall request options`,
+	);
+	expectWindow(
+		wrapperSource,
+		sendToolCall.index,
+		500,
+		/this\._toolCallOutputSchemaPassthrough\?\.\(\)[^]{0,20}?this\.client\.request\(\{method:"tools\/call",params:[\w$]+\},[\w$.]+,[\w$]+\)[^]{0,20}?this\.client\.callTool\([\w$]+,void 0,[\w$]+\)/,
+		`${build}: wrapper sendToolCall`,
+	);
+	const sources = readCursorSdkBuildFiles(build).map(({ source }) => source);
+	for (const [setter, field] of [
+		["setToolCallOutputSchemaPassthrough", "_toolCallOutputSchemaPassthrough"],
+		["setToolCallRequestOptions", "_toolCallRequestOptions"],
+	] as const) {
+		const occurrences = sources.reduce((total, source) => total + source.split(setter).length - 1, 0);
+		const definition = new RegExp(`(?<![\\w$.])${setter}\\(([\\w$]+)\\)\\{this\\.${field}=\\1\\}`);
+		const isDefinition = sources.some((source) => definition.test(source));
+		if (occurrences !== 1 || !isDefinition) {
+			layoutError(
+				`${build}: ${setter} appears ${occurrences} times (definition found: ${isDefinition}); the SDK package used to only define it. ` +
+					"If the SDK now calls it, sendToolCall can bypass client.callTool or inject request options, so the MCP tool-timeout " +
+					"matcher in src/cursor-mcp-timeout-override.ts needs re-verification before this pin is changed",
+			);
+		}
+	}
 
 	const layout: SdkMcpLayout = {
 		build,
-		protocolFileName: protocol.fileName,
-		wrapperFileName: wrapperChunk.fileName,
+		protocolFileName: protocol.name,
+		wrapperFileName: wrapperChunk.name,
 		baseClass: baseHeader.name,
 		clientClass: clientHeader.name,
 		wrapperClass: wrapperHeader.name,
@@ -264,7 +298,8 @@ async function paginate({fetchPage:e}){return await e(void 0)}
 class ${layout.wrapperClass}{
 	constructor(e){this.client=e}
 	async ${METHOD.getTools}(){return await paginate({fetchPage:e=>this.client.${METHOD.listTools}({cursor:e})})}
-	async ${METHOD.callTool}(e,t){return await this.client.${METHOD.callTool}({name:e,arguments:t})}
+	async ${METHOD.callTool}(e,t){return await this.${METHOD.sendToolCall}({name:e,arguments:t},void 0)}
+	${METHOD.sendToolCall}(e,t){return this.client.${METHOD.callTool}(e,void 0,t)}
 }
 class Ancestor{
 	async ${METHOD.connect}(fn){return await fn()}
@@ -353,20 +388,20 @@ async function loadFixture(root: string, layout: SdkMcpLayout): Promise<Fixture>
 	return { Client: fixture.Client, Wrapper: fixture.Wrapper, Ancestor: fixture.Ancestor };
 }
 
-function fixtureKey(build: SdkBuild, kind: FixtureKind): string {
+function fixtureKey(build: CursorSdkBuild, kind: FixtureKind): string {
 	return `${build}:${kind}`;
 }
 
 // The path of the generated modules is what the stack reports: an SDK build directory
 // under node_modules/@cursor/sdk/dist/<build>, or a vendored copy outside the SDK.
-function fixtureRoot(root: string, build: SdkBuild, kind: FixtureKind): string {
+function fixtureRoot(root: string, build: CursorSdkBuild, kind: FixtureKind): string {
 	return kind === "sdk" ? join(root, build, "node_modules", "@cursor", "sdk", "dist", build) : join(root, build, "vendored");
 }
 
 // Runs `call` with the real override installed over a recording setTimeout. Only the
 // probe delays are intercepted (and never armed); every other timer passes through.
 async function observeSdkTimer(
-	build: SdkBuild,
+	build: CursorSdkBuild,
 	kind: FixtureKind,
 	call: (context: ScenarioContext) => Promise<unknown>,
 ): Promise<{ stack: string; delays: unknown[] }> {
@@ -483,7 +518,7 @@ const SCENARIOS: Scenario[] = [
 
 describe("Cursor SDK MCP layout contract", () => {
 	it("resolves @cursor/sdk to the bundled build under Bun and ships esm and cjs builds", () => {
-		const manifest = JSON.parse(readFileSync(join(SDK_PACKAGE_DIR, "package.json"), "utf8"));
+		const manifest = JSON.parse(readFileSync(join(CURSOR_SDK_ROOT, "package.json"), "utf8"));
 
 		expect(manifest.exports["."].bun).toBe("./dist/bundled/index.js");
 		expect(manifest.exports["."].import).toBe("./dist/esm/index.js");
@@ -494,7 +529,7 @@ describe("Cursor SDK MCP layout contract", () => {
 	});
 
 	// Scanning a multi-megabyte SDK build takes about 3 s unloaded, close to bun's 5 s default.
-	for (const build of SDK_BUILDS) {
+	for (const build of CURSOR_SDK_BUILDS) {
 		it(
 			`pins the installed ${build} build's MCP protocol layout the matchers rely on`,
 			() => {
@@ -517,7 +552,7 @@ describe("Cursor SDK MCP stack classification", () => {
 		// so a /var vs /private/var alias here leaks into later files' module resolution.
 		const root = mkdtempSync(join(realpathSync(tmpdir()), "omp-cursor-mcp-stack-"));
 		tmpRoot = root;
-		for (const build of SDK_BUILDS) {
+		for (const build of CURSOR_SDK_BUILDS) {
 			const layout = readSdkMcpLayout(build);
 			for (const kind of ["sdk", "plain"] as const) {
 				fixtures.set(fixtureKey(build, kind), await loadFixture(fixtureRoot(root, build, kind), layout));
@@ -533,7 +568,7 @@ describe("Cursor SDK MCP stack classification", () => {
 		if (tmpRoot) rmSync(tmpRoot, { recursive: true, force: true });
 	});
 
-	for (const build of SDK_BUILDS) {
+	for (const build of CURSOR_SDK_BUILDS) {
 		describe(`${build} build`, () => {
 			for (const scenario of SCENARIOS) {
 				it(`classifies ${scenario.name}`, async () => {
@@ -556,6 +591,138 @@ describe("Cursor SDK MCP stack classification", () => {
 	}
 });
 
+// The protocol classes omp actually runs: the bundled build's own `Client` and its base class, taken
+// from a copy of the build that also exports them (see loadInstalledBundledSdkInternals), against a
+// transport that sends nothing back. The override is installed over a recording setTimeout, so every
+// delay the SDK's own `request()` arms is seen with the real stack Bun produced for it.
+interface RealProtocolClient {
+	connect(transport: object): Promise<unknown>;
+	listTools(params?: object): Promise<unknown>;
+	callTool(params: object): Promise<unknown>;
+	listPrompts(params?: object): Promise<unknown>;
+}
+
+type RealProtocolClientClass = new (info: { name: string; version: string }, options: { capabilities: object }) => RealProtocolClient;
+
+interface NeverAnsweringTransport {
+	start(): Promise<void>;
+	send(message: unknown): Promise<void>;
+	close(): Promise<void>;
+	onclose?: () => void;
+}
+
+/** `{Client}` over the bundle's top-level names: the client class is assigned inside a lazy module initializer, which the getter runs first. */
+function realProtocolExportsSource(layout: SdkMcpLayout): string {
+	const source = readCursorSdkEntrySource("bundled");
+	const assignment = source.indexOf(`${layout.clientClass}=class ${layout.clientClass} extends ${layout.baseClass}{`);
+	if (assignment < 0) layoutError(`bundled: class ${layout.clientClass} is no longer assigned inside a lazy module initializer`);
+	const initializer = lazyInitializerBefore(source, assignment) ?? layoutError("bundled: no lazy module initializer encloses the MCP client class");
+	return `{Client:()=>{${initializer}();return ${layout.clientClass}}}`;
+}
+
+interface RealRequest {
+	delay: number;
+	stack: string;
+}
+
+/**
+ * Runs `calls` in order against one real client, each after the previous call's request armed its timer,
+ * and returns what each request armed. Nothing answers, so no request settles until the transport closes.
+ */
+async function observeRealProtocolRequests(
+	Client: RealProtocolClientClass,
+	calls: ReadonlyArray<(client: RealProtocolClient, transport: NeverAnsweringTransport) => Promise<unknown>>,
+): Promise<RealRequest[]> {
+	const client = new Client({ name: "omp-cursor-sdk-test", version: "0" }, { capabilities: {} });
+	const transport: NeverAnsweringTransport = { start: async () => {}, send: async () => {}, close: async () => {} };
+	const probeDelays = new Set<unknown>([SDK_DEFAULT_MS, TOOL_OVERRIDE_MS, CONNECT_OVERRIDE_MS]);
+	const requests: RealRequest[] = [];
+	const settled: Array<Promise<unknown>> = [];
+
+	// A leaked install from another test file would make the recorder below shadow it.
+	restoreCursorMcpToolTimeoutOverride();
+	const realSetTimeout = globalThis.setTimeout;
+	globalThis.setTimeout = ((handler: unknown, delay?: unknown, ...args: unknown[]) => {
+		if (typeof delay === "number" && probeDelays.has(delay)) {
+			requests.push({ delay, stack: new Error().stack ?? "" });
+			return 0;
+		}
+		return Reflect.apply(realSetTimeout, globalThis, [handler, delay, ...args]);
+	}) as unknown as typeof setTimeout;
+	try {
+		installCursorMcpToolTimeoutOverride({ timeoutMs: TOOL_OVERRIDE_MS, connectTimeoutMs: CONNECT_OVERRIDE_MS });
+		for (const call of calls) {
+			const before = requests.length;
+			settled.push(call(client, transport).catch(() => undefined));
+			// The request arms its timer within a few turns: initialize only after `await super.connect`.
+			for (let turn = 0; turn < 50 && requests.length === before; turn++) await new Promise((resolve) => setImmediate(resolve));
+			expect(requests.length, "the SDK's request() armed its timer").toBe(before + 1);
+		}
+	} finally {
+		restoreCursorMcpToolTimeoutOverride();
+		globalThis.setTimeout = realSetTimeout;
+	}
+	// Closing the transport rejects the pending requests, so none outlives the test.
+	transport.onclose?.();
+	await Promise.all(settled);
+	return requests;
+}
+
+describe("Cursor SDK MCP protocol classes loaded from the installed bundled build", () => {
+	let sdk: InstalledBundledSdkInternals<{ Client: () => RealProtocolClientClass }> | undefined;
+
+	beforeAll(async () => {
+		sdk = await loadInstalledBundledSdkInternals(realProtocolExportsSource(readSdkMcpLayout("bundled")));
+	}, SDK_BUILD_SCAN_TIMEOUT_MS);
+
+	afterAll(() => {
+		restoreCursorMcpToolTimeoutOverride();
+		sdk?.dispose();
+	});
+
+	const connect = (client: RealProtocolClient, transport: NeverAnsweringTransport) => client.connect(transport);
+	const scenarios: ReadonlyArray<{ name: string; call: (client: RealProtocolClient) => Promise<unknown>; purpose: Purpose }> = [
+		{ name: "tools/list: listTools()", call: (client) => client.listTools({}), purpose: "connect" },
+		{ name: "tools/call: callTool()", call: (client) => client.callTool({ name: "t", arguments: {} }), purpose: "tool" },
+		{ name: "prompts/list: listPrompts() is an unknown request and keeps the SDK default", call: (client) => client.listPrompts({}), purpose: "neither" },
+	];
+
+	function realClient(): RealProtocolClientClass {
+		if (!sdk) throw new Error("bundled SDK internals not loaded");
+		return sdk.internals.Client();
+	}
+
+	function expectPurpose(request: RealRequest | undefined, purpose: Purpose): void {
+		if (!request) throw new Error("no request observed");
+		// Not a vacuous pass: the stack is the SDK's protocol layer, loaded from an SDK path, with the timer and request frames.
+		expect(request.stack).toContain(METHOD.setupTimeout);
+		expect(request.stack).toContain(METHOD.request);
+		expect(request.stack.replaceAll("\\", "/")).toContain("node_modules/@cursor/sdk/dist/bundled/index.js");
+		expect(isCursorSdkMcpConnectTimeoutStack(request.stack)).toBe(purpose === "connect");
+		expect(isCursorSdkMcpToolTimeoutStack(request.stack)).toBe(purpose === "tool");
+		// End to end: the installed override picked this purpose's delay for the SDK's own request.
+		expect(request.delay).toBe(EXPECTED_DELAY_MS[purpose]);
+	}
+
+	it("initialize: the real connect() keeps the connect timeout", async () => {
+		const requests = await observeRealProtocolRequests(realClient(), [connect]);
+
+		expect(requests).toHaveLength(1);
+		expectPurpose(requests[0], "connect");
+	});
+
+	for (const scenario of scenarios) {
+		it(`${scenario.name}`, async () => {
+			const requests = await observeRealProtocolRequests(realClient(), [connect, (client) => scenario.call(client)]);
+
+			// The first request is the initialize that connected the client.
+			expect(requests).toHaveLength(2);
+			expectPurpose(requests[0], "connect");
+			expectPurpose(requests[1], scenario.purpose);
+		});
+	}
+});
+
 // Frame text as printed by the runtimes. JSC (Bun 1.3.14) prints bare method names and
 // `at async` for awaited ancestors; V8 (Node 26.3.0) prints `Class.method` with the
 // minified class name. Both were captured from the minified-shaped modules above.
@@ -563,10 +730,10 @@ function stackWith(frames: string[]): string {
 	return ["Error", ...frames.map((frame) => `    at ${frame}`)].join("\n");
 }
 
-const SDK_FILE = "/work/node_modules/@cursor/sdk/dist/esm/458.js";
+const SDK_FILE = "/work/node_modules/@cursor/sdk/dist/esm/116.js";
 const SDK_BUNDLED_FILE = "/work/node_modules/@cursor/sdk/dist/bundled/index.js";
-const SDK_WRAPPER_FILE = "/work/node_modules/@cursor/sdk/dist/esm/479.js";
-const SDK_WIN_FILE = "C:\\work\\node_modules\\@cursor\\sdk\\dist\\esm\\458.js";
+const SDK_WRAPPER_FILE = "/work/node_modules/@cursor/sdk/dist/esm/331.js";
+const SDK_WIN_FILE = "C:\\work\\node_modules\\@cursor\\sdk\\dist\\esm\\116.js";
 
 function jscProtocolStack(method: string, file = SDK_FILE, ancestors: string[] = []): string {
 	return stackWith([

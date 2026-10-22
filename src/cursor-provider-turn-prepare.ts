@@ -33,7 +33,7 @@ import {
 	getEffectiveCursorMaxMode,
 	getEffectiveFastForModelId,
 } from "./cursor-state.js";
-import { assertImportedCursorSdkMaxModePatched, applyCursorMaxModeSelection } from "./cursor-max-mode.js";
+import { selectCursorMaxModeSelection } from "./cursor-max-mode.js";
 import { resolveEffectiveCursorConfig } from "./cursor-runtime-state.js";
 import type { CursorCloudContextHandoff, CursorResolvedSdkConfig } from "./cursor-config.js";
 import { buildCursorModelSelection } from "./model-discovery.js";
@@ -505,16 +505,16 @@ export async function prepareCursorProviderTurn(
 	const { model, options } = params;
 
 	const agentMode = getCursorProviderAgentModeOrThrow();
-	const maxMode = getEffectiveCursorMaxMode();
-	if (maxMode) assertImportedCursorSdkMaxModePatched();
-	const fastEnabled = resolvedConfig.runtime.value === "cloud" ? undefined : getEffectiveFastForModelId(model.id);
-	const selection = applyCursorMaxModeSelection(
+	const runtime = resolvedConfig.runtime.value;
+	const fastEnabled = runtime === "cloud" ? undefined : getEffectiveFastForModelId(model.id);
+	const selection = selectCursorMaxModeSelection(
+		model.id,
 		buildCursorModelSelection(model.id, options?.reasoning ?? "off", fastEnabled),
-		maxMode,
+		{ runtime, enabled: getEffectiveCursorMaxMode() },
 	);
 	const context: PrepareCursorProviderTurnContext = { ...prepareParams, agentMode, selection, fastEnabled };
 
-	if (resolvedConfig.runtime.value === "cloud") {
+	if (runtime === "cloud") {
 		// The SDK rejects a tool allowlist for cloud agents, so a cloud advisor would get
 		// every tool; refuse it before the cloud turn invalidates the local agent. Summarizer
 		// requests stay unrestricted there, like every other cloud request.

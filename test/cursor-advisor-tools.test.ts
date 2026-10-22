@@ -3,8 +3,7 @@ import { SUMMARIZATION_SYSTEM_PROMPT } from "@oh-my-pi/pi-agent-core/compaction/
 import type { Context, Model } from "@oh-my-pi/pi-ai";
 import { renderInbandToolPrompt } from "@oh-my-pi/pi-ai/dialect";
 import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildCursorIncrementalPrompt, buildCursorPrompt, getCursorPlanModeToolGuidanceText, getCursorToolTailGuardText } from "../src/context.js";
 import { restoreCursorMcpToolTimeoutOverride } from "../src/cursor-mcp-timeout-override.js";
@@ -13,13 +12,14 @@ import { prepareCursorProviderTurn, resolveCursorProviderTurnConfig } from "../s
 import { acquireSessionCursorAgent, createOneShotCursorAgent, disposeAllSessionCursorAgents } from "../src/cursor-session-agent.js";
 import { __testUtils as cursorSessionScopeTestUtils } from "../src/cursor-session-scope.js";
 import { __testUtils as sessionStoreTestUtils } from "../src/cursor-session-store.js";
+import { CURSOR_SDK_BUILDS, CURSOR_SDK_ROOT, readCursorSdkBuildSource } from "./helpers/cursor-sdk-build-source.js";
+import { createAgentsInBuild, offlineAgentRuntime } from "./helpers/cursor-sdk-offline-agent.js";
 
 sessionStoreTestUtils.setSdkOperations({
 	getDefaultStateRoot: () => "/tmp/omp-cursor-sdk-test-state",
 	openSqliteStore: async () => ({ dispose: async () => {} }) as never,
 });
 
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SCOPE = "/tmp/sessions/advisor-tools.jsonl";
 const MAIN_SESSION_ID = "01a0e2a0-0000-7000-8000-000000000001";
 const ADVISOR_SESSION_ID = "01a0e2a0-0000-7000-8000-0000000000ad";
@@ -318,34 +318,65 @@ describe("installed @cursor/sdk built-in tool restriction contract", () => {
 		await expect(attempt).rejects.toThrow("`tools` is not supported for cloud agents yet");
 	});
 
-	it("resolves every name the advisor allowlist uses through the SDK's tool vocabulary", () => {
-		// `ToolName` only autocompletes: Agent.create derives the accepted names from the agent proto's
-		// ToolCall oneof (`read_tool_call` -> `read`) and rejects any other name, which would fail
-		// every advisor agent at runtime.
-		const bundle = readFileSync(join(REPO, "node_modules/@cursor/sdk/dist/bundled/index.js"), "utf8");
-		expect(bundle).toContain('$.oneof?.localName!=="tool"');
-		expect(bundle).toContain('$.localName.replace(/ToolCall$/,"")');
-		const allowlist = getCursorBuiltInToolAllowlist(advisorTurn(["read", "grep", "glob", "ls", "find", "search"])) ?? [];
-		expect(allowlist).toEqual(["read", "grep", "glob"]);
-		for (const name of allowlist) expect(bundle).toMatch(new RegExp(`\\|\\d+ ${name}_tool_call #\\d+ tool\\|`));
-	});
-
 	it("documents the empty and non-empty allowlist semantics the summarizer and advisor rely on", () => {
-		const declaration = readFileSync(join(REPO, "node_modules/@cursor/sdk/dist/esm/options.d.ts"), "utf8");
+		const declaration = readFileSync(join(CURSOR_SDK_ROOT, "dist/esm/options.d.ts"), "utf8");
 		expect(declaration).toContain("`[]` — no built-in tools; the model can only respond with text.");
 		expect(declaration).toContain("Non-empty — only the listed tools are offered to the model.");
 		expect(declaration).toMatch(/omitting `"mcp"`\s*\*\s*disables MCP entirely/);
 	});
 
-	it("sends a local agent's restriction with every run it starts, including an empty one", () => {
-		const bundle = readFileSync(join(REPO, "node_modules/@cursor/sdk/dist/bundled/index.js"), "utf8");
-		// Each run copies the allowlist from the agent's options, so a pooled advisor agent
-		// keeps it on every send...
-		expect(bundle).toContain("...this.options.allowedProtoTools!==void 0?{allowedTools:this.options.allowedProtoTools}:{}");
-		// ...and it reaches Cursor's backend, which offers the model only the listed tools. An empty
-		// list is sent as an empty header (`!==void 0`, unlike the exclusion list's `length>0`), which
-		// is what keeps a summarizer text-only.
-		expect(bundle).toContain('BA1="x-cursor-agent-allowed-tools"');
-		expect(bundle).toContain('...$.allowedTools!==void 0?{[BA1]:$.allowedTools.join(",")}:{}');
+	// Bun loads the bundled build and Node loads esm or cjs. Chunk names and minified identifiers change
+	// between SDK releases, so each pin is a pattern over the whole build with `[\w$]+` for identifiers.
+	describe.each(CURSOR_SDK_BUILDS)("%s build", (build) => {
+		it("refuses the tool options for cloud agents", () => {
+			const source = readCursorSdkBuildSource(build);
+			expect(source).toContain('["tools","disallowedTools","systemPrompt"]');
+			expect(source).toContain("is not supported for cloud agents yet; it currently applies to local agents only.");
+		});
+
+		it("derives the accepted tool names from the agent proto's ToolCall oneof, which holds every name the advisor allowlist uses", () => {
+			// `ToolName` only autocompletes: Agent.create derives the accepted names from the agent proto's
+			// ToolCall oneof (`read_tool_call` -> `read`) and rejects any other name, which would fail
+			// every advisor agent at runtime.
+			const source = readCursorSdkBuildSource(build);
+			expect(source).toMatch(/(?:[\w$]+\.oneof\?\.localName!=="tool"|"tool"!==[\w$]+\.oneof\?\.localName)/);
+			expect(source).toMatch(/[\w$]+\.localName\.replace\(\/ToolCall\$\/,""\)/);
+			const allowlist = getCursorBuiltInToolAllowlist(advisorTurn(["read", "grep", "glob", "ls", "find", "search"])) ?? [];
+			expect(allowlist).toEqual(["read", "grep", "glob"]);
+			for (const name of allowlist) expect(source).toMatch(new RegExp(`\\|\\d+ ${name}_tool_call #\\d+ tool\\|`));
+		});
+
+		it.skipIf(offlineAgentRuntime(build) === undefined)(
+			"creates a local agent for the advisor allowlist and for an empty one, and refuses a name outside the vocabulary",
+			() => {
+				const results = createAgentsInBuild(build, {
+					advisor: { tools: ["read", "grep", "glob"] },
+					summarizer: { tools: [] },
+					unknown: { tools: ["no_such_tool" as ToolName] },
+				});
+				expect(results.advisor).toEqual({ model: null });
+				expect(results.summarizer).toEqual({ model: null });
+				const unknown = results.unknown;
+				const refusal = unknown && "error" in unknown ? unknown.error : "";
+				expect(refusal).toContain("Unknown tool name(s) in `tools`: no_such_tool.");
+				const validNames = /Valid tool names: (.*)\.$/.exec(refusal)?.[1]?.split(", ") ?? [];
+				expect(validNames).toEqual(expect.arrayContaining(["read", "grep", "glob"]));
+			},
+			60_000,
+		);
+
+		it("sends a local agent's restriction with every run it starts, including an empty one", () => {
+			const source = readCursorSdkBuildSource(build);
+			// Each run copies the allowlist from the agent's options, so a pooled advisor agent
+			// keeps it on every send...
+			expect(source).toContain("...this.options.allowedProtoTools!==void 0?{allowedTools:this.options.allowedProtoTools}:{}");
+			// ...and it reaches Cursor's backend, which offers the model only the listed tools. An empty
+			// list is sent as an empty header (`!==void 0`, unlike the exclusion list's `length>0`), which
+			// is what keeps a summarizer text-only.
+			expect(source).toMatch(/[\w$]+="x-cursor-agent-allowed-tools"/);
+			const headers =
+				/\{\.\.\.([\w$]+)\.allowedTools!==void 0\?\{\[[\w$.]+\]:\1\.allowedTools\.join\(","\)\}:\{\},\.\.\.\1\.disallowedTools!==void 0&&\1\.disallowedTools\.length>0\?\{\[[\w$.]+\]:\1\.disallowedTools\.join\(","\)\}:\{\}\}/g;
+			expect([...source.matchAll(headers)]).toHaveLength(1);
+		});
 	});
 });

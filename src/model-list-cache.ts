@@ -80,7 +80,8 @@ function isModelVariant(value: unknown): value is NonNullable<ModelListItem["var
 		record.params.every(isModelParameterValue) &&
 		typeof record.displayName === "string" &&
 		(record.description === undefined || typeof record.description === "string") &&
-		(record.isDefault === undefined || typeof record.isDefault === "boolean")
+		(record.isDefault === undefined || typeof record.isDefault === "boolean") &&
+		(record.isMaxMode === undefined || typeof record.isMaxMode === "boolean")
 	);
 }
 

@@ -3,6 +3,8 @@
     "sdkPackage": "@cursor/sdk",
     "sdkVersion": "1.0.34",
     "verified": "2026-10-22",
+    "contractVerifiedSdkVersions": ["1.0.34", "1.0.40"],
+    "contractVerification": "1.0.40 was not re-captured: its usage-types.d.ts is byte-identical to 1.0.34, its getUsage/GetUsageOptions/getAgentUsage declarations differ only in line numbers, and the declared run-id sentences and the AgentUsage mapper contract in test/cursor-sdk-billed-usage.test.ts pass against its esm, cjs and bundled builds.",
     "model": "composer-2-5",
     "captured": [
       "Probe 1: a LOCAL agent (tools: [], temporary SQLite store, scratch cwd) sent three prompts (a ~6k-token reference list, then two short questions). The streamed turn-ended usage of each run was recorded (localTurnEnded), and agent.getUsage() was called after every run, at the end, and through the static Agent.getUsage(agentId). Every call answered 403 feature_unavailable (localGetUsageFailure).",

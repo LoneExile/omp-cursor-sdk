@@ -1,8 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { runInThisContext } from "node:vm";
 import ts from "typescript";
-import { resolveInstalledPackageRoot } from "./installed-package.js";
+import { type CursorSdkBuild, cursorSdkBuildEntry, readCursorSdkEntrySource } from "./cursor-sdk-build-source.js";
 
 // Test-only execution of the INSTALLED SDK's own printer, so tests assert the bytes the SDK really prints
 // rather than a hand-copied format. No replacement SDK code is shipped; a missing module or export fails the
@@ -10,9 +8,6 @@ import { resolveInstalledPackageRoot } from "./installed-package.js";
 //
 // The package ships three builds and the runtime picks one by condition: omp (Bun) loads `dist/bundled`
 // (package.json exports "bun"), Node ESM `dist/esm`, CommonJS `dist/cjs`. The filter must hold for all three.
-
-export type SdkBuild = "esm" | "cjs" | "bundled";
-export const SDK_BUILDS: readonly SdkBuild[] = ["esm", "cjs", "bundled"];
 
 export interface InstalledSdkLoggerContext {
 	withName(name: string): InstalledSdkLoggerContext;
@@ -26,12 +21,8 @@ export interface InstalledSdkLogger {
 	warn: InstalledSdkLoggerCall;
 }
 
-function buildDir(build: SdkBuild): string {
-	return join(resolveInstalledPackageRoot("@cursor/sdk"), "dist", build);
-}
-
-function parseScript(file: string): ts.SourceFile {
-	return ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+function parseScript(build: CursorSdkBuild): ts.SourceFile {
+	return ts.createSourceFile(cursorSdkBuildEntry(build), readCursorSdkEntrySource(build), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
 }
 
 /**
@@ -71,13 +62,13 @@ interface SdkModuleLoader {
 
 const LOGGER_MODULE = "../context/dist/logger.js";
 const CORE_MODULE = "../context/dist/core.js";
-const moduleTables = new Map<SdkBuild, Record<string, SdkModuleFactory>>();
+const moduleTables = new Map<CursorSdkBuild, Record<string, SdkModuleFactory>>();
 
-function readModuleTable(build: SdkBuild): Record<string, SdkModuleFactory> {
+function readModuleTable(build: CursorSdkBuild): Record<string, SdkModuleFactory> {
 	const cached = moduleTables.get(build);
 	if (cached) return cached;
-	const entry = join(buildDir(build), "index.js");
-	const ast = parseScript(entry);
+	const entry = cursorSdkBuildEntry(build);
+	const ast = parseScript(build);
 	let found: Record<string, SdkModuleFactory> | undefined;
 	const visit = (node: ts.Node): void => {
 		if (found) return;
@@ -173,8 +164,8 @@ let bundledPrinterSource: BundledPrinterSource | undefined;
  */
 function readBundledPrinterSource(): BundledPrinterSource {
 	if (bundledPrinterSource) return bundledPrinterSource;
-	const file = join(buildDir("bundled"), "index.js");
-	const ast = parseScript(file);
+	const file = cursorSdkBuildEntry("bundled");
+	const ast = parseScript("bundled");
 	const declarations = new Map<string, ts.FunctionDeclaration | ts.VariableDeclaration>();
 	for (const statement of ast.statements) {
 		if (ts.isFunctionDeclaration(statement) && statement.name) declarations.set(statement.name.text, statement);
@@ -240,15 +231,6 @@ function loadBundledPrinter(useColors: boolean): InstalledSdkLogger {
 }
 
 /** Evaluates the installed build's printer fresh (colors on or off). */
-export function loadInstalledSdkLogger(build: SdkBuild, useColors: boolean): InstalledSdkLogger {
+export function loadInstalledSdkLogger(build: CursorSdkBuild, useColors: boolean): InstalledSdkLogger {
 	return build === "bundled" ? loadBundledPrinter(useColors) : loadModuleTableLogger(build, useColors, "local-exec:cursor-rules");
-}
-
-/** Text of every JavaScript file of one installed build, for template-level contract assertions. */
-export function readInstalledSdkBundleText(build: SdkBuild): string {
-	const dir = buildDir(build);
-	return readdirSync(dir)
-		.filter((name) => name.endsWith(".js"))
-		.map((name) => readFileSync(join(dir, name), "utf8"))
-		.join("\n");
 }

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isUtf8 } from "node:buffer";
 
-// Evidence (installed @cursor/sdk 1.0.34 esm, cjs and bun-bundled builds, locked by
+// Evidence (installed @cursor/sdk 1.0.40 esm, cjs and bun-bundled builds, locked by
 // test/cursor-sdk-output-filter-contract.test.ts):
 // - Every SDK log line is one `console.log` (INFO/DEBUG) or `console.warn` (WARN) call with ONE
 //   complete string argument. The logger prints `HH:MM:SS.mmm INFO  <message>[ ctx=<path>][ meta={...}]`,

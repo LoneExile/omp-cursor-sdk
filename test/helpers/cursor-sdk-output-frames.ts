@@ -1,5 +1,5 @@
 /**
- * One INFO frame as printed by the installed @cursor/sdk 1.0.34 logger. cursor-sdk-output-filter-contract.test.ts
+ * One INFO frame as printed by the installed @cursor/sdk 1.0.40 logger. cursor-sdk-output-filter-contract.test.ts
  * regenerates it with the SDK's own printer (colors on and off, timestamp normalized) and fails when this drifts, so
  * behavior tests can use the literals without re-deriving them.
  */

@@ -1,6 +1,6 @@
 import type { ModelListItem } from "@cursor/sdk";
 
-// Generated with @cursor/sdk@1.0.34 from 47 Cursor models.
+// Generated with @cursor/sdk@1.0.40 from 47 Cursor models.
 // Refresh with: npm run refresh:cursor-snapshots -- --write
 // Do not add secrets; this file stores public model metadata only.
 export const FALLBACK_MODEL_ITEMS = [
@@ -167,7 +167,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Fable 5"
+				displayName: "Claude Fable 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -184,7 +185,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Fable 5"
+				displayName: "Claude Fable 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -201,7 +203,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "high"
 					}
 				],
-				displayName: "Claude Fable 5"
+				displayName: "Claude Fable 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -218,7 +221,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Claude Fable 5"
+				displayName: "Claude Fable 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -235,7 +239,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Fable 5"
+				displayName: "Claude Fable 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -337,7 +342,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Fable 5"
+				displayName: "Claude Fable 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -354,7 +360,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Fable 5"
+				displayName: "Claude Fable 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -372,7 +379,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Fable 5",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -389,7 +397,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Claude Fable 5"
+				displayName: "Claude Fable 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -406,7 +415,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Fable 5"
+				displayName: "Claude Fable 5",
+				isMaxMode: true
 			}
 		]
 	},
@@ -571,7 +581,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Fable 5.1"
+				displayName: "Claude Fable 5.1",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -588,7 +599,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Fable 5.1"
+				displayName: "Claude Fable 5.1",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -605,7 +617,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "high"
 					}
 				],
-				displayName: "Claude Fable 5.1"
+				displayName: "Claude Fable 5.1",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -622,7 +635,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Claude Fable 5.1"
+				displayName: "Claude Fable 5.1",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -639,7 +653,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Fable 5.1"
+				displayName: "Claude Fable 5.1",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -741,7 +756,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Fable 5.1"
+				displayName: "Claude Fable 5.1",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -758,7 +774,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Fable 5.1"
+				displayName: "Claude Fable 5.1",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -776,7 +793,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Fable 5.1",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -793,7 +811,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Claude Fable 5.1"
+				displayName: "Claude Fable 5.1",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -810,7 +829,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Fable 5.1"
+				displayName: "Claude Fable 5.1",
+				isMaxMode: true
 			}
 		]
 	},
@@ -1017,7 +1037,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Haiku 5.5 1M Low No Thinking"
+				displayName: "Claude Haiku 5.5 1M Low No Thinking",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1034,7 +1055,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Haiku 5.5 1M Medium No Thinking"
+				displayName: "Claude Haiku 5.5 1M Medium No Thinking",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1051,7 +1073,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "high"
 					}
 				],
-				displayName: "Claude Haiku 5.5 1M High No Thinking"
+				displayName: "Claude Haiku 5.5 1M High No Thinking",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1068,7 +1091,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Claude Haiku 5.5 1M Extra High No Thinking"
+				displayName: "Claude Haiku 5.5 1M Extra High No Thinking",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1085,7 +1109,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Haiku 5.5 1M Max No Thinking"
+				displayName: "Claude Haiku 5.5 1M Max No Thinking",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1187,7 +1212,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Haiku 5.5 1M Low"
+				displayName: "Claude Haiku 5.5 1M Low",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1204,7 +1230,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Haiku 5.5 1M Medium"
+				displayName: "Claude Haiku 5.5 1M Medium",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1222,7 +1249,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Haiku 5.5 1M High",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1239,7 +1267,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Claude Haiku 5.5 1M Extra High"
+				displayName: "Claude Haiku 5.5 1M Extra High",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1256,7 +1285,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Haiku 5.5 1M Max"
+				displayName: "Claude Haiku 5.5 1M Max",
+				isMaxMode: true
 			}
 		]
 	},
@@ -1446,7 +1476,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Opus 4.6"
+				displayName: "Claude Opus 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1463,7 +1494,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Opus 4.6"
+				displayName: "Claude Opus 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1480,7 +1512,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "high"
 					}
 				],
-				displayName: "Claude Opus 4.6"
+				displayName: "Claude Opus 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1497,7 +1530,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Opus 4.6"
+				displayName: "Claude Opus 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1582,7 +1616,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Opus 4.6"
+				displayName: "Claude Opus 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1599,7 +1634,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Opus 4.6"
+				displayName: "Claude Opus 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1617,7 +1653,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Opus 4.6",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1634,7 +1671,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Opus 4.6"
+				displayName: "Claude Opus 4.6",
+				isMaxMode: true
 			}
 		]
 	},
@@ -1761,7 +1799,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1811,7 +1850,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1861,7 +1901,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1911,7 +1952,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1961,7 +2003,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -1986,7 +2029,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2011,7 +2055,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2036,7 +2081,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2061,7 +2107,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2086,7 +2133,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2111,7 +2159,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2136,7 +2185,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2161,7 +2211,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2186,7 +2237,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2211,7 +2263,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2261,7 +2314,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2311,7 +2365,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2361,7 +2416,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2411,7 +2467,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2461,7 +2518,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2486,7 +2544,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2511,7 +2570,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2536,7 +2596,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2561,7 +2622,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2586,7 +2648,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2611,7 +2674,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2637,7 +2701,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Opus 4.7",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2662,7 +2727,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2687,7 +2753,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2712,7 +2779,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.7"
+				displayName: "Claude Opus 4.7",
+				isMaxMode: true
 			}
 		]
 	},
@@ -2841,7 +2909,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2891,7 +2960,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2941,7 +3011,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -2991,7 +3062,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3041,7 +3113,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3066,7 +3139,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3091,7 +3165,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3116,7 +3191,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3141,7 +3217,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3166,7 +3243,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3191,7 +3269,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3216,7 +3295,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3241,7 +3321,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3266,7 +3347,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3291,7 +3373,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3341,7 +3424,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3391,7 +3475,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3441,7 +3526,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3491,7 +3577,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3541,7 +3628,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3566,7 +3654,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3591,7 +3680,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3616,7 +3706,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3641,7 +3732,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3667,7 +3759,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Opus 4.8",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3692,7 +3785,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3717,7 +3811,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3742,7 +3837,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3767,7 +3863,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3792,7 +3889,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 4.8"
+				displayName: "Claude Opus 4.8",
+				isMaxMode: true
 			}
 		]
 	},
@@ -3920,7 +4018,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -3970,7 +4069,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4020,7 +4120,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4045,7 +4146,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4070,7 +4172,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4095,7 +4198,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4120,7 +4224,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4145,7 +4250,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4170,7 +4276,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4220,7 +4327,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4270,7 +4378,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4320,7 +4429,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4370,7 +4480,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4420,7 +4531,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4445,7 +4557,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4470,7 +4583,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4495,7 +4609,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4520,7 +4635,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4546,7 +4662,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Opus 5",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4571,7 +4688,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4596,7 +4714,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4621,7 +4740,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4646,7 +4766,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4671,7 +4792,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5"
+				displayName: "Claude Opus 5",
+				isMaxMode: true
 			}
 		]
 	},
@@ -4772,7 +4894,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4806,7 +4929,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4840,7 +4964,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4874,7 +4999,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4908,7 +5034,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4925,7 +5052,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4942,7 +5070,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4960,7 +5089,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Opus 5.5",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4977,7 +5107,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -4994,7 +5125,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5011,7 +5143,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5028,7 +5161,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5045,7 +5179,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5062,7 +5197,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5079,7 +5215,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Claude Opus 5.5"
+				displayName: "Claude Opus 5.5",
+				isMaxMode: true
 			}
 		]
 	},
@@ -5349,7 +5486,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Sonnet 4.6"
+				displayName: "Claude Sonnet 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5366,7 +5504,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Sonnet 4.6"
+				displayName: "Claude Sonnet 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5383,7 +5522,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "high"
 					}
 				],
-				displayName: "Claude Sonnet 4.6"
+				displayName: "Claude Sonnet 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5400,7 +5540,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Sonnet 4.6"
+				displayName: "Claude Sonnet 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5485,7 +5626,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Sonnet 4.6"
+				displayName: "Claude Sonnet 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5503,7 +5645,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Sonnet 4.6",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5520,7 +5663,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "high"
 					}
 				],
-				displayName: "Claude Sonnet 4.6"
+				displayName: "Claude Sonnet 4.6",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5537,7 +5681,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Sonnet 4.6"
+				displayName: "Claude Sonnet 4.6",
+				isMaxMode: true
 			}
 		]
 	},
@@ -5703,7 +5848,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Sonnet 5"
+				displayName: "Claude Sonnet 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5720,7 +5866,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Sonnet 5"
+				displayName: "Claude Sonnet 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5737,7 +5884,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "high"
 					}
 				],
-				displayName: "Claude Sonnet 5"
+				displayName: "Claude Sonnet 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5754,7 +5902,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Claude Sonnet 5"
+				displayName: "Claude Sonnet 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5771,7 +5920,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Sonnet 5"
+				displayName: "Claude Sonnet 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5873,7 +6023,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Sonnet 5"
+				displayName: "Claude Sonnet 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5890,7 +6041,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Sonnet 5"
+				displayName: "Claude Sonnet 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5908,7 +6060,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Sonnet 5",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5925,7 +6078,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Claude Sonnet 5"
+				displayName: "Claude Sonnet 5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -5942,7 +6096,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Sonnet 5"
+				displayName: "Claude Sonnet 5",
+				isMaxMode: true
 			}
 		]
 	},
@@ -6068,7 +6223,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Claude Sonnet 5.5 1M Low"
+				displayName: "Claude Sonnet 5.5 1M Low",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -6081,7 +6237,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Claude Sonnet 5.5 1M Medium"
+				displayName: "Claude Sonnet 5.5 1M Medium",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -6095,7 +6252,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Sonnet 5.5 1M High",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -6108,7 +6266,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Claude Sonnet 5.5 1M Extra High"
+				displayName: "Claude Sonnet 5.5 1M Extra High",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -6121,7 +6280,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Claude Sonnet 5.5 1M Max"
+				displayName: "Claude Sonnet 5.5 1M Max",
+				isMaxMode: true
 			}
 		]
 	},
@@ -7289,7 +7449,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.4"
+				displayName: "GPT-5.4",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -7306,7 +7467,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.4"
+				displayName: "GPT-5.4",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -7324,7 +7486,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "GPT-5.4",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -7341,7 +7504,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.4"
+				displayName: "GPT-5.4",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -7358,7 +7522,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.4"
+				displayName: "GPT-5.4",
+				isMaxMode: true
 			}
 		]
 	},
@@ -7777,7 +7942,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.5"
+				displayName: "GPT-5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -7794,7 +7960,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.5"
+				displayName: "GPT-5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -7812,7 +7979,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "GPT-5.5",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -7829,7 +7997,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.5"
+				displayName: "GPT-5.5",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -7846,7 +8015,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.5"
+				displayName: "GPT-5.5",
+				isMaxMode: true
 			}
 		]
 	},
@@ -8135,7 +8305,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8152,7 +8323,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8169,7 +8341,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8186,7 +8359,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8204,7 +8378,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "GPT-5.6 Luna",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8221,7 +8396,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8238,7 +8414,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8255,7 +8432,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8272,7 +8450,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8289,7 +8468,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8306,7 +8486,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8323,7 +8504,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Luna"
+				displayName: "GPT-5.6 Luna",
+				isMaxMode: true
 			}
 		]
 	},
@@ -8615,7 +8797,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8632,7 +8815,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8649,7 +8833,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8666,7 +8851,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8684,7 +8870,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "GPT-5.6 Sol",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8701,7 +8888,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8718,7 +8906,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8735,7 +8924,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8752,7 +8942,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8769,7 +8960,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8786,7 +8978,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -8803,7 +8996,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Sol"
+				displayName: "GPT-5.6 Sol",
+				isMaxMode: true
 			}
 		]
 	},
@@ -9092,7 +9286,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9109,7 +9304,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9126,7 +9322,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9143,7 +9340,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9161,7 +9359,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "GPT-5.6 Terra",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9178,7 +9377,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9195,7 +9395,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9212,7 +9413,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9229,7 +9431,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9246,7 +9449,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9263,7 +9467,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9280,7 +9485,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "GPT-5.6 Terra"
+				displayName: "GPT-5.6 Terra",
+				isMaxMode: true
 			}
 		]
 	},
@@ -9756,7 +9962,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Grok 4.7  Low"
+				displayName: "Grok 4.7  Low",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9773,7 +9980,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Grok 4.7  Low Fast​​"
+				displayName: "Grok 4.7  Low Fast​​",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9790,7 +9998,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Grok 4.7  Medium"
+				displayName: "Grok 4.7  Medium",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9807,7 +10016,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Grok 4.7  Medium Fast​​"
+				displayName: "Grok 4.7  Medium Fast​​",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9824,7 +10034,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Grok 4.7  High"
+				displayName: "Grok 4.7  High",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9842,7 +10053,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Grok 4.7  High Fast​​",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9859,7 +10071,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "false"
 					}
 				],
-				displayName: "Grok 4.7  Extra High"
+				displayName: "Grok 4.7  Extra High",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -9876,7 +10089,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "true"
 					}
 				],
-				displayName: "Grok 4.7  Extra High Fast​​"
+				displayName: "Grok 4.7  Extra High Fast​​",
+				isMaxMode: true
 			}
 		]
 	},
@@ -10088,7 +10302,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "minimal"
 					}
 				],
-				displayName: "Muse Spark 1.3"
+				displayName: "Muse Spark 1.3",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10101,7 +10316,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Muse Spark 1.3"
+				displayName: "Muse Spark 1.3",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10114,7 +10330,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Muse Spark 1.3"
+				displayName: "Muse Spark 1.3",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10128,7 +10345,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Muse Spark 1.3",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10141,7 +10359,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "xhigh"
 					}
 				],
-				displayName: "Muse Spark 1.3"
+				displayName: "Muse Spark 1.3",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10154,7 +10373,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Muse Spark 1.3"
+				displayName: "Muse Spark 1.3",
+				isMaxMode: true
 			}
 		]
 	},
@@ -10297,7 +10517,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "minimal"
 					}
 				],
-				displayName: "Muse Wonder 1M Minimal"
+				displayName: "Muse Wonder 1M Minimal",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10310,7 +10531,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "low"
 					}
 				],
-				displayName: "Muse Wonder 1M Low"
+				displayName: "Muse Wonder 1M Low",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10323,7 +10545,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "medium"
 					}
 				],
-				displayName: "Muse Wonder 1M Medium"
+				displayName: "Muse Wonder 1M Medium",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10336,7 +10559,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "high"
 					}
 				],
-				displayName: "Muse Wonder 1M High"
+				displayName: "Muse Wonder 1M High",
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10350,7 +10574,8 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Muse Wonder 1M Extra High",
-				isDefault: true
+				isDefault: true,
+				isMaxMode: true
 			},
 			{
 				params: [
@@ -10363,7 +10588,8 @@ export const FALLBACK_MODEL_ITEMS = [
 						value: "max"
 					}
 				],
-				displayName: "Muse Wonder 1M Max"
+				displayName: "Muse Wonder 1M Max",
+				isMaxMode: true
 			}
 		]
 	}

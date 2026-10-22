@@ -10,8 +10,8 @@ import { fileURLToPath } from "node:url";
  * `createRequire(...).resolve` throw there even though the real import resolves normally. Walk the
  * `node_modules` chain by hand instead: that is the chain the runtime import resolves against.
  *
- * A leaf module (no imports from this package) so the SDK loader, the platform-package resolver and
- * the Max Mode guard can each depend on it without importing one another.
+ * A leaf module (no imports from this package) so the platform-package resolver can depend on it
+ * without importing the SDK loader.
  */
 export function findCursorSdkPackageDir(moduleUrl: string | URL): string | undefined {
 	let dir: string;
