@@ -28,7 +28,7 @@ Pi CLI tool toggles apply at the pi tool-registry boundary. `--no-tools`, `--too
 Default behavior:
 
 - Cursor host tools handle files, shell, grep, and edits.
-- When exposed, `pi__mcp` is preferred for MCP work and `pi__subagent` is preferred for delegation. Cursor-configured MCP and Cursor-native subagents are fallbacks when the matching pi tool is not exposed or is unavailable.
+- When exposed, omp's `task` tool (`pi__task`) is preferred for delegation and omp's MCP tools (`pi__mcp__<server>_<tool>`) are preferred for MCP work. Cursor-native subagents and Cursor-configured MCP are fallbacks when the matching pi tool is not exposed or is unavailable.
 - The pi bridge exposes **active pi tools** as `pi__*` MCP names when `PI_CURSOR_PI_TOOL_BRIDGE` is enabled (default on).
 - Overlapping pi builtins (`read`, `bash`, `write`, `edit`, `grep`, `find`, `ls`) are **hidden** from the bridge unless `PI_CURSOR_EXPOSE_BUILTIN_TOOLS=1`.
 

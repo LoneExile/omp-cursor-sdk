@@ -11,6 +11,7 @@ import { __testUtils as cursorSessionScopeTestUtils } from "../../src/cursor-ses
 import { __testUtils as cursorSessionResumeTestUtils } from "../../src/cursor-session-agent-resume.js";
 import { __testUtils as cursorSessionLineageTestUtils } from "../../src/cursor-session-agent-lineage.js";
 import { __testUtils as cursorSdkProcessErrorGuardTestUtils } from "../../src/cursor-sdk-process-error-guard.js";
+import { __testUtils as cursorSdkOutputFilterTestUtils } from "../../src/cursor-sdk-output-filter.js";
 import { installCursorSessionStoreMock } from "./cursor-session-store.js";
 
 export {
@@ -41,4 +42,6 @@ export async function resetIndexExtensionTestState(): Promise<void> {
 	cursorSessionLineageTestUtils.reset();
 	cursorSdkProcessErrorGuardTestUtils.resetLifecycleSessionGuard();
 	nativeToolDisplayTestUtils.reset();
+	// The first loadCursorSdk() takes a process-lifetime output-filter lease; release it between tests.
+	cursorSdkOutputFilterTestUtils.resetProcessOutputFilter();
 }

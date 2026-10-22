@@ -87,7 +87,6 @@ interface CursorProviderTurnPrepareResultBase {
 	meta: CursorProviderTurnSendMeta;
 	contextWindowAgentId: string;
 	textDeltas: string[];
-	restoreCursorSdkOutputFilter: () => void;
 	lifecycle: CursorProviderTurnLifecycle;
 }
 

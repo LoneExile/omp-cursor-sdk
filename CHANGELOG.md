@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `PI_CURSOR_LIVE_RUN_IDLE_DISPOSE_MS` sets the live-run idle window in milliseconds: a decimal integer from 1 to 2147483647. Anything else uses the default of 300000 (five minutes). Ported from upstream #283.
+
+### Fixed
+
+- A bridged omp tool call that runs longer than the live-run idle window is no longer cancelled. When the idle timer fired, the plugin released the live Cursor run, which cancelled its pending call, for example a long `task` subagent or a `cursor_ask_question` dialog waiting for the user. A run now stays alive while omp is still executing one of its own bridged calls. Once omp has produced a call's tool result (completed, failed, or aborted), that call no longer holds the run: the full window starts again and the call stays resolvable by the next provider request. Aborting the turn, session shutdown, and session switches still cancel pending calls at once; compaction does not. Ported from upstream #281.
+- The 10-second MCP initialize and `listTools` timeout now applies. The matcher looked for class names (`Client.connect`, `McpSdkClient.getTools`) that no `@cursor/sdk` build has, and under Bun the SDK resolves to its bundled build with different minified names again, so those requests kept the SDK's 60 seconds. Both timeout matchers now read the protocol method frame that issued the SDK request on an SDK path: `connect` and `listTools` for the 10-second timeout, `callTool` for the 3600-second tool timeout. Other MCP requests, such as `listPrompts`, keep 60 seconds. A Cursor-configured MCP server that needs longer than 10 seconds to start can raise the limit with `PI_CURSOR_MCP_CONNECT_TIMEOUT_SECONDS` or `PI_CURSOR_MCP_CONNECT_TIMEOUT_MS`.
+- On models that pair boolean `thinking` with `reasoning_effort` (Claude Haiku 5.5), thinking `off` sends `thinking=false` without `reasoning_effort`, and enabled levels send `thinking=true` with the mapped `reasoning_effort`. `off` used to leave `reasoning_effort` in the request.
+- Cursor's native shell parser loads under omp. The SDK looks for `@cursor/sdk-<platform>-<arch>` only above the omp binary and launch script, and omp plugins are installed elsewhere, so Cursor's shell command analysis was off. Before the SDK first loads, the plugin sets `CURSOR_TREE_SITTER_VENDOR_DIR` to the installed platform package's `vendor` directory when both parser entry points exist and the variable is unset, empty, or relative (the SDK ignores non-absolute values). An absolute value is never changed. Ported from upstream #232.
+- `@cursor/sdk` wraps Unavailable, DeadlineExceeded, and Internal `ConnectError`s in a `NetworkError` with the original as `cause`, and the plugin did not recognize the wrapper. It is now classified from its `ConnectError` cause: the user sees the retryable "Network error" message instead of `[unavailable] Error`, and the process-error guard contains it during an active turn. The SDK's other `ConnectError` wrappers, such as `AuthenticationError`, are classified from their cause the same way. Containment still requires Cursor SDK provenance (an `@cursor/sdk` stack frame or `aiserver.*` details) somewhere in the cause chain. Ported from upstream #265.
+- Cursor SDK background logs (rules and skills loads, file watchers, `/cursor-refresh-config`, work that outlives a turn) no longer reach omp's TUI between turns. One process-wide output filter is installed the first time the SDK loads, instead of only during turns; sessions that never load the SDK are not wrapped. Ported from upstream #367.
+- The bridge prompt names omp's tools: `pi__task` for delegation and `pi__mcp__*` for MCP work. It named Pi's `pi__subagent` and `pi__mcp`, which omp never exposes, so the preference never applied.
+
+### Changed
+
+- The SDK output filter matches only complete, verified SDK frames in every SDK build (esm, cjs, and the bundled build Bun loads). It drops the INFO lines for `managed_skills.startup_inventory`, `managed_skills.removed`, and the three rules and skills services' `load completed`, the four hook-compatibility `[hooks]` notices (unsupported trigger matcher, unsupported `Glob` tool, unsupported event, unknown event), and the ignore-mapping error caused by an unconfigured ripgrep. The SDK's informational `[hooks]` warnings (long hook timeout, deprecation, refused symlink path, all tools in a matcher unsupported, invalid event value) go to omp's log file instead of the terminal. It used to hide any line containing `[hooks]` or `managed_skills.`; unrecognized `[hooks]` lines now pass through. The `Agent.create()` mute ends when that call settles, instead of also covering SDK work it started in the background.
+- The bundled fallback model snapshot is refreshed from the live catalog with `@cursor/sdk` 1.0.34: 47 models, adding `claude-haiku-5-5`, `claude-sonnet-5-5`, `gemini-4-argon`, `glm-5p3`, `glm-5p3-flash`, and `muse-wonder-1.0`. Like live discovery, the unmeasured `@1m` variants of the new Claude and Muse models register the catalog's 1M label until a checkpoint measurement exists.
+
 ## 0.4.5 - 2026-10-03
 
 ### Added

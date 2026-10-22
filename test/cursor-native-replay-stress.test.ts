@@ -73,7 +73,7 @@ function mockFinishedTaskSend() {
 
 describe("native replay stress", () => {
 	beforeEach(async () => {
-		cursorProviderTestUtils.setCursorNativeReplayIdleDisposeMs(0);
+		cursorProviderTestUtils.setCursorLiveRunIdleDisposeMs(0);
 		await resetCursorProviderTestState();
 	});
 

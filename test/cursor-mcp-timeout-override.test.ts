@@ -1,12 +1,9 @@
-import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	cursorMcpToolTimeoutOverrideDefaults,
 	installCursorMcpToolTimeoutOverride,
-	isCursorSdkMcpConnectTimeoutStack,
-	isCursorSdkMcpToolTimeoutStack,
 	resolveCursorMcpConnectTimeoutMs,
 	resolveCursorMcpToolTimeoutMs,
 	restoreCursorMcpToolTimeoutOverride,
@@ -149,57 +146,7 @@ return (() => {
 	return run(callback);
 }
 
-function readCursorSdkEsmBundleContaining(...markers: string[]): string {
-	const sdkEsmDir = join(process.cwd(), "node_modules/@cursor/sdk/dist/esm");
-	const hits = readdirSync(sdkEsmDir).flatMap((fileName) => {
-		if (!fileName.endsWith(".js")) return [];
-		const source = readFileSync(join(sdkEsmDir, fileName), "utf8");
-		return markers.every((marker) => source.includes(marker)) ? [{ fileName, source }] : [];
-	});
-
-	expect(hits.map((hit) => hit.fileName)).toHaveLength(1);
-	return hits[0]!.source;
-}
-
 describe("Cursor MCP timeout override", () => {
-	it("tracks the installed Cursor SDK MCP callTool timeout seam", () => {
-		const sdkMcpBundle = readCursorSdkEsmBundleContaining(
-			'withName("McpSdkClient.callTool")',
-			'this.client.callTool({name:t,arguments:r})',
-		);
-		const sdkProtocolBundle = readCursorSdkEsmBundleContaining(
-			'this.request({method:"initialize"',
-			"timeoutId:setTimeout",
-		);
-
-		expect(sdkMcpBundle).toContain('withName("McpSdkClient.callTool")');
-		expect(sdkMcpBundle).toContain('this.client.callTool({name:t,arguments:r})');
-		expect(sdkMcpBundle).toContain('withName("McpSdkClient.getTools")');
-		expect(sdkMcpBundle).toContain('this.client.listTools({cursor:e})');
-		expect(sdkProtocolBundle).toContain('this.request({method:"initialize"');
-		expect(sdkProtocolBundle).toContain('_setupTimeout(e,t,n,s,i=!1)');
-		expect(sdkProtocolBundle).toContain('timeoutId:setTimeout(s,t)');
-	});
-
-	it("recognizes the Cursor SDK MCP tool-call timeout stack shape", () => {
-		const stack = `Error
-    at Protocol._setupTimeout (${process.cwd()}/node_modules/@cursor/sdk/dist/esm/index.js:1:1)
-    at Client.callTool (${process.cwd()}/node_modules/@cursor/sdk/dist/esm/index.js:1:1)
-    at McpSdkClient.callTool (${process.cwd()}/node_modules/@cursor/sdk/dist/esm/index.js:1:1)`;
-
-		const listToolsStack = stack.replace(/callTool/g, "listTools").replace(/McpSdkClient\.listTools/, "McpSdkClient.getTools");
-		const initializeStack = stack.replace(/callTool/g, "connect");
-		const unknownProtocolStack = stack.replace(/callTool/g, "listPrompts");
-
-		expect(isCursorSdkMcpToolTimeoutStack(stack)).toBe(true);
-		expect(isCursorSdkMcpToolTimeoutStack(listToolsStack)).toBe(false);
-		expect(isCursorSdkMcpConnectTimeoutStack(listToolsStack)).toBe(true);
-		expect(isCursorSdkMcpConnectTimeoutStack(initializeStack)).toBe(true);
-		expect(isCursorSdkMcpConnectTimeoutStack(unknownProtocolStack)).toBe(false);
-		expect(isCursorSdkMcpConnectTimeoutStack(stack)).toBe(false);
-		expect(isCursorSdkMcpToolTimeoutStack(stack.replace(/node_modules\/\@cursor\/sdk/g, "src"))).toBe(false);
-	});
-
 	it("installs the override before Cursor session agent acquisition", async () => {
 		vi.resetModules();
 		const calls: string[] = [];

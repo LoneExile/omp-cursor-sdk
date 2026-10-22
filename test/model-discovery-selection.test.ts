@@ -11,6 +11,7 @@ import {
 	__testUtils,
 } from "../src/model-discovery.js";
 import type { ModelListItem } from "@cursor/sdk";
+import { FALLBACK_MODEL_ITEMS } from "../src/cursor-fallback-models.generated.js";
 
 function register(items: ModelListItem[]) {
 	return __testUtils.registerModelItems(items);
@@ -308,6 +309,128 @@ describe("OMP thinking metadata", () => {
 		]);
 		expect(config?.reasoning).toBe(false);
 		expect(config).not.toHaveProperty("thinking");
+	});
+});
+
+// Catalog shape captured from live `Cursor.models.list()` (see src/cursor-fallback-models.generated.ts):
+// Claude Opus exposes `thinking` + `effort`, Claude Haiku 5.5 exposes `thinking` + `reasoning_effort`.
+// Both must behave the same: enabled levels send thinking=true + the mapped effort, `off` sends
+// thinking=false and no effort parameter at all.
+const ENABLED_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+function claudeLikeModel(effortId: "effort" | "reasoning_effort", defaultThinking: "true" | "false"): ModelListItem {
+	return {
+		id: "claude-like",
+		displayName: "Claude Like",
+		parameters: [
+			{ id: "thinking", displayName: "Thinking", values: [{ value: "false" }, { value: "true" }] },
+			{ id: "context", displayName: "Context", values: [{ value: "300k" }, { value: "1m" }] },
+			{ id: effortId, displayName: "Effort", values: ENABLED_LEVELS.map((value) => ({ value })) },
+		],
+		variants: [
+			{
+				params: [
+					{ id: "thinking", value: defaultThinking },
+					{ id: "context", value: "1m" },
+					{ id: effortId, value: "medium" },
+				],
+				displayName: "Claude Like",
+				isDefault: true,
+			},
+		],
+	};
+}
+
+describe.each(["effort", "reasoning_effort"] as const)("boolean thinking plus %s", (effortId) => {
+	it("advertises native off..max and maps off to thinking=false", () => {
+		const [config] = register([claudeLikeModel(effortId, "true")]);
+		expect(config?.reasoning).toBe(true);
+		expect(config?.thinking).toEqual({ mode: "effort", efforts: [...ENABLED_LEVELS], requiresEffort: false });
+		expect(getCursorModelMetadata("claude-like@1m")?.thinkingLevelMap).toEqual({
+			off: "false",
+			minimal: null,
+			low: "low",
+			medium: "medium",
+			high: "high",
+			xhigh: "xhigh",
+			max: "max",
+		});
+	});
+
+	it.each(ENABLED_LEVELS)("sends thinking=true and %s as the effort", (level) => {
+		register([claudeLikeModel(effortId, "true")]);
+		expect(buildCursorModelSelection("claude-like@300k", level)).toEqual({
+			id: "claude-like",
+			params: [
+				{ id: "thinking", value: "true" },
+				{ id: "context", value: "300k" },
+				{ id: effortId, value: level },
+			],
+		});
+	});
+
+	it.each(ENABLED_LEVELS)("re-enables thinking for %s when the catalog default has thinking=false", (level) => {
+		register([claudeLikeModel(effortId, "false")]);
+		expect(buildCursorModelSelection("claude-like@1m", level)).toEqual({
+			id: "claude-like",
+			params: [
+				{ id: "thinking", value: "true" },
+				{ id: "context", value: "1m" },
+				{ id: effortId, value: level },
+			],
+		});
+	});
+
+	it("sends thinking=false and no effort parameter when pi thinking is off", () => {
+		register([claudeLikeModel(effortId, "true")]);
+		expect(buildCursorModelSelection("claude-like@300k", "off")).toEqual({
+			id: "claude-like",
+			params: [
+				{ id: "thinking", value: "false" },
+				{ id: "context", value: "300k" },
+			],
+		});
+	});
+
+	it("leaves the catalog default untouched for a level the model does not offer", () => {
+		register([claudeLikeModel(effortId, "true")]);
+		expect(buildCursorModelSelection("claude-like@1m", "minimal")).toEqual({
+			id: "claude-like",
+			params: [
+				{ id: "thinking", value: "true" },
+				{ id: "context", value: "1m" },
+				{ id: effortId, value: "medium" },
+			],
+		});
+	});
+});
+
+describe("fallback catalog Claude Haiku 5.5", () => {
+	const haiku = FALLBACK_MODEL_ITEMS.find((item) => item.id === "claude-haiku-5-5");
+
+	it("is present in the fallback snapshot with boolean thinking and reasoning_effort", () => {
+		expect(haiku?.parameters?.map((parameter) => parameter.id)).toEqual(["thinking", "context", "reasoning_effort"]);
+	});
+
+	it.each(["300k", "1m"])("selects thinking and reasoning_effort natively at @%s", (context) => {
+		if (!haiku) throw new Error("claude-haiku-5-5 is missing from the fallback snapshot");
+		const config = register([haiku]).find((candidate) => candidate.id === `claude-haiku-5-5@${context}`);
+		expect(config?.thinking).toEqual({ mode: "effort", efforts: [...ENABLED_LEVELS], requiresEffort: false });
+		expect(buildCursorModelSelection(`claude-haiku-5-5@${context}`, "xhigh")).toEqual({
+			id: "claude-haiku-5-5",
+			params: [
+				{ id: "thinking", value: "true" },
+				{ id: "context", value: context },
+				{ id: "reasoning_effort", value: "xhigh" },
+			],
+		});
+		expect(buildCursorModelSelection(`claude-haiku-5-5@${context}`, "off")).toEqual({
+			id: "claude-haiku-5-5",
+			params: [
+				{ id: "thinking", value: "false" },
+				{ id: "context", value: context },
+			],
+		});
 	});
 });
 

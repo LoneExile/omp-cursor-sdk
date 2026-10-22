@@ -136,6 +136,14 @@ export class CursorPiToolBridgeRegistry implements CursorPiToolBridge {
 		return false;
 	}
 
+	/** omp produced the tool result of a bridged call (see `CursorPiToolBridgeRunImpl.markPiToolResultReady`). */
+	markPiToolResultReady(piToolCallId: string): boolean {
+		for (const run of this.runs) {
+			if (run.markPiToolResultReady(piToolCallId)) return true;
+		}
+		return false;
+	}
+
 	private serializeServerLifecycle<T>(operation: () => Promise<T>): Promise<T> {
 		const next = this.serverLifecycle.then(operation, operation);
 		this.serverLifecycle = next.then(() => undefined, () => undefined);

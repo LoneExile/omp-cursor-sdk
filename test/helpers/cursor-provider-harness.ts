@@ -54,6 +54,7 @@ import { streamCursor, __testUtils as cursorProviderTestUtils } from "../../src/
 import { registerCursorPiToolBridge, __testUtils as cursorPiToolBridgeTestUtils } from "../../src/cursor-pi-tool-bridge.js";
 import { __testUtils as modelDiscoveryTestUtils } from "../../src/model-discovery.js";
 import { __testUtils as nativeToolDisplayTestUtils } from "../../src/cursor-native-tool-display-state.js";
+import { __testUtils as cursorSdkOutputFilterTestUtils } from "../../src/cursor-sdk-output-filter.js";
 import { registerCursorNativeToolDisplay } from "../../src/cursor-native-tool-display-registration.js";
 import type { CursorNativeToolDisplayExtensionApi } from "../../src/cursor-native-tool-display-registration.js";
 import type { ModelListItem, Run, SDKAgent, SendOptions } from "@cursor/sdk";
@@ -364,6 +365,8 @@ export async function resetCursorProviderTestState(): Promise<void> {
 	cloudLifecycleTestUtils.setDurableWriter(() => true);
 	registerCursorCloudLifecycleLedger(createPiHarness());
 	await cursorPiToolBridgeTestUtils.resetRegisteredBridgeForTests();
+	// The first loadCursorSdk() takes a process-lifetime output-filter lease; release it between tests.
+	cursorSdkOutputFilterTestUtils.resetProcessOutputFilter();
 	vi.clearAllMocks();
 	delete process.env.PI_CURSOR_NATIVE_TOOL_DISPLAY;
 	delete process.env.PI_CURSOR_REGISTER_NATIVE_TOOLS;
@@ -391,7 +394,7 @@ export async function resetCursorProviderTestState(): Promise<void> {
 	delete process.env[CURSOR_HTTP1_ENV];
 	process.env.PI_CURSOR_TOOL_MANIFEST = "0";
 	expect(cursorProviderTestUtils.pendingCursorNativeRunCount()).toBe(0);
-	cursorProviderTestUtils.resetCursorNativeReplayIdleDisposeMs();
+	cursorProviderTestUtils.resetCursorLiveRunIdleDisposeMs();
 	await cursorProviderTestUtils.resetSessionCursorAgents();
 	cursorProviderTestUtils.resetSessionTurnQueue();
 	cursorSessionScopeTestUtils.reset();

@@ -362,11 +362,18 @@ function applyThinkingLevel(
 ): void {
 	const mapped = metadata.thinkingLevelMap?.[level];
 	if (mapped === undefined || mapped === null) return;
+	// The catalog names the effort control `effort` (Claude Opus) or `reasoning_effort` (Claude Haiku 5.5,
+	// grok-4.7, gemini-3.8-flash); a model exposes at most one of them.
+	const effortId = metadata.parameterIds.effort
+		? "effort"
+		: metadata.parameterIds.reasoningEffort
+			? "reasoning_effort"
+			: undefined;
 
 	if (level === "off") {
 		if (metadata.parameterIds.thinking && mapped === "false") {
 			setParam(params, "thinking", mapped);
-			deleteParam(params, "effort");
+			if (effortId) deleteParam(params, effortId);
 			return;
 		}
 		if (metadata.parameterIds.reasoning) {
@@ -375,14 +382,9 @@ function applyThinkingLevel(
 		return;
 	}
 
-	if (metadata.parameterIds.effort) {
+	if (effortId) {
 		if (metadata.parameterIds.thinking) setParam(params, "thinking", "true");
-		setParam(params, "effort", mapped);
-		return;
-	}
-
-	if (metadata.parameterIds.reasoningEffort) {
-		setParam(params, "reasoning_effort", mapped);
+		setParam(params, effortId, mapped);
 		return;
 	}
 

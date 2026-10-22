@@ -73,25 +73,45 @@ export function resolveCursorMcpConnectTimeoutMs(
 	return DEFAULT_CURSOR_MCP_CONNECT_TIMEOUT_MS;
 }
 
-function isCursorSdkMcpProtocolTimeoutStack(stack: string | undefined): boolean {
+// The SDK minifies its class names (`class y extends d` in the webpack esm/cjs chunks,
+// `class R11 extends L11` in the Bun bundle), so a timeout's purpose is classified from
+// frames by method name and SDK path, never by a class name. A stack is the protocol
+// timer, `_setupTimeout`, armed by the base class's `request`; the purpose is the
+// protocol method that called `request`, which is the frame right after it:
+//   Bun/JSC  at request (…/node_modules/@cursor/sdk/dist/bundled/index.js:L:C)
+//            at async listTools (…/node_modules/@cursor/sdk/dist/bundled/index.js:L:C)
+//   V8       at y.request (file:///…/@cursor/sdk/dist/esm/458.js:L:C)
+//            at async y.listTools (file:///…/@cursor/sdk/dist/esm/458.js:L:C)
+// Requiring that adjacency keeps an unknown request (`listPrompts`, `ping`, …) on the SDK
+// default even when a `connect`, `listTools` or `callTool` frame sits further up the
+// stack, and a `connect` resumed inside a `callTool` keeps the connect timeout.
+const CURSOR_SDK_PATH_PATTERN = String.raw`(?:node_modules[/\\]@cursor[/\\]sdk|@cursor/sdk/dist)`;
+
+function cursorSdkFramePattern(methods: string): string {
+	return String.raw`^[ \t]*at (?:async )?(?:[\w$]+\.)*(?:${methods}) \(.*${CURSOR_SDK_PATH_PATTERN}[^\n]*`;
+}
+
+const CURSOR_SDK_MCP_TIMEOUT_FRAME_REGEX = new RegExp(cursorSdkFramePattern("_setupTimeout"), "m");
+const CURSOR_SDK_MCP_TOOL_REQUEST_REGEX = new RegExp(
+	`${cursorSdkFramePattern("request")}\\n${cursorSdkFramePattern("callTool")}`,
+	"m",
+);
+const CURSOR_SDK_MCP_CONNECT_REQUEST_REGEX = new RegExp(
+	`${cursorSdkFramePattern("request")}\\n${cursorSdkFramePattern("connect|listTools")}`,
+	"m",
+);
+
+function isCursorSdkMcpTimeoutStack(stack: string | undefined, purposeRegex: RegExp): boolean {
 	if (!stack) return false;
-	return (
-		/(?:node_modules[/\\]@cursor[/\\]sdk|node_modules\/\@cursor\/sdk|@cursor\/sdk\/dist)/.test(stack) &&
-		/\b_setupTimeout\b|\bProtocol\._setupTimeout\b/.test(stack)
-	);
+	return CURSOR_SDK_MCP_TIMEOUT_FRAME_REGEX.test(stack) && purposeRegex.test(stack);
 }
 
 export function isCursorSdkMcpToolTimeoutStack(stack: string | undefined): boolean {
-	if (!stack) return false;
-	return (
-		isCursorSdkMcpProtocolTimeoutStack(stack) &&
-		/\bcallTool\b|\bClient\.callTool\b|\bMcpSdkClient\.callTool\b/.test(stack)
-	);
+	return isCursorSdkMcpTimeoutStack(stack, CURSOR_SDK_MCP_TOOL_REQUEST_REGEX);
 }
 
 export function isCursorSdkMcpConnectTimeoutStack(stack: string | undefined): boolean {
-	if (!stack || !isCursorSdkMcpProtocolTimeoutStack(stack)) return false;
-	return /\bClient\.(?:connect|listTools)\b|\bMcpSdkClient\.getTools\b/.test(stack);
+	return isCursorSdkMcpTimeoutStack(stack, CURSOR_SDK_MCP_CONNECT_REQUEST_REGEX);
 }
 
 function isCursorSdkDefaultMcpTimeout(delay: SetTimeoutDelay): boolean {

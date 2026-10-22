@@ -39,7 +39,6 @@ function makeCloudPrepared(agent: SDKAgent): CursorProviderTurnPrepareResult {
 		meta: {},
 		contextWindowAgentId: CLOUD_AGENT_ID,
 		textDeltas: [],
-		restoreCursorSdkOutputFilter: () => {},
 		runtime: {
 			kind: "direct",
 			turnCoordinator: {

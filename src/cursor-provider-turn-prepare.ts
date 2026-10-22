@@ -4,7 +4,7 @@ import { getCursorBuiltInToolAllowlist, isCursorAdvisorRequest } from "./cursor-
 import { configureCursorSdkHttp1 } from "./cursor-http1.js";
 import { installCursorMcpToolTimeoutOverride } from "./cursor-mcp-timeout-override.js";
 import { ensureCursorRipgrepPath } from "./cursor-ripgrep-path.js";
-import { installCursorSdkOutputFilter, suppressCursorSdkOutput } from "./cursor-sdk-output-filter.js";
+import { suppressCursorSdkOutput } from "./cursor-sdk-output-filter.js";
 import {
 	acquireSessionCursorAgent,
 	buildCursorSessionSendPrompt,
@@ -153,7 +153,6 @@ async function prepareCursorCloudProviderTurn(
 	const { params, cwd, resolvedApiKey, sdkEventDebug, throwIfAborted, resolvedConfig, agentMode, selection, fastEnabled } = prepareParams;
 	const { model, context, options } = params;
 
-	let restoreCursorSdkOutputFilter: (() => void) | undefined;
 	let cloudAgentForCleanup: SDKAgent | undefined;
 	let completed = false;
 
@@ -174,7 +173,6 @@ async function prepareCursorCloudProviderTurn(
 		}
 
 		const { Agent } = await loadCursorSdk();
-		restoreCursorSdkOutputFilter = installCursorSdkOutputFilter();
 		const promptOptions = {
 			...getCursorPromptOptions(model),
 			agentMode,
@@ -256,14 +254,12 @@ async function prepareCursorCloudProviderTurn(
 			},
 			contextWindowAgentId: agent.agentId,
 			textDeltas,
-			restoreCursorSdkOutputFilter,
 			lifecycle: buildCloudCursorProviderTurnLifecycle(agent),
 			runtime: { kind: "direct", turnCoordinator },
 		};
 	} finally {
 		if (!completed) {
 			await cloudAgentForCleanup?.[Symbol.asyncDispose]?.().catch(() => {});
-			restoreCursorSdkOutputFilter?.();
 		}
 	}
 }
@@ -274,7 +270,6 @@ async function prepareCursorLocalProviderTurn(
 	const { params, cwd, resolvedApiKey, sdkEventDebug, throwIfAborted, resolvedConfig, agentMode, selection, fastEnabled } = prepareParams;
 	const { model, context, options } = params;
 
-	let restoreCursorSdkOutputFilter: (() => void) | undefined;
 	let sessionAgentScopeKey: string | undefined;
 	let oneShotLease: OneShotCursorAgentLease | undefined;
 	let liveRun: CursorLiveRun | undefined;
@@ -294,7 +289,6 @@ async function prepareCursorLocalProviderTurn(
 		);
 
 		installCursorMcpToolTimeoutOverride();
-		restoreCursorSdkOutputFilter = installCursorSdkOutputFilter();
 		const settingSources = getEffectiveCursorSettingSources();
 		const queuedBridgeRequestsBeforeLiveRun: CursorPiBridgeToolRequest[] = [];
 		let liveRunForBridgeQueue: CursorLiveRun | undefined;
@@ -468,7 +462,6 @@ async function prepareCursorLocalProviderTurn(
 			sessionAgentScopeKey,
 			sessionAgentLease,
 			localForce: resolvedConfig.local.force,
-			restoreCursorSdkOutputFilter,
 			lifecycle: oneShotLease
 				? buildOneShotCursorProviderTurnLifecycle(oneShotLease)
 				: buildLocalCursorProviderTurnLifecycle(sessionAgentLease, sessionAgentScopeKey),
@@ -487,7 +480,6 @@ async function prepareCursorLocalProviderTurn(
 			} else {
 				await abandonSessionCursorAgent(sessionAgentScopeKey).catch(() => {});
 			}
-			restoreCursorSdkOutputFilter?.();
 		}
 	}
 }

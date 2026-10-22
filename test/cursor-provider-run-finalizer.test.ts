@@ -59,7 +59,6 @@ describe("CursorRunFinalizer", () => {
 				commitSend: () => {},
 				trackRunCompletion,
 			} satisfies SessionCursorAgentLease,
-			restoreCursorSdkOutputFilter: () => {},
 			lifecycle: {
 				commitSend: () => {},
 				trackRunCompletion,
@@ -186,7 +185,6 @@ describe("CursorRunFinalizer", () => {
 				},
 				trackRunCompletion: () => {},
 			} satisfies SessionCursorAgentLease,
-			restoreCursorSdkOutputFilter: () => {},
 			lifecycle: {
 				commitSend: () => {
 					throw new Error("commit failed before terminal event");
@@ -293,7 +291,6 @@ describe("CursorRunFinalizer", () => {
 				commitSend: () => {},
 				trackRunCompletion: () => {},
 			} satisfies SessionCursorAgentLease,
-			restoreCursorSdkOutputFilter: () => {},
 			lifecycle: {
 				commitSend: () => {},
 				trackRunCompletion: () => {},
