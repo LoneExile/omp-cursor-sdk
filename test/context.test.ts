@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Type } from "typebox";
 import {
 	buildCursorPrompt,
+	getCursorTurnInput,
 	buildCursorIncrementalPrompt,
 	computeCursorContextFingerprint,
 	shouldBootstrapCursorContext,
@@ -15,7 +16,24 @@ import {
 	planCursorSessionSend,
 } from "../src/cursor-session-send-policy.js";
 import type { Context, UserMessage, AssistantMessage, ToolResultMessage } from "@oh-my-pi/pi-ai";
-import { convertToLlm } from "@oh-my-pi/pi-coding-agent";
+import {
+	assistantReply,
+	compactionSummary,
+	expectInOrder,
+	frameImage,
+	frameImages,
+	history,
+	hostMessages,
+	imageHook,
+	noteImage,
+	noteImages,
+	planNotice,
+	prompt,
+	promptImage,
+	promptImages,
+	shotImage,
+	shotImages,
+} from "./helpers/turn-input-fixtures.js";
 
 describe("buildCursorPrompt", () => {
 	it("includes system prompt", () => {
@@ -305,13 +323,14 @@ describe("buildCursorPrompt", () => {
 		const ctx: Context = {
 			messages: [
 				{ role: "user", content: `old ${"x".repeat(200)}`, timestamp: 1 } satisfies UserMessage,
+				assistantReply("older answer", 2),
 				{
 					role: "user",
 					content: [
 						{ type: "text", text: "latest request" },
 						{ type: "image", data: "newbase64", mimeType: "image/png" },
 					],
-					timestamp: 2,
+					timestamp: 3,
 				} satisfies UserMessage,
 			],
 		};
@@ -355,7 +374,7 @@ describe("buildCursorPrompt", () => {
 		expect(result.text).toContain("Tool result (bash, call tc1): README.md");
 	});
 
-	it("extracts images from latest user message only", () => {
+	it("extracts images from the pending user input only", () => {
 		const ctx: Context = {
 			messages: [
 				{
@@ -366,13 +385,14 @@ describe("buildCursorPrompt", () => {
 					],
 					timestamp: 1,
 				} satisfies UserMessage,
+				assistantReply("I see it.", 2),
 				{
 					role: "user",
 					content: [
 						{ type: "text", text: "And this one" },
 						{ type: "image", data: "newbase64", mimeType: "image/jpeg" },
 					],
-					timestamp: 2,
+					timestamp: 3,
 				} satisfies UserMessage,
 			],
 		};
@@ -381,9 +401,9 @@ describe("buildCursorPrompt", () => {
 		expect(result.images[0]).toEqual({ data: "newbase64", mimeType: "image/jpeg" });
 	});
 
-	it("explains that only latest user images are available as image bytes", () => {
+	it("explains that only the latest user input's images are available as image bytes", () => {
 		const result = buildCursorPrompt({ messages: [{ role: "user", content: "test", timestamp: 1 }] });
-		expect(result.text).toContain("only latest user images are sent");
+		expect(result.text).toContain("only images from the latest user input are sent");
 		expect(result.text).toContain("ask to reattach prior images");
 	});
 
@@ -398,10 +418,11 @@ describe("buildCursorPrompt", () => {
 					],
 					timestamp: 1,
 				} satisfies UserMessage,
+				assistantReply("Seen.", 2),
 				{
 					role: "user",
 					content: "Second",
-					timestamp: 2,
+					timestamp: 3,
 				} satisfies UserMessage,
 			],
 		};
@@ -443,16 +464,18 @@ describe("buildCursorPrompt", () => {
 		const ctx: Context = {
 			messages: [
 				{ role: "user", content: `old request ${"x".repeat(3000)}`, timestamp: 1 } satisfies UserMessage,
-				{ role: "user", content: "recent request", timestamp: 2 } satisfies UserMessage,
+				assistantReply("old answer", 2),
+				{ role: "user", content: "recent request", timestamp: 3 } satisfies UserMessage,
 				{
 					role: "toolResult",
 					toolCallId: "tc1",
 					toolName: "bash",
 					content: [{ type: "text", text: "recent tool output" }],
 					isError: false,
-					timestamp: 3,
+					timestamp: 4,
 				} satisfies ToolResultMessage,
-				{ role: "user", content: "latest request", timestamp: 4 } satisfies UserMessage,
+				assistantReply("recent answer", 5),
+				{ role: "user", content: "latest request", timestamp: 6 } satisfies UserMessage,
 			],
 		};
 
@@ -476,7 +499,8 @@ describe("buildCursorPrompt", () => {
 					timestamp: 1,
 				} satisfies ToolResultMessage,
 				{ role: "user", content: "recent request", timestamp: 2 } satisfies UserMessage,
-				{ role: "user", content: "latest request", timestamp: 3 } satisfies UserMessage,
+				assistantReply("recent answer", 3),
+				{ role: "user", content: "latest request", timestamp: 4 } satisfies UserMessage,
 			],
 		};
 
@@ -660,13 +684,6 @@ describe("cursor session prompt assembly", () => {
 		expect(prompt.text).not.toContain("Be helpful.");
 		expect(prompt.text).not.toContain("User: Hello");
 	});
-
-	// OMP providers receive messages already converted by the host's convertToLlm: `!` shell
-	// output becomes a `user` message; extension custom messages and text @file mentions
-	// become `developer` messages (pi-agent-core convertMessageToLlm, session/messages.ts).
-	function hostMessages(messages: unknown[]): Context["messages"] {
-		return convertToLlm(messages as Parameters<typeof convertToLlm>[0]);
-	}
 
 	function sendStateFor(priorContext: Context) {
 		return { bootstrapped: true, contextFingerprint: computeCursorContextFingerprint(priorContext), incrementalSendCount: 1 };
@@ -982,5 +999,192 @@ describe("cursor session prompt assembly", () => {
 
 		expect(prompt.text).toContain("conversation history before this point was compacted");
 		expect(prompt.text).toContain("Earlier work covered auth setup.");
+	});
+});
+
+describe("pending input", () => {
+	const fileMention = { role: "fileMention", files: [{ path: "notes.md", content: "Use bun test." }], timestamp: 3 };
+	const imageFileMention = { role: "fileMention", files: [{ path: "shot.png", content: "", image: shotImage }], timestamp: 3 };
+	// agent-session.ts assembles a turn as [notices before the prompt, prompt, next-turn messages,
+	// @file mentions, before_agent_start messages]; convertToLlm splits an image-bearing custom
+	// message into a `developer` message and a synthetic `user` message ("Images attached to <type>.").
+	const context: Context = { systemPrompt: ["Be helpful."], messages: hostMessages([...history, planNotice, prompt, fileMention, imageHook]) };
+	const pendingSections = [
+		"Developer: Plan mode is active.",
+		"User: Fix the flaky test",
+		'Developer: <file path="notes.md">\nUse bun test.\n</file>',
+		"Developer: Attached by hook.",
+		"User: Images attached to screenshot-note.",
+	];
+	const olderSections = ["Refactor the parser", "Parser refactored."];
+	const tightBudget = { maxInputTokens: 1, charsPerToken: 1 };
+
+	it("reaches the provider as developer messages around the prompt and a synthetic image user message", () => {
+		expect(context.messages.map((message) => message.role)).toEqual([
+			"user",
+			"assistant",
+			"developer",
+			"user",
+			"developer",
+			"developer",
+			"user",
+		]);
+	});
+
+	it("returns every message after the last assistant message, in order", () => {
+		expect(getCursorTurnInput(context.messages)).toEqual(context.messages.slice(2));
+	});
+
+	it("returns every message when there is no assistant message", () => {
+		const firstTurn = hostMessages([planNotice, prompt, fileMention]);
+
+		expect(getCursorTurnInput(firstTurn)).toEqual(firstTurn);
+	});
+
+	it("returns the latest user request, and no tool result, when a tool-result continuation leaves it before the last assistant message", () => {
+		const continuation = [
+			{ role: "user", content: "Describe this image", timestamp: 1 } satisfies UserMessage,
+			{ ...assistantReply("Reading the file.", 2), stopReason: "toolUse" as const },
+			{ role: "toolResult", toolCallId: "tc1", toolName: "read", content: [{ type: "text", text: "ok" }], isError: false, timestamp: 3 } satisfies ToolResultMessage,
+		];
+
+		expect(getCursorTurnInput(continuation)).toEqual([continuation[0]]);
+	});
+
+	it("leaves compaction and branch summaries out of the pending input", () => {
+		const messages = hostMessages([
+			...history,
+			{ role: "branchSummary", summary: "Tried approach A. secret=XYZ", fromId: "entry-a", timestamp: 3 },
+			compactionSummary("Earlier work. secret=XYZ"),
+			{ role: "user", content: "Second request", timestamp: 4 },
+		]);
+
+		expect(messages.slice(2, 4).map((message) => message.role === "user" && message.historyRewriteAt)).toEqual([3, 3]);
+		expect(getCursorTurnInput(messages)).toEqual([messages[4]]);
+		// A summary is never fresh input, not even as the latest user message.
+		expect(getCursorTurnInput(messages.slice(0, 4))).toEqual([]);
+	});
+
+	it("keeps the real prompt text when a synthetic image user message follows it", () => {
+		const promptThenNote = { systemPrompt: ["Be helpful."], messages: hostMessages([...history, prompt, imageHook]) };
+
+		expect(promptThenNote.messages.at(-1)).toMatchObject({ role: "user", content: [{ type: "text", text: "Images attached to screenshot-note." }, noteImage] });
+		const sent = buildCursorPrompt({ ...promptThenNote, messages: getCursorTurnInput(promptThenNote.messages) });
+
+		expectInOrder(sent.text, ["User: Fix the flaky test", "Developer: Attached by hook.", "User: Images attached to screenshot-note."]);
+		expect(sent.images).toEqual([...promptImages, ...noteImages]);
+	});
+
+	it("sends the images of every pending user message in order on bootstrap and incremental prompts", () => {
+		const expected = [...promptImages, ...noteImages];
+		expect(buildCursorPrompt(context).images).toEqual(expected);
+		expect(buildCursorIncrementalPrompt(context, {}, 1).images).toEqual(expected);
+	});
+
+	it("sends an @file image mention as one user message after the prompt, with all its images", () => {
+		// session/messages.ts: a fileMention becomes one `developer` message for its text files and one
+		// `user` message for its image files, `<file path>` lines plus every image, not "Images attached to".
+		const twoImages = { role: "fileMention", files: [{ path: "shot.png", content: "", image: shotImage }, { path: "diagram.png", content: "", image: noteImage }], timestamp: 3 };
+		const withShots: Context = { systemPrompt: ["Be helpful."], messages: hostMessages([...history, prompt, twoImages]) };
+		const withShot: Context = { systemPrompt: ["Be helpful."], messages: hostMessages([...history, prompt, imageFileMention]) };
+
+		expect(withShots.messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "user"]);
+		expect(withShots.messages.at(-1)).toMatchObject({
+			role: "user",
+			content: [{ type: "text", text: '<file path="shot.png">\n</file>\n<file path="diagram.png">\n</file>' }, shotImage, noteImage],
+		});
+		expect(buildCursorPrompt(withShots).images).toEqual([...promptImages, ...shotImages, ...noteImages]);
+		expect(buildCursorPrompt(withShot).images).toEqual([...promptImages, ...shotImages]);
+		expect(buildCursorIncrementalPrompt(withShot, {}, 1).images).toEqual([...promptImages, ...shotImages]);
+		expectInOrder(buildCursorPrompt(withShot).text, ["User: Fix the flaky test", 'User: <file path="shot.png">\n</file>']);
+	});
+
+	it("sends no image from before the last assistant message when the pending input has a user message", () => {
+		const withOldImage: Context = {
+			...context,
+			messages: hostMessages([{ role: "user", content: [{ type: "text", text: "Earlier screenshot" }, { type: "image", data: "old-image-b64", mimeType: "image/gif" }], timestamp: 0 }, ...history, planNotice, prompt, fileMention, imageHook]),
+		};
+
+		expect(buildCursorPrompt(withOldImage).images).toEqual([...promptImages, ...noteImages]);
+		expect(buildCursorPrompt(withOldImage).text).toContain("User: Earlier screenshot\n[image omitted from transcript]");
+	});
+
+	it("never trims the pending input, even over the budget, while older history is trimmed", () => {
+		const bootstrap = buildCursorPrompt(context, tightBudget).text;
+
+		expectInOrder(bootstrap, ["[Earlier transcript omitted: 2 messages to fit Cursor context budget]", ...pendingSections]);
+		for (const older of olderSections) expect(bootstrap).not.toContain(older);
+		// An incremental send carries the slice appended after the last send: Cursor's reply, then the pending input.
+		const incremental = buildCursorIncrementalPrompt(context, tightBudget, 1).text;
+		expectInOrder(incremental, pendingSections);
+		for (const older of olderSections) expect(incremental).not.toContain(older);
+	});
+
+	it("treats every message as pending input when there is no assistant message", () => {
+		const consecutive: Context = {
+			messages: hostMessages([
+				{ role: "user", content: `First request ${"x".repeat(500)}`, timestamp: 1 },
+				{ role: "user", content: `Second request ${"y".repeat(500)}`, timestamp: 2 },
+				{ role: "user", content: [{ type: "text", text: "Third request" }, promptImage], timestamp: 3 },
+			]),
+		};
+		const sent = buildCursorPrompt(consecutive, tightBudget);
+
+		expectInOrder(sent.text, ["User: First request", "User: Second request", "User: Third request"]);
+		expect(sent.text).not.toContain("Earlier transcript omitted");
+		expect(sent.text.length).toBeGreaterThan(1000);
+		expect(sent.images).toEqual(promptImages);
+	});
+
+	it("keeps a tool-result continuation's latest user request and its images", () => {
+		const continuation: Context = {
+			messages: [
+				{ role: "user", content: [{ type: "text", text: "Describe this image" }, promptImage], timestamp: 1 },
+				{ ...assistantReply("Reading the file.", 2), content: [{ type: "toolCall", id: "tc1", name: "read", arguments: { path: "a.png" } }], stopReason: "toolUse" },
+				{ role: "toolResult", toolCallId: "tc1", toolName: "read", content: [{ type: "text", text: "ok" }], isError: false, timestamp: 3 },
+			],
+		};
+		const sent = buildCursorPrompt(continuation, tightBudget);
+
+		expect(sent.text).toContain("User: Describe this image");
+		expect(sent.text).toContain("Tool result (read, call tc1): ok");
+		expect(sent.images).toEqual(promptImages);
+	});
+
+	it("sends neither the text nor the images of a summary in the pending input, and trims it under budget", () => {
+		const afterTree: Context = {
+			messages: hostMessages([...history, compactionSummary(`Earlier work. ${"z".repeat(300)}`, [frameImage]), { role: "user", content: "Second request", timestamp: 4 }]),
+		};
+
+		expect(buildCursorPrompt(afterTree).images).toEqual([]);
+		expect(buildCursorIncrementalPrompt(afterTree, {}, 1).images).toEqual([]);
+		const trimmed = buildCursorPrompt(afterTree, tightBudget).text;
+		expect(trimmed).toContain("User: Second request");
+		expect(trimmed).not.toContain("zzzzzzzz");
+		// Without a budget the summary is still part of the bootstrap transcript.
+		expect(buildCursorPrompt(afterTree).text).toContain("zzzzzzzz");
+	});
+
+	it("keeps a summary that is the latest user message, with its images, as before", () => {
+		const summaryLast: Context = {
+			messages: hostMessages([...history, compactionSummary(`Earlier work. ${"z".repeat(300)}`, [frameImage])]),
+		};
+		const sent = buildCursorPrompt(summaryLast, tightBudget);
+
+		expect(sent.text).toContain("zzzzzzzz");
+		expect(sent.images).toEqual(frameImages);
+	});
+
+	it("resends the context's own pending input when an incremental send has no new input", () => {
+		// Same context sent twice: nothing is appended, so the whole pending input goes out again,
+		// including the real prompt in front of a trailing synthetic image message.
+		for (const sent of [buildCursorIncrementalPrompt(context, {}, context.messages.length), buildCursorIncrementalPrompt(context)]) {
+			expectInOrder(sent.text, pendingSections);
+			for (const older of olderSections) expect(sent.text).not.toContain(older);
+			expect(sent.images).toEqual([...promptImages, ...noteImages]);
+		}
+		const tight = buildCursorIncrementalPrompt(context, tightBudget);
+		expectInOrder(tight.text, pendingSections);
+		expect(tight.text).not.toContain("Earlier transcript omitted");
 	});
 });

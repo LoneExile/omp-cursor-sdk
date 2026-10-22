@@ -416,7 +416,8 @@ describe("streamCursor prompt and model config", () => {
 			systemPrompt: "Keep this system prompt.",
 			messages: [
 				{ role: "user", content: `old request ${"x".repeat(1200)}`, timestamp: 1 },
-				{ role: "user", content: "latest request must remain", timestamp: 2 },
+				makeAssistantMessage("old answer", 2),
+				{ role: "user", content: "latest request must remain", timestamp: 3 },
 			],
 		};
 		const smallModel = { ...makeModel("gpt-5.5@1m"), contextWindow: 250, maxTokens: 50 };
@@ -449,13 +450,14 @@ describe("streamCursor prompt and model config", () => {
 			systemPrompt: "Keep image prompt compact.",
 			messages: [
 				{ role: "user", content: `old request ${"x".repeat(1200)}`, timestamp: 1 },
+				makeAssistantMessage("old answer", 2),
 				{
 					role: "user",
 					content: [
 						{ type: "text", text: "latest image request" },
 						{ type: "image", data: "base64-image", mimeType: "image/png" },
 					],
-					timestamp: 2,
+					timestamp: 3,
 				},
 			],
 		};
