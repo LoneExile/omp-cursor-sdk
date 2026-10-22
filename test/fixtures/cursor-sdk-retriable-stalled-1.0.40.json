@@ -1,0 +1,44 @@
+{
+  "provenance": {
+    "sdkPackage": "@cursor/sdk",
+    "sdkVersion": "1.0.40",
+    "verified": "2026-10-22",
+    "builds": ["bundled", "esm", "cjs"],
+    "issues": [
+      "https://github.com/fitchmultz/pi-cursor-sdk/issues/194",
+      "https://github.com/fitchmultz/pi-cursor-sdk/issues/197"
+    ]
+  },
+  "errorShape": {
+    "classKind": "RetriableError",
+    "name": "RetriableError",
+    "code": "connection_stalled",
+    "single": {
+      "message": "Connection stalled",
+      "title": "Connection stalled",
+      "detail": "The connection stalled. Please try again.",
+      "isRetryable": true,
+      "when": "the stall retry policy throws with no transport retry counted (transportErrorRetries absent or 0)"
+    },
+    "repeated": {
+      "message": "Connection stalled repeatedly",
+      "title": "Connection stalled",
+      "detailTemplate": "The connection stalled ${n} times. Please check your network connection and try again.",
+      "isRetryable": true,
+      "when": "the stall retry policy throws after transportErrorRetries > 0 retries; n is transportErrorRetries + 1"
+    }
+  },
+  "sourceMarkers": [
+    "get kind(){return\"RetriableError\"}",
+    "get name(){return this.kind}",
+    "\"Connection stalled repeatedly\"",
+    "\"Connection stalled\"",
+    "title:\"Connection stalled\"",
+    "detail:\"The connection stalled. Please try again.\"",
+    "The connection stalled ",
+    "Please check your network connection and try again.",
+    "isRetryable:!0",
+    "value:\"connection_stalled\""
+  ],
+  "syntheticStackFrame": "at connectionStalled (file:///repo/node_modules/@cursor/sdk/dist/bundled/index.js:1:1)"
+}

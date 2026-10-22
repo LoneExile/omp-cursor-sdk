@@ -65,6 +65,10 @@ function instantiate(template: string, args: readonly string[]): string {
 	return template.replace(/\$\{\}/g, () => args[index++]!);
 }
 
+// Each printed-frames test extracts the SDK logger from a multi-megabyte build, which can pass bun's 5 s default on a
+// loaded machine.
+const SDK_LOGGER_LOAD_TIMEOUT_MS = 30_000;
+
 describe("installed Cursor SDK output contract: package", () => {
 	it("is the SDK version these templates were verified against", () => {
 		expect(readInstalledPackageVersion("@cursor/sdk")).toBe("1.0.40");
@@ -206,7 +210,7 @@ for (const build of CURSOR_SDK_BUILDS) {
 				capture.restore();
 				capture = undefined;
 			}
-		});
+		}, SDK_LOGGER_LOAD_TIMEOUT_MS);
 
 		for (const useColors of [false, true]) {
 			it(`prints every filtered INFO message as a frame the filter recognizes and drops (colors=${useColors})`, () => {
@@ -226,7 +230,7 @@ for (const build of CURSOR_SDK_BUILDS) {
 				expect(capture!.consoleCalls).toEqual([]);
 				expect(capture!.stdout).toEqual([]);
 				expect(capture!.stderr).toEqual([]);
-			});
+			}, SDK_LOGGER_LOAD_TIMEOUT_MS);
 		}
 
 		it("keeps warnings with a filtered message, and unrelated INFO frames, visible", () => {
@@ -241,6 +245,6 @@ for (const build of CURSOR_SDK_BUILDS) {
 			const warning = capture.consoleCalls[0]!.args[0] as string;
 			expect(warning).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3} WARN  LocalCursorRulesService load completed /);
 			expect(capture.stdout).toHaveLength(0);
-		});
+		}, SDK_LOGGER_LOAD_TIMEOUT_MS);
 	});
 }

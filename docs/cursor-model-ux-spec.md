@@ -13,7 +13,7 @@ Current implementation notes:
 - Cursor `reasoning`, `effort`, `reasoning_effort`, and boolean `thinking` parameters are driven by pi native thinking when the Cursor SDK exposes those controls. Each model advertises OMP-native `thinking: { mode: "effort", efforts, requiresEffort }` metadata listing exactly the levels Cursor maps (`requiresEffort` is `true` when Cursor has no off value); OMP ignores Pi's `thinkingLevelMap`, which stays internal to selection.
 - Cursor `fast` is extension state by default; models that expose `fast` also get selection-only `@fast` / `@slow` virtual aliases for per-agent overrides.
 - Cursor SDK `mode` (`agent` or `plan`) is extension session state, not model identity, pi thinking, Cursor `fast`, or pi's separate plan-mode extension.
-- Cursor status uses one coordinated `ctx.ui.setStatus("cursor", ...)` value for fast, non-default plan mode, and the local-only `http1` transport marker; the default pi footer remains intact.
+- Cursor status uses one coordinated `ctx.ui.setStatus("cursor", ...)` value (`formatCursorStatus` in `src/cursor-runtime-state.ts`): `cursor:<runtime>` and `fast:on|off|n/a` always, then `max:on` only while Max Mode is on for the local runtime (the default; never shown for cloud), the local-only `http1` transport marker, and `plan` only in non-default mode. A default local run shows, for example, `cursor:local · fast:on · max:on`; a cloud run shows `cursor:cloud · fast:n/a`. The default pi footer remains intact.
 - Installed `@cursor/sdk` user messages accept images, and Cursor models are treated as image-capable; registered input metadata is `text` plus `image`.
 - Image payload forwarding sends the images of every `user` message in the pending input (every message after the last `assistant` message, in order) except compaction and branch summaries, plus the latest user message's images (the anchor). omp adds a synthetic `user` message ("Images attached to <type>.") after each image-bearing custom message, and an `@file` image mention is one `user` message per mention (`<file path>` lines plus all its images). When no user message follows the last assistant message (a tool-result continuation, or a turn a hook message started), the anchor still sends the earlier prompt's images. Otherwise images before the last assistant message are not sent: the transcript keeps an `[image omitted from transcript]` placeholder and the prompt tells Cursor to ask the user to reattach or describe a prior image. A summary's images are sent only when it is itself the latest user message. The prompt budget never trims the pending input or the latest user message; they can exceed it, and with no assistant message every message is pending. Cursor Cloud `fresh` sends `getCursorTurnInput`: the pending user and developer messages (which include `!` and Python output and `@file` messages) plus the latest user message when none follows the last assistant message, never summaries or tool results; `bootstrap` sends the whole context. Carrying images forward across turns remains a future product decision because it affects token cost, privacy, stale visual context, and expected multimodal follow-up behavior.
 - Exact `@cursor/sdk@1.0.40` is a package dependency of this extension; users should not need a global SDK install. The host baseline is omp 18.3.4 (`@oh-my-pi/*` 18.3.4).
@@ -30,7 +30,7 @@ Current implementation notes:
 - Prompt text is the primary provider/bridge contract. Bootstrap prompts carry a short boundary block plus the callable-surface manifest by default (`PI_CURSOR_TOOL_MANIFEST=1`). MCP `listTools` descriptions use a one-line pointer to the bootstrap prompt instead of repeating the full contract (`buildCursorPiBridgeMcpToolDescription()`). Cursor must call the exposed `pi__*` MCP name, not the real pi tool name shown in pi history or transcripts. When exposed, omp's `task` tool (`pi__task`) takes preference over Cursor-native subagents for delegation and omp's MCP tools (`mcp__<server>_<tool>`, bridged as `pi__mcp__<server>_<tool>`) take preference over Cursor-configured MCP for MCP work; the Cursor-native surfaces remain fallbacks when the matching pi bridge tool is absent or unavailable. Pi emits and executes the real pi tool name. Maintainer debug: `/cursor-tools` prints bridge/manifest enablement, effective `PI_CURSOR_SETTING_SOURCES`, and the current callable-surface snapshot.
 - The provider also registers `cursor_ask_question` for Cursor models when the bridge and default-on `PI_CURSOR_ASK_QUESTION` control are enabled. While the tool awaits pi UI input it emits package event `pi-cursor-sdk:ask-question:blocked` with `{ active: true }` and clears `{ active: false }` in `finally`; the tool runs with `executionMode: "sequential"` so parallel sibling calls cannot overlap dialogs. Cursor sees it as `pi__cursor_ask_question`, and pi executes it through the normal tool path so interactive users can choose options from pi UI. `PI_CURSOR_ASK_QUESTION=0` removes only this tool while preserving the rest of the bridge. In non-UI modes it reports that UI is unavailable so Cursor can state a default assumption instead. When pi has visible Agent Skills loaded, the provider rewrites the skill catalog for Cursor and registers `cursor_activate_skill` as `pi__cursor_activate_skill`; pi executes it through the normal tool path so Cursor can load the full `SKILL.md` and skill resource list for the current pi-loaded skill source of truth. `PI_CURSOR_PI_TOOL_BRIDGE=0` disables the local bridge, including question and skill activation bridging. Cloud Cursor agents remain out of scope for the bridge.
 - The bridge queues MCP calls, emits provider `toolcall_*` events, waits for matching pi `toolResult` messages by `toolCallId`, resolves the result back into the same live Cursor SDK run without creating a new `Agent`, and never calls tool `execute()` handlers directly. The same-run resume invariant holds unless the run was disposed, aborted, or cancelled.
-- Cursor SDK MCP tool calls use a guarded timeout override because installed `@cursor/sdk` 1.0.23 still has a 60-second MCP request default with no public per-server timeout option. The extension extends the verified Cursor SDK MCP `callTool` timeout path to 3600 seconds by default and shortens the verified first-send MCP initialize/listTools timeout paths to 10 seconds by default so unavailable configured MCP servers do not block the first reply for a full minute; unknown MCP protocol timeout stacks keep the SDK default. Users can override tool-call timeouts with `PI_CURSOR_MCP_TOOL_TIMEOUT_MS` or `PI_CURSOR_MCP_TOOL_TIMEOUT_SECONDS`, and initialize/listTools timeouts with `PI_CURSOR_MCP_CONNECT_TIMEOUT_MS` or `PI_CURSOR_MCP_CONNECT_TIMEOUT_SECONDS`. Bridged `CallTool` waits also have a local fail-closed deadline that defaults to and cannot exceed the effective MCP tool timeout; `PI_CURSOR_PI_BRIDGE_CALL_TIMEOUT_MS` can lower it, expiry or MCP cancellation aborts active pi execution when available, and expired bridge events are dropped before pi tool emission.
+- Cursor SDK MCP tool calls use a guarded timeout override because the installed `@cursor/sdk` 1.0.40 still has a 60-second MCP request default (`?.timeout??6e4` in the `dist/esm` and `dist/cjs` chunks, a `60000` constant in `dist/bundled`; `test/cursor-mcp-timeout-sdk-stack.test.ts` pins it) and its public `McpServerConfig` (`dist/esm/options.d.ts`) has no timeout option. The extension extends the verified Cursor SDK MCP `callTool` timeout path to 3600 seconds by default and shortens the verified first-send MCP initialize/listTools timeout paths to 10 seconds by default so unavailable configured MCP servers do not block the first reply for a full minute; unknown MCP protocol timeout stacks keep the SDK default. Users can override tool-call timeouts with `PI_CURSOR_MCP_TOOL_TIMEOUT_MS` or `PI_CURSOR_MCP_TOOL_TIMEOUT_SECONDS`, and initialize/listTools timeouts with `PI_CURSOR_MCP_CONNECT_TIMEOUT_MS` or `PI_CURSOR_MCP_CONNECT_TIMEOUT_SECONDS`. Bridged `CallTool` waits also have a local fail-closed deadline that defaults to and cannot exceed the effective MCP tool timeout; `PI_CURSOR_PI_BRIDGE_CALL_TIMEOUT_MS` can lower it, expiry or MCP cancellation aborts active pi execution when available, and expired bridge events are dropped before pi tool emission.
 - Cursor SDK local safety controls are off by default. `--cursor-auto-review` / `PI_CURSOR_AUTO_REVIEW` and `--cursor-sandbox` / `PI_CURSOR_SANDBOX` pass only explicit enabled values into `Agent.create({ local })`; user or trusted project config can set `local.autoReview` and `local.sandboxOptions.enabled`; project config (`.omp/cursor-sdk.json`) is active only when the run used `--auto-approve`, because omp has no per-project trust event (`src/cursor-session-scope.ts` `isCliProjectTrustApproved`), and project saves require the same trust provenance rather than creating trust resources automatically. Explicit runtime, fast-default, and HTTP transport saves preserve unrecognized config fields, reject malformed or non-object JSON without rewriting it, and use one lock-protected read-modify-write path; fast saves mutate only the selected model key. Because Pi can mutate its in-memory session branch before a journal append throws, a completed global save is authoritative and the command reports the partial journal failure instead of attempting an ambiguous rollback; the new global value stays authoritative over stale branch entries until a later successful save or session restart.
 - Local HTTP/1.1/SSE compatibility is strictly opt-in through `PI_CURSOR_HTTP_1_1`, `/cursor-http on|off|toggle`, or user `cursor-sdk.json` `local.useHttp1ForAgent`. Precedence is session, environment, user, then the built-in unset default; project config is excluded. Unset makes no `Cursor.configure()` call. Explicit values configure the installed SDK before local `Agent.create()`, extension-owned explicit state is cleared with the SDK's documented `null` reset when returning to unset and during session shutdown before module reload, and default/HTTP2/HTTP1 choices split pooled local agents. Pi's supported CLI/TUI/print/RPC lifecycle has one active session runtime per process; concurrent independent `AgentSession` embedding in one process is outside this transport toggle's contract because the installed SDK setting and executor cache are module-global. The footer adds `http1` only for enabled local runtime; cloud creation and status remain untouched.
 - Bridge diagnostics are opt-in only: `PI_CURSOR_PI_TOOL_BRIDGE_DEBUG=1` writes typed, allowlisted, scrubbed single-line JSONL records to `process.stderr` with prefix `[pi-cursor-sdk:bridge]`. Diagnostics are scrubbed operational logs, not anonymous telemetry. They intentionally include tool names, safe correlation IDs, run lifecycle, exposed pi↔MCP name pairs, queued requests, result resolution, rejection, cancellation, and pending counts. Correlation IDs are generated independently from the tokenized endpoint path, and Cursor MCP call IDs are hashed before serialization. Diagnostics must not include endpoint paths/URLs/path components/tokens, API keys, bearer tokens, cookies, session credentials, raw args/results, stdout/stderr payloads, file contents, Cursor settings output, or local private session paths in tracked docs, and they must not call pi UI status, notification, or footer APIs. If tool names themselves are unacceptable for a release target, bridge debug diagnostics are not safe for shared logs under the current contract.
@@ -40,7 +40,7 @@ Current implementation notes:
 - Local Cursor SDK usage events are used when the SDK reports them before the corresponding pi turn is emitted and the reported counts fit the selected pi model window. For each safe local SDK-attributed assistant turn, `usage.input`, `usage.output`, `usage.cacheRead`, and `usage.cacheWrite` come from the latest per-turn raw `turn-ended.usage` (not SDK `toTokenUsage`): observed local runtime keeps `inputTokens` as the full prompt with cache fields as a partition, even though published SDK `TokenUsage.totalTokens` sums all four fields. Pi maps that raw local shape to disjoint components (`input = inputTokens - cacheReadTokens - cacheWriteTokens`) and `usage.totalTokens = inputTokens + outputTokens` for occupancy/compaction. Local turns never read `getUsage()`. Cloud raw usage remains display-only. A finished cloud turn instead takes the billed `getUsage({ runId })` row for its run when the row is recorded and its `input + cacheRead + cacheWrite` fits the model window: the row fills `usage.input/output/cacheRead/cacheWrite` as reported (additive buckets), and `usage.totalTokens` and `usage.contextTokens` hold the occupancy estimate, so billed spend never becomes omp's context anchor or a usage-backed overflow. Other cloud turns use approximate pi accounting. Approximate fallback never reports less occupancy than the last compatible same-model in-window assistant measurement in context. Cumulative `RunResult.usage` is never used for per-message occupancy. If the local SDK reports no usage in time, or reports full-agent-context-sized usage outside the selected model window, the provider falls back to local `input/output` activity estimates while setting `usage.totalTokens` to the current replayable context estimate so footer/compaction context does not collapse after split tool turns; after a split live-run turn times out waiting for SDK usage, later SDK usage for that live run is ignored rather than risk applying stale usage to the wrong pi turn. Cursor SDK cost is unavailable, so cost remains absent/zero. `src/cursor-usage-accounting.ts` owns this policy.
 - Audit observation, 2026-05-19, superseded by the 2026-05-21 replay pass and #68 incomplete visibility, then narrowed by the 2026-05-26 fast-local suppression: a missing-file read with Composer 2.5 emitted `tool-call-started` for Cursor `read`, then streamed final text `Error: File not found`, but did not emit `tool-call-completed` or an `onStep` `toolCall` error result. Leftover external/side-effectful started calls are surfaced at run completion through the same native replay routing as completed tools (activity cards when allowed, otherwise inactive/transcript traces), while fast local discovery starts are debug-only after a successful text-producing run. Cursor-reported completed/step errors remain visible.
 - Maintainer visual verification for replay-card changes should follow [Cursor Native Tool Visual Audit Workflow](./cursor-native-tool-visual-audit.md): offscreen PTY-driven pi run, xterm.js/Playwright screenshot rendering, and JSONL inspection before accepting commits or PRs.
-- Cursor provider/runtime releases must pass the local [Platform Smoke Gate](./platform-smoke.md): `npm run smoke:platform:all`. Cloud-runtime changes must also pass `npm run smoke:cloud`. Use [Cursor Live Smoke Checklist](./cursor-live-smoke-checklist.md) only for focused inner-loop/debug runs with real `omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5` invocations, manual observation, temporary session dirs, diagnostics scans, and persisted JSONL inspection. See [Cursor testing lessons](./cursor-testing-lessons.md) for `CURSOR_API_KEY` setup, isolated smoke harnesses, and replay JSONL scans.
+- Cursor provider/runtime changes are gated by the omp-native pre-commit validation in [AGENTS.md](../AGENTS.md#pre-commit-validation-maintainer): `npm test`, `npm run typecheck:src`, `omp models cursor-sdk -e .`, and live `omp -e <repo>` print/RPC turns. The Pi-era smoke scripts (`npm run smoke:platform:all`, `npm run smoke:cloud`, and the rest, described in [Platform Smoke Gate](./platform-smoke.md)) are unported: they drive the Pi CLI, do not run as-is, and are not a gate (`AGENTS.md`, `## Setup and commands`). A live Cursor Cloud probe must capture the `bc-*` agent and run IDs and verify archive/delete cleanup. Use [Cursor Live Smoke Checklist](./cursor-live-smoke-checklist.md) only for focused inner-loop/debug runs with real `omp -e . --cursor-no-fast --model cursor-sdk/composer-2-5` invocations, manual observation, temporary session dirs, diagnostics scans, and persisted JSONL inspection. See [Cursor testing lessons](./cursor-testing-lessons.md) for `CURSOR_API_KEY` setup, isolated smoke harnesses, and replay JSONL scans.
 - For models without a catalog `context` parameter, context windows are not hardcoded. The extension ships a bundled SDK-derived cache generated from `createAgentPlatform().checkpointStore.loadLatest(agentId).tokenDetails.maxTokens`. Its `@1m` rows were measured with `@cursor/sdk` 1.0.40 (1,000,000; `gpt-5.4@1m` 922,000), which runs every `@1m` variant the catalog lists in Max Mode itself. `gpt-5.4@1m@fast`, `gpt-5.5@1m@fast` and `gpt-5-5@1m@fast` have no catalog variant, so the SDK does not force Max Mode on them and their rows are an explicit 272,000. The live captures are `test/fixtures/cursor-sdk-1.0.40-context-window-captures.json`, and `test/model-discovery-selection.test.ts` requires every registered id advertised above 300k to build a Max Mode only selection. Successful runs can update a local override cache, but model discovery does not probe models at startup.
 - Max Mode needs no patched SDK, and it applies to the local runtime only. It is on by default and a local turn sets `ModelSelection.maxMode: true`, which `@cursor/sdk` 1.0.40 copies onto the local agent's request (1.0.34 does not read the field). Cursor Cloud never carries it: the Cloud Agents API's model object takes only `id` and `params` and answers 400 `Unrecognized key(s) in object: 'maxMode'` for another key, while the SDK passes the selection to the REST request whole. So on a cloud turn the toggle has no effect, the selection is sent unchanged, and the status shows `cursor:cloud · fast:n/a` without `max:on`. Precedence is `--cursor-max-mode` / `--cursor-no-max-mode`, then `PI_CURSOR_MAX_MODE`, then `/cursor-max-mode` session state, then user `cursor-sdk.json` `maxMode` saved with `--save-user`, then on. Project config is never a source. On a local turn with the toggle off the selection is untouched, unless the catalog lists every variant consistent with its params as `ModelVariant.isMaxMode` (for example every `@1m` variant the catalog lists, `grok-4.7@500k` and the fast 300k Opus variants; `isCursorSelectionMaxModeOnly` in `src/model-discovery.ts`, the rule the SDK's catalog resolver applies when it sets `maxMode` itself and bills Max Mode rates): such a turn is refused before any agent exists, with the registered ids of the same model that do not need Max Mode listed. A model with no catalog variants, or a param combination the catalog does not list, is never refused; by that rule a `/cursor-fast` preference that picks a lane the catalog does not list for plain `gpt-5.4@1m`, `gpt-5.5@1m` or `gpt-5-5@1m` runs outside Max Mode, at a smaller window than the table lists. A refusal such as `Invalid parameters for registry model` for a larger context gets a hint that names the next smaller catalog context (`@256k`); on a local turn that did not already carry `maxMode` it also names `--cursor-max-mode` / `/cursor-max-mode`. Max Mode / long context bills higher. Status shows `max:on` only while the toggle is on for the local runtime, for example `cursor:local · fast:on · max:on`. The only SDK patch left, `scripts/patch-cursor-sdk.mjs`, is optional: it turns off the local agent's default `Co-authored-by: Cursor <cursoragent@cursor.com>` commit trailer (Cloud agents still add it), and turns never check for it. Re-apply it after `omp plugin install` (`node scripts/patch-cursor-sdk.mjs --sdk ~/.omp/plugins/node_modules/@cursor/sdk` for the hoisted copy) and restart omp.
 - The installed `@cursor/sdk` exposes latest-style `ModelListItem.aliases`. The extension registers only unambiguous aliases as pi model IDs (with the same context suffixes when applicable) and sends the alias back in `ModelSelection.id`. Cursor-only fast preferences are keyed by the selected SDK model ID/alias, with read fallback for older preferences keyed by the underlying catalog `id`. Aliases shared by multiple base models, such as generic family aliases, are skipped because the pi row metadata would otherwise imply one base model while Cursor may resolve the alias to another.
@@ -58,7 +58,7 @@ Main outcomes:
 - `omp models` shows pi-native Cursor models with accurate `contextWindow`, pi-controllable thinking metadata, and conservative defaults where the Cursor SDK does not expose limits or capabilities.
 - `shift+tab` is pi's native thinking control and drives Cursor `reasoning` or `effort`.
 - Cursor context options are represented as pi-visible model variants when they change native model metadata.
-- Cursor-only state (`fast` and Cursor SDK `mode`) is controlled by extension flags/commands and shown through native status text only when non-default.
+- Cursor-only state (`fast`, Max Mode on the local runtime, and Cursor SDK `mode`) is controlled by extension flags/commands and shown through native status text: `fast` always appears, `max:on` appears while Max Mode is on for the local runtime, and `mode` appears only when non-default.
 - The default pi footer remains intact.
 - Model capabilities are discovered from the Cursor SDK, not hardcoded per model.
 
@@ -386,7 +386,7 @@ Rules:
 - Toggle unsuffixed models with `/cursor-fast`; do not persist a new default while a virtual fast alias is selected.
 - Store per-session and global per-base-model preferences for unsuffixed models.
 - When calling `Agent.create()` or `agent.send()`, include the selected `fast` value in Cursor model params.
-- Show fast-capable local models as `cursor:local · fast:on` or `cursor:local · fast:off` through `ctx.ui.setStatus()` while a Cursor model is active; cloud runtime shows `cursor:cloud · fast:n/a`.
+- Show local models as `cursor:local · fast:on · max:on` or `cursor:local · fast:off · max:on` through `ctx.ui.setStatus()` while a Cursor model is active (`fast:n/a` when the model has no `fast` parameter; with Max Mode off the `· max:on` segment is absent); cloud runtime shows `cursor:cloud · fast:n/a` and never `max:on`.
 - Keep `--cursor-fast` and `--cursor-no-fast` as explicit process-level force flags.
 
 Reason:
@@ -397,10 +397,14 @@ Reason:
 Status examples:
 
 ```text
-cursor:local · fast:off
+cursor:local · fast:off · max:on
+cursor:local · fast:on · max:on
+cursor:local · fast:on · max:on · http1
 cursor:local · fast:on
-cursor:local · fast:on · http1
+cursor:cloud · fast:n/a
 ```
+
+The first three show Max Mode on, its default for the local runtime; the fourth is the same status with Max Mode off (`--cursor-no-max-mode` or `/cursor-max-mode off`).
 
 ## Cursor SDK Mode Behavior
 
@@ -427,11 +431,13 @@ Rules:
 Status examples:
 
 ```text
-cursor:local · fast:n/a · plan
-cursor:local · fast:off · plan
-cursor:local · fast:on · plan
+cursor:local · fast:n/a · max:on · plan
+cursor:local · fast:off · max:on · plan
+cursor:local · fast:on · max:on · plan
 cursor:cloud · fast:n/a · plan
 ```
+
+With Max Mode off, the local statuses lose `· max:on`.
 
 ## Footer Behavior
 
@@ -439,7 +445,7 @@ Hard requirement:
 
 - Leave pi's default footer intact.
 - Do not use `ctx.ui.setFooter()` for the first pass.
-- Use `ctx.ui.setStatus()` only while a Cursor model is active, showing Cursor-only state that pi cannot show natively, such as `cursor:local`, `cursor:cloud`, local `fast:on|off|n/a`, enabled local `http1`, and non-default Cursor SDK `plan` mode.
+- Use `ctx.ui.setStatus()` only while a Cursor model is active, showing Cursor-only state that pi cannot show natively, such as `cursor:local`, `cursor:cloud`, local `fast:on|off|n/a`, `max:on` while Max Mode is on for the local runtime, enabled local `http1`, and non-default Cursor SDK `plan` mode.
 - Non-cursor models must have no Cursor status.
 
 Reason:
@@ -453,13 +459,13 @@ Expected native footer behavior:
 - provider/model is shown by pi from the selected `cursor` model,
 - thinking level is shown by pi when `reasoning` is true,
 - context usage is computed from `contextWindow`,
-- extension status adds only Cursor-only text such as `cursor:local · fast:n/a`, `cursor:local · fast:off`, `cursor:local · fast:on · http1`, `cursor:local · fast:on · plan`, or `cursor:cloud · fast:n/a`.
+- extension status adds only Cursor-only text such as `cursor:local · fast:n/a · max:on`, `cursor:local · fast:off · max:on`, `cursor:local · fast:on · max:on · http1`, `cursor:local · fast:on · max:on · plan`, or `cursor:cloud · fast:n/a` (each local status without `· max:on` when Max Mode is off).
 
 `ctx.ui.setStatus()` adds an extension status line in the default footer. It does not patch the built-in model segment. The native shape is closer to:
 
 ```text
 ...                                      (cursor) gpt-5.5@1m • medium
-cursor:local · fast:off · plan
+cursor:local · fast:off · max:on · plan
 ```
 
 not:
@@ -563,6 +569,29 @@ Fast flag example:
 omp --model cursor-sdk/gpt-5.5@1m --cursor-fast -p "Say ok only"
 ```
 
+## Config Precedence And Cloud Scope
+
+`src/cursor-config.ts` owns precedence (`resolveCursorSdkConfig` and the order constants `RUNTIME_ORDER`, `CLOUD_ORDER`, `LOCAL_ORDER`, `LOCAL_FORCE_ORDER`, `HTTP1_ORDER`; `test/cursor-config.test.ts` asserts the per-field omissions). Max Mode and fast defaults have their own resolvers, described above.
+
+| Setting | Sources, highest first |
+|---|---|
+| Runtime | CLI, environment, session, trusted project, user, built-in `local` |
+| Cloud fields: acknowledgement, repo/ref, context handoff, direct push, PR controls, local-state allow, env names, Cursor-managed environment | CLI, environment, session, user, built-in; project config is never a source |
+| Local `autoReview`, `sandbox`, `resume` | CLI, environment, trusted project, user, built-in |
+| Local HTTP/1.1 transport | session, environment, user, built-in; project config is excluded |
+| Local `force` | CLI, environment, built-in |
+
+"Trusted project" means a run started with `--auto-approve` (`isCliProjectTrustApproved` in `src/cursor-session-scope.ts`). The safety-capped fields (runtime, context handoff, direct push, PR controls, local-state allow, env names, env-from-files) keep a CLI value as one-shot intent; below CLI, a stricter user value caps a riskier environment or session value (`resolveWithCap`). The session layer supplies only runtime, cloud acknowledgement, and the HTTP/1.1 preference (`getCursorSessionConfig` in `src/cursor-runtime-state.ts`).
+
+Cursor Cloud deliberately does not offer the following. Each item was checked against the code and `@cursor/sdk` 1.0.40; changing one is a product or security decision to record here first.
+
+- Cloud resume or detach: every cloud turn creates a new cloud agent (the `Agent.create()` call in the cloud branch of `src/cursor-provider-turn-prepare.ts`; `Agent.resume` is used only by the local session pool in `src/cursor-session-agent.ts`), and an abort cancels the cloud run (`src/cursor-provider-turn-send.ts`).
+- Pi environment forwarding and `.env` reads: `preflightCursorCloudRuntime` fails with `env_forwarding_not_implemented` and points at Cursor-native environment setup (`src/cursor-cloud-options.ts`).
+- Artifact download and agent/run URL display: artifacts are listed with path, size, and update time and never downloaded (`src/cursor-cloud-reporting.ts`), and the SDK's `SDKAgentInfo` carries no URL (`dist/esm/agent.d.ts`).
+- Automatic cleanup, bulk deletion, and raw filters: only `/cursor-cloud list | archive <bc-agentId> | delete <bc-agentId> --yes` on agents recorded in the session ledger (`src/cursor-cloud-lifecycle.ts`).
+- Pi-subagent mapping and inline cloud MCP: `buildCursorCloudAgentOptions` (`src/cursor-cloud-options.ts`) sends neither `agents` nor `mcpServers`. The inline cloud MCP, remote bridge, and `local.customTools` limits are in [Cursor tool surfaces in pi](./cursor-tool-surfaces.md).
+- `/model` cloud-availability annotations: blocked on the SDK. `ModelListItem` (`dist/esm/options.d.ts`) exposes no local/cloud availability field, so no compatibility map may be inferred from catalog size or model parameters.
+
 ## Discovered Model Capability Examples
 
 These examples document the capability shapes the extension handles, not an exhaustive live catalog. The exact Cursor catalog changes over time; use `omp models cursor-sdk -e .` or `Cursor.models.list()` for the current model surface. When the SDK reports aliases, only unambiguous aliases are registered; shared generic aliases are skipped.
@@ -582,6 +611,8 @@ If Cursor later adds `fast`, `context`, `reasoning`, `effort`, or aliases to a m
 
 ## Detailed Examples
 
+Status lines in these examples assume Max Mode is on, its default for the local runtime; with it off the `· max:on` segment is absent.
+
 ### Composer 2 / 2.5
 
 Initial Cursor default for Composer 2.5:
@@ -590,14 +621,14 @@ Initial Cursor default for Composer 2.5:
 pi model: cursor-sdk/composer-2-5
 Cursor params: fast=true
 pi thinking: off
-Cursor status: cursor:local · fast:on
+Cursor status: cursor:local · fast:on · max:on
 ```
 
 Toggle fast:
 
 ```text
 Cursor params: fast=false
-Cursor status: cursor:local · fast:off
+Cursor status: cursor:local · fast:off · max:on
 ```
 
 `shift+tab`: no-op because the model is not reasoning-capable.
@@ -610,7 +641,7 @@ Initial Cursor default:
 pi model: cursor-sdk/gpt-5.5@1m
 Cursor params: context=1m; reasoning=medium; fast=false
 pi thinking: medium
-Cursor status: cursor:local · fast:off
+Cursor status: cursor:local · fast:off · max:on
 ```
 
 After selecting the 272k variant:
@@ -625,7 +656,7 @@ After fast toggle:
 
 ```text
 Cursor params: context=272k; reasoning=medium; fast=true
-Cursor status: cursor:local · fast:on
+Cursor status: cursor:local · fast:on · max:on
 ```
 
 After `shift+tab` to xhigh:
@@ -643,7 +674,7 @@ Initial Cursor default:
 pi model: cursor-sdk/gpt-5.3-codex
 Cursor params: reasoning=high; fast=true
 pi thinking: high
-Cursor status: cursor:local · fast:on
+Cursor status: cursor:local · fast:on · max:on
 ```
 
 After `shift+tab` to low:
@@ -724,9 +755,9 @@ Before calling done:
    - launch interactive with Cursor
    - verify default pi footer remains unchanged
    - verify Cursor status appears only for Cursor models
-   - verify Cursor fast-capable local models show `cursor:local · fast:on` or `cursor:local · fast:off`
-   - required `cursor-http1-live` platform lane proves an enabled local HTTP/1.1/SSE turn completes and shows `http1`; unit/default live lanes prove local-disabled and cloud statuses omit it
-   - verify Cursor `plan` status appears only in non-default mode and combines with status as `cursor:local · fast:n/a · plan`, `cursor:local · fast:on · plan`, `cursor:local · fast:off · plan`, or `cursor:cloud · fast:n/a · plan`
+   - verify Cursor fast-capable local models show `cursor:local · fast:on · max:on` or `cursor:local · fast:off · max:on` (without `· max:on` when Max Mode is off), and that the cloud runtime shows `cursor:cloud · fast:n/a` with no `max:on`
+   - verify an enabled local HTTP/1.1/SSE turn completes and shows `http1`, and that local-disabled and cloud statuses omit it (the Pi-era `cursor-http1-live` platform lane is unported; see `AGENTS.md`, so run it as a manual local turn after `/cursor-http on`)
+   - verify Cursor `plan` status appears only in non-default mode and combines with status as `cursor:local · fast:n/a · max:on · plan`, `cursor:local · fast:on · max:on · plan`, `cursor:local · fast:off · max:on · plan`, or `cursor:cloud · fast:n/a · plan` (local statuses without `· max:on` when Max Mode is off)
    - verify non-cursor footer/status unchanged
    - verify `shift+tab` uses pi native thinking
    - verify context changes through native model selection

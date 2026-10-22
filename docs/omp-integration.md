@@ -535,9 +535,9 @@ controls reasoning depth on both variants.
 
 - `/cursor-refresh-models` — refresh the live catalog (bypasses cache)
 - `/cursor-fast` — toggle fast mode for the current Cursor model
-- `/cursor-max-mode [on|off|toggle] [--save-user]` — opt into Cursor Max Mode
-  (local runtime only). `--save-user` writes user `cursor-sdk.json` only, never
-  project config
+- `/cursor-max-mode [on|off|toggle] [--save-user]` — set Cursor Max Mode for
+  this session (on by default; local runtime only, Cursor Cloud ignores it).
+  `--save-user` writes user `cursor-sdk.json` only, never project config
 - `/cursor-tools` — live tool-surface debug report
 - `/cursor-mode <agent|plan>` — agent/plan mode
 
@@ -563,7 +563,7 @@ entries and `~/.omp/agent/cursor-sdk.json` defaults.
 - `PI_CURSOR_MAX_MODE` — `1`/`true`/`on` or `0`/`false`/`off`; forces Max Mode below the CLI flags (local runtime only)
 - `PI_CURSOR_RUNTIME=cloud` — opt into cloud agents
 - `PI_CURSOR_CLOUD_ACK=1` (+ `PI_CURSOR_CLOUD_REPO`, ...) — cloud ack/config
-- `fastDefaults` and `maxMode` in `~/.omp/agent/cursor-sdk.json` — saved fast defaults and the optional Max Mode user preference. `maxMode` is never read from project config
+- `fastDefaults` and `maxMode` in `~/.omp/agent/cursor-sdk.json` — saved fast defaults and the saved Max Mode user preference, which replaces the built-in default of on (`maxMode: false` makes it default off). `maxMode` is never read from project config
 - `PI_CURSOR_SDK_EVENT_DEBUG=1` — SDK event debug logging
 
 ### Files

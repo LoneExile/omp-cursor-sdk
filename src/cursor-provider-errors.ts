@@ -182,14 +182,16 @@ function isCursorSdkStallAbortNetworkError(code: unknown, evidence: string, stac
 		/(?:operation was aborted|canceled)/i.test(evidence) &&
 		/(?:AbortError|operation was aborted)/i.test(`${evidence}\n${stackEvidence}`) &&
 		stackEvidence.includes("@cursor/sdk") &&
-		/\b(?:onStall|reportStall|StallDetected)\b/i.test(stackEvidence)
+		/\b(?:onStall|reportStall)\b/i.test(stackEvidence)
 	);
 }
 
 /**
- * @cursor/sdk@1.0.23 throws internal RetriableError (name/kind "RetriableError") with message
- * "Connection stalled" or "Connection stalled repeatedly" after fetchWithRetry exhausts stalls.
- * The ConnectError is only the cause; the top-level error is not a ConnectError.
+ * @cursor/sdk 1.0.40 (checked in its bundled, esm and cjs builds; first recorded on 1.0.23) throws an internal
+ * RetriableError (name/kind "RetriableError", code "connection_stalled") with message "Connection stalled" or
+ * "Connection stalled repeatedly" once its retry policy gives up on a request its stall detector aborted. The
+ * top-level error is not a ConnectError.
+ * `test/cursor-sdk-retriable-stalled-contract.test.ts` pins the shape in every build.
  */
 export function isCursorSdkConnectionStalledError(error: unknown): boolean {
 	const record = asRecord(error);

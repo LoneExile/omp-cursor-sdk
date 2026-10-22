@@ -19,12 +19,14 @@ The native replay `Tool grep not found` failure was integration-shaped, not unit
 
 Passing hundreds of unit tests did not prove that chain was safe. Regression coverage now includes:
 
-- `test/index.test.ts` — `before_agent_start` and `turn_start` resync after plan-style strip
+- `test/index-registration.test.ts` — `before_agent_start` registers the Cursor-only tools and `turn_start` resyncs them after a plan-style `setActiveTools(["read", "bash", "edit", "write"])` strip
 - `test/cursor-native-replay-stress.test.ts` — plan strip → resync → grep replay; inactive-tool trace fallbacks
 - `test/cursor-provider-replay-live-run.test.ts` — inactive replay tools emit trace instead of broken `toolUse`
 - `test/cursor-native-replay-trace.test.ts` — shared inactive replay trace formatting
 - `test/cursor-native-replay-routing.test.ts` — `resolveNativeReplayDisposition` and `partitionNativeToolsByActiveContext`
 - `test/validate-smoke-jsonl.test.ts` — replay scan semantics (real errors vs doc mentions in successful reads)
+
+These are legacy Pi-bound suites outside `npm test`; `npm run test:full` runs them with known failures in the omp port (`AGENTS.md`, `## Setup and commands`).
 
 When changing provider/runtime behavior, ask whether the bug spans **pi extension lifecycle**, **active tool state**, **provider streaming**, and **persisted JSONL**. If yes, add an integration-style unit test or live smoke coverage for that chain.
 
