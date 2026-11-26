@@ -368,7 +368,7 @@ describe("Cursor SDK shell spawn failures", () => {
 			`function ${escapeRegExp(cache[5]!)}\\((${IDENT})\\)\\{return new ${IDENT}\\(\\{max:\\1\\?\\.max\\?\\?10,ttl:\\1\\?\\.ttl\\}\\)\\}`,
 			"the streaming exec cache's default map is a bounded cache",
 		);
-		// Since 1.4 the executor is kept on the instance and shares its redelivery map with the instance's other shell caches.
+		// Since 1.4 the executor is kept on the instance, and its redelivery map lives in the instance's shellRedeliveryCaches.
 		onlyMatch(
 			SDK_BUNDLE,
 			`this\\.shellStreamExecutor=new ${IDENT}\\(this\\.permissionsService,${IDENT},this\\.ignoreService,this\\.backgroundShellExecutor\\.getManager\\(\\)\\),this\\.register\\(${IDENT},${escapeRegExp(cache[1]!)}\\(this\\.shellStreamExecutor,void 0,this\\.shellRedeliveryCaches\\.shellStream\\)\\)`,

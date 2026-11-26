@@ -196,10 +196,13 @@ describe("advisor Cursor agents", () => {
 		const pooled = agentParams("agent-advisor", advisor(["read", "grep", "glob"]));
 		await acquireSessionCursorAgent(pooled.params);
 		expect(pooled.createAgent).toHaveBeenCalledWith(expect.objectContaining({ tools: ["read", "grep", "glob"] }));
+		// The SDK forwards the allowlist unchanged only without `local.fs` (its tool restriction contract below).
+		expect(pooled.createAgent.mock.calls[0]?.[0]?.local).not.toHaveProperty("fs");
 
 		const oneShot = agentParams("agent-advisor-one-shot", advisor([]));
 		const lease = await createOneShotCursorAgent(oneShot.params);
 		expect(oneShot.createAgent).toHaveBeenCalledWith(expect.objectContaining({ tools: [] }));
+		expect(oneShot.createAgent.mock.calls[0]?.[0]?.local).not.toHaveProperty("fs");
 		await lease.dispose();
 
 		const main = agentParams("agent-main", { conversationId: MAIN_SESSION_ID, mainConversation: true });

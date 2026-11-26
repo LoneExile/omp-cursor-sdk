@@ -177,8 +177,11 @@ function isCanceledConnectCode(code: unknown): boolean {
 }
 
 // @cursor/sdk 1.4 aborts a stalled request with a reason it builds in `reportStall`: an AbortError DOMException that it
-// marks with a non-enumerable `cursorStallCut: true`. A DOMException carries no stack under Bun (JavaScriptCore), so
-// there the marker, not the `reportStall` frame, is what identifies the stall; 1.0.x left only the frames.
+// marks with a non-enumerable `cursorStallCut: true`. A DOMException carries no stack under Bun (measured on 1.3.14), so
+// there the marker, not the `reportStall` frame, is what identifies the stall; 1.0.x left only the frames. The marked
+// reason is the third and last link of the wrapper's chain (Unknown ConnectError, canceled ConnectError, AbortError), so
+// it fits `CAUSE_CHAIN_MAX_LINKS` exactly: the SDK's `convertConnectError` puts only Unavailable, DeadlineExceeded and
+// Internal ConnectErrors in a NetworkError, never this Unknown one.
 function hasCursorSdkStallCutReason(chain: readonly CauseChainLink[]): boolean {
 	return chain.some(({ value, record }) => getErrorName(value, record) === "AbortError" && record.cursorStallCut === true);
 }

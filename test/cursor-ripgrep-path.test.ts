@@ -103,8 +103,9 @@ describe("Cursor ripgrep path", () => {
 
 		// The local runtime picks one ripgrep path: an absolute CURSOR_RIPGREP_PATH of any file name (a relative or
 		// empty one counts as unset, so ensureCursorRipgrepPath only keeps an absolute value), else the `bin/rg`
-		// (`bin/rg.exe` on Windows) of the @cursor/sdk-<platform>-<arch> package found from the entry script and the
-		// executable, else `rg` from PATH. A platform package the SDK cannot find is what ensureCursorRipgrepPath
+		// (`bin/rg.exe` on Windows) of the @cursor/sdk-<platform>-<arch> package found from the entry script, the SDK's own
+		// module directory (1.4 and later; under omp the bundled build has none, see cursor-tree-sitter-vendor-dir.test.ts)
+		// and the executable, else `rg` from PATH. A platform package the SDK cannot find is what ensureCursorRipgrepPath
 		// compensates for by writing the path it resolved into the variable.
 		const resolverOrder = onlyMatch(
 			bundle,

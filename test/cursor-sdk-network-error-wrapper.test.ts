@@ -278,14 +278,21 @@ describe("installed @cursor/sdk stall detector (contract for the stall/abort cla
 
 		// `reportStall` is a method name and `onStall` a property name, so the minifier keeps both: they are the frame names.
 		// Since 1.4 it hands `onStall` a reason: an AbortError DOMException built while reportStall runs (by a named helper
-		// in the Bun bundle, inline in the webpack builds), so the reason's own stack also holds reportStall.
+		// in the Bun bundle, inline in the webpack builds) and marked `cursorStallCut: true`. A DOMException has no stack
+		// under Bun, so that marker is what the classifier reads there.
 		expect(detector.reportStall, stallPin(build, "reportStall no longer calls this.onStall?.(reason)")).toMatch(/this\.onStall\?\.\(/);
-		const stallReason = /new DOMException\(`the stall detector cut the stream: \$\{[\w$]+\}`,"AbortError"\)/;
+		const stallReason =
+			/new DOMException\(`the stall detector cut the stream: \$\{[\w$]+\}`,"AbortError"\);return Object\.defineProperty\([\w$]+,("cursorStallCut"|[\w$]+),\{value:!0\}\)/;
+		// The marker key is a literal in the webpack builds and a module constant in the Bun bundle.
+		const marksStallCut = (source: string): boolean => {
+			const key = stallReason.exec(source)?.[1];
+			return key !== undefined && (key === '"cursorStallCut"' || new RegExp(`(?<![\\w$.])${escapeRegExp(key)}="cursorStallCut"`).test(text));
+		};
 		const reasonBuilder = new RegExp(`this\\.onStall\\?\\.\\((${IDENT})\\(`).exec(detector.reportStall)?.[1];
-		const builtInReportStall = stallReason.test(detector.reportStall);
+		const builtInReportStall = marksStallCut(detector.reportStall);
 		const builtByHelper =
-			reasonBuilder !== undefined && reasonBuilder !== "function" && stallReason.test(balancedDeclaration(text, onlyMatch(text, `function ${escapeRegExp(reasonBuilder)}\\(${IDENT}\\)\\{`, stallPin(build, "the stall reason builder is declared once")).index!));
-		expect(builtInReportStall || builtByHelper, stallPin(build, "reportStall no longer passes onStall an AbortError DOMException it builds")).toBe(true);
+			reasonBuilder !== undefined && reasonBuilder !== "function" && marksStallCut(balancedDeclaration(text, onlyMatch(text, `function ${escapeRegExp(reasonBuilder)}\\(${IDENT}\\)\\{`, stallPin(build, "the stall reason builder is declared once")).index!));
+		expect(builtInReportStall || builtByHelper, stallPin(build, "reportStall no longer passes onStall an AbortError DOMException it builds and marks cursorStallCut")).toBe(true);
 
 		const detected = onlyMatch(text, `(?<![.\\w$])onStallDetected\\(${IDENT}\\)\\{`, stallPin(build, "the build declares exactly one onStallDetected method"));
 		const detectedBody = balancedDeclaration(text, detected.index!);
