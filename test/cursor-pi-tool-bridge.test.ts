@@ -584,6 +584,22 @@ describe("cursor pi tool bridge loopback MCP lifecycle", () => {
 		expect(registry.getHttpServerAddress()).toBeUndefined();
 	});
 
+	it("resumes overlapping disposal and registry shutdown callers only after releasing the endpoint and listener", async () => {
+		const registry = __testUtils.createRegistry(
+			createBridgePiHarness({ active: ["read"], tools: [createToolInfo("read")] }),
+			{ PI_CURSOR_EXPOSE_BUILTIN_TOOLS: "1" },
+		);
+		const run = await registry.createRun();
+		// Record what each caller observes when it resumes; registry shutdown races the in-flight disposal.
+		const observedOnResume = (caller: Promise<void>) => caller.then(() => ({
+			endpoints: registry.getEndpointCount(),
+			listener: registry.getHttpServerAddress(),
+		}));
+		const released = { endpoints: 0, listener: undefined };
+		expect(await Promise.all([run.dispose(), run.dispose(), registry.disposeAll()].map(observedOnResume)))
+			.toEqual([released, released, released]);
+	});
+
 	it("queues MCP calls, maps them back to real pi tool names, and resolves from pi tool results", async () => {
 		const registry = __testUtils.createRegistry(
 			createBridgePiHarness({ active: ["read"], tools: [createToolInfo("read", "Read files", Type.Object({ path: Type.String() }))] }),

@@ -83,7 +83,7 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 	private mcpServer?: McpProtocolServer;
 	private mcpTransport?: StreamableHTTPServerTransport;
 	private toolCallCounter = 0;
-	private disposed = false;
+	private disposal?: Promise<void>;
 
 	constructor(
 		registry: CursorPiToolBridgeRunHost,
@@ -266,9 +266,17 @@ export class CursorPiToolBridgeRunImpl implements CursorPiToolBridgeRun {
 		}
 	}
 
-	async dispose(): Promise<void> {
-		if (this.disposed) return;
-		this.disposed = true;
+	private get disposed(): boolean {
+		return this.disposal !== undefined;
+	}
+
+	/** Disposes once; overlapping callers (run release and session shutdown) all wait for the cleanup to finish. */
+	dispose(): Promise<void> {
+		this.disposal ??= this.disposeOnce();
+		return this.disposal;
+	}
+
+	private async disposeOnce(): Promise<void> {
 		this.cancel("Cursor pi tool bridge run disposed");
 		this.executingToolCallListeners.clear();
 		await waitForProtocolFlush();
