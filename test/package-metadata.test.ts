@@ -70,8 +70,8 @@ describe("package metadata cutover baselines", () => {
 	});
 
 	it("pins Cursor SDK exactly", () => {
-		expect(packageJson.dependencies["@cursor/sdk"]).toBe("1.0.40");
-		expect(lockPackageVersion("@cursor/sdk")).toBe("1.0.40");
+		expect(packageJson.dependencies["@cursor/sdk"]).toBe("1.4.2");
+		expect(lockPackageVersion("@cursor/sdk")).toBe("1.4.2");
 	});
 
 	it("ships an exact MCP/Hono bundledDependencies closure for published installs", () => {

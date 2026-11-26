@@ -8,7 +8,7 @@ const MAX_ALTERNATIVES_LISTED = 4;
 /**
  * Apply the Cursor Max Mode toggle to a model selection.
  *
- * `@cursor/sdk` 1.0.40 carries Max Mode natively as `ModelSelection.maxMode` and copies it onto the
+ * `@cursor/sdk` (1.0.40 and later, 1.4.2 checked) carries Max Mode natively as `ModelSelection.maxMode` and copies it onto the
  * local agent's request. A disabled toggle returns the selection untouched.
  */
 export function applyCursorMaxModeSelection(selection: ModelSelection, enabled: boolean): ModelSelection {
@@ -52,11 +52,11 @@ export function formatCursorMaxModeOffWarning(piModelId: string, selection: Mode
  *
  * - Cursor Cloud: the selection unchanged. The Cloud Agents API's model object (`ModelRef`) has only `id` and
  *   `params`, and it rejects any other key (a run request carrying `maxMode` answers 400 `validation_error:
- *   Unrecognized key(s) in object: 'maxMode'`), while @cursor/sdk 1.0.40 passes the selection to the REST
+ *   Unrecognized key(s) in object: 'maxMode'`), while @cursor/sdk 1.4.2 passes the selection to the REST
  *   request whole. The toggle has no effect on a Cloud turn.
  * - Local, toggle on: `maxMode: true`.
  * - Local, toggle off: the selection unchanged, unless the catalog lists every variant matching it as Max
- *   Mode only. `@cursor/sdk` 1.0.40 then sets `maxMode` itself and bills Max Mode rates, which the user
+ *   Mode only. `@cursor/sdk` 1.4.2 then sets `maxMode` itself and bills Max Mode rates, which the user
  *   switched off, so that selection is refused before any agent exists. A model whose catalog has no variant
  *   information is never refused.
  */

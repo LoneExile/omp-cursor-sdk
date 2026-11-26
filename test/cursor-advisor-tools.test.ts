@@ -12,7 +12,8 @@ import { prepareCursorProviderTurn, resolveCursorProviderTurnConfig } from "../s
 import { acquireSessionCursorAgent, createOneShotCursorAgent, disposeAllSessionCursorAgents } from "../src/cursor-session-agent.js";
 import { __testUtils as cursorSessionScopeTestUtils } from "../src/cursor-session-scope.js";
 import { __testUtils as sessionStoreTestUtils } from "../src/cursor-session-store.js";
-import { CURSOR_SDK_BUILDS, CURSOR_SDK_ROOT, readCursorSdkBuildSource } from "./helpers/cursor-sdk-build-source.js";
+import { CURSOR_SDK_BUILDS, CURSOR_SDK_ROOT, readCursorSdkBuildFiles, readCursorSdkBuildSource } from "./helpers/cursor-sdk-build-source.js";
+import { balancedDeclaration, escapeRegExp, IDENT, onlyMatch } from "./helpers/cursor-sdk-minified-source.js";
 import { createAgentsInBuild, offlineAgentRuntime } from "./helpers/cursor-sdk-offline-agent.js";
 
 sessionStoreTestUtils.setSdkOperations({
@@ -195,10 +196,13 @@ describe("advisor Cursor agents", () => {
 		const pooled = agentParams("agent-advisor", advisor(["read", "grep", "glob"]));
 		await acquireSessionCursorAgent(pooled.params);
 		expect(pooled.createAgent).toHaveBeenCalledWith(expect.objectContaining({ tools: ["read", "grep", "glob"] }));
+		// The SDK forwards the allowlist unchanged only without `local.fs` (its tool restriction contract below).
+		expect(pooled.createAgent.mock.calls[0]?.[0]?.local).not.toHaveProperty("fs");
 
 		const oneShot = agentParams("agent-advisor-one-shot", advisor([]));
 		const lease = await createOneShotCursorAgent(oneShot.params);
 		expect(oneShot.createAgent).toHaveBeenCalledWith(expect.objectContaining({ tools: [] }));
+		expect(oneShot.createAgent.mock.calls[0]?.[0]?.local).not.toHaveProperty("fs");
 		await lease.dispose();
 
 		const main = agentParams("agent-main", { conversationId: MAIN_SESSION_ID, mainConversation: true });
@@ -366,17 +370,39 @@ describe("installed @cursor/sdk built-in tool restriction contract", () => {
 		);
 
 		it("sends a local agent's restriction with every run it starts, including an empty one", () => {
-			const source = readCursorSdkBuildSource(build);
-			// Each run copies the allowlist from the agent's options, so a pooled advisor agent
-			// keeps it on every send...
-			expect(source).toContain("...this.options.allowedProtoTools!==void 0?{allowedTools:this.options.allowedProtoTools}:{}");
-			// ...and it reaches Cursor's backend, which offers the model only the listed tools. An empty
-			// list is sent as an empty header (`!==void 0`, unlike the exclusion list's `length>0`), which
-			// is what keeps a summarizer text-only.
-			expect(source).toMatch(/[\w$]+="x-cursor-agent-allowed-tools"/);
-			const headers =
-				/\{\.\.\.([\w$]+)\.allowedTools!==void 0\?\{\[[\w$.]+\]:\1\.allowedTools\.join\(","\)\}:\{\},\.\.\.\1\.disallowedTools!==void 0&&\1\.disallowedTools\.length>0\?\{\[[\w$.]+\]:\1\.disallowedTools\.join\(","\)\}:\{\}\}/g;
-			expect([...source.matchAll(headers)]).toHaveLength(1);
+			// The webpack builds write `void 0!==x` where the Bun bundle writes `x!==void 0`; the pins read one spelling.
+			const normalize = (text: string) => text.replace(/void 0(===|!==)([\w$.]+)/g, "$2$1void 0");
+			const source = normalize(readCursorSdkBuildSource(build));
+			// Each send passes the agent's allowlist through one helper and spreads the result into the run's options, so a
+			// pooled advisor agent keeps it on every send...
+			const sendPattern = `(?:let|const) (${IDENT})=(${IDENT})\\(\\{fileSystem:${IDENT},allowedTools:this\\.options\\.allowedProtoTools,disallowedTools:this\\.options\\.disallowedProtoTools\\}\\)`;
+			onlyMatch(source, sendPattern, `${build}: the send passes the agent's allowlist through one helper`);
+			// Minified names repeat across the webpack chunks, so the helper is looked up in the chunk that calls it.
+			const chunk = normalize(readCursorSdkBuildFiles(build).find(({ source: text }) => new RegExp(sendPattern).test(normalize(text)))!.source);
+			const send = onlyMatch(chunk, sendPattern, `${build}: the send, in its own chunk`);
+			const [, runTools, helper] = send;
+			expect(chunk.slice(send.index!, send.index! + 4000), `${build}: the helper's result is spread into the run's options`).toMatch(
+				new RegExp(`\\.\\.\\.${escapeRegExp(runTools!)},\\.\\.\\.this\\.options\\.systemPrompt!==void 0`),
+			);
+			// ...and without `local.fs` (this plugin never sets one) the helper returns the list unchanged whenever it is
+			// defined, so an empty list stays an empty list. Webpack module scopes reuse the helper's name, so it is found by
+			// its first statement.
+			const helperStart = onlyMatch(
+				chunk,
+				`function ${escapeRegExp(helper!)}\\((${IDENT})\\)\\{(?:let|const) ${IDENT}=\\1\\.fileSystem===void 0\\?\\{allowedTools:\\1\\.allowedTools,disallowedTools:\\1\\.disallowedTools\\}:`,
+				`${build}: the allowlist helper passes the lists through when there is no local.fs`,
+			);
+			const helperBody = balancedDeclaration(chunk, helperStart.index!);
+			expect(helperBody).toMatch(new RegExp(`return\\{\\.\\.\\.(${IDENT})\\.allowedTools!==void 0\\?\\{allowedTools:\\1\\.allowedTools\\}:\\{\\}`));
+			// It reaches Cursor's backend, which offers the model only the listed tools. An empty list is sent as an empty
+			// header (`!==void 0`, unlike the exclusion list's `length>0`), which is what keeps a summarizer text-only.
+			expect(source).toContain('"x-cursor-agent-allowed-tools"');
+			const headers = new RegExp(
+				`\\{\\.\\.\\.(${IDENT})\\.allowedTools!==void 0\\?\\{\\[[\\w$.]+\\]:\\1\\.allowedTools\\.join\\(","\\)\\}:\\{\\},` +
+					`\\.\\.\\.\\1\\.disallowedTools!==void 0&&\\1\\.disallowedTools\\.length>0\\?\\{\\[[\\w$.]+\\]:\\1\\.disallowedTools\\.join\\(","\\)\\}:\\{\\}\\}`,
+				"g",
+			);
+			expect([...source.matchAll(headers)], `${build}: the allow and exclude headers are built once`).toHaveLength(1);
 		});
 	});
 });

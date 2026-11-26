@@ -176,18 +176,28 @@ function isCanceledConnectCode(code: unknown): boolean {
 	return code === 1 || code === "canceled";
 }
 
-function isCursorSdkStallAbortNetworkError(code: unknown, evidence: string, stackEvidence: string): boolean {
+// @cursor/sdk 1.4 aborts a stalled request with a reason it builds in `reportStall`: an AbortError DOMException that it
+// marks with a non-enumerable `cursorStallCut: true`. A DOMException carries no stack under Bun (measured on 1.3.14), so
+// there the marker, not the `reportStall` frame, is what identifies the stall; 1.0.x left only the frames. The marked
+// reason is the third and last link of the wrapper's chain (Unknown ConnectError, canceled ConnectError, AbortError), so
+// it fits `CAUSE_CHAIN_MAX_LINKS` exactly: the SDK's `convertConnectError` puts only Unavailable, DeadlineExceeded and
+// Internal ConnectErrors in a NetworkError, never this Unknown one.
+function hasCursorSdkStallCutReason(chain: readonly CauseChainLink[]): boolean {
+	return chain.some(({ value, record }) => getErrorName(value, record) === "AbortError" && record.cursorStallCut === true);
+}
+
+function isCursorSdkStallAbortNetworkError(code: unknown, evidence: string, stackEvidence: string, chain: readonly CauseChainLink[]): boolean {
 	return (
 		isUnknownConnectCode(code) &&
 		/(?:operation was aborted|canceled)/i.test(evidence) &&
 		/(?:AbortError|operation was aborted)/i.test(`${evidence}\n${stackEvidence}`) &&
 		stackEvidence.includes("@cursor/sdk") &&
-		/\b(?:onStall|reportStall)\b/i.test(stackEvidence)
+		(/\b(?:onStall|reportStall)\b/i.test(stackEvidence) || hasCursorSdkStallCutReason(chain))
 	);
 }
 
 /**
- * @cursor/sdk 1.0.40 (checked in its bundled, esm and cjs builds; first recorded on 1.0.23) throws an internal
+ * @cursor/sdk 1.4.2 (checked in its bundled, esm and cjs builds; first recorded on 1.0.23) throws an internal
  * RetriableError (name/kind "RetriableError", code "connection_stalled") with message "Connection stalled" or
  * "Connection stalled repeatedly" once its retry policy gives up on a request its stall detector aborted. The
  * top-level error is not a ConnectError.
@@ -204,7 +214,7 @@ export function isCursorSdkConnectionStalledError(error: unknown): boolean {
 	return /(?:^|[\\/])node_modules[\\/]@cursor[\\/]sdk[\\/]dist[\\/]/.test(stack) || stack.includes("@cursor/sdk");
 }
 
-// @cursor/sdk 1.0.34 and later (1.0.40 checked) bundle their Connect Node transport into their own dist files, so a
+// @cursor/sdk 1.0.34 and later (1.0.40 and 1.4.2 checked) bundle their Connect Node transport into their own dist files, so a
 // transport error's frames carry the SDK's `node_modules/@cursor/sdk/dist` path and never a
 // `@connectrpc/connect-node` one (1.0.32 imported that package from node_modules).
 function getCursorConnectSource(chain: readonly CauseChainLink[], stackEvidence: string): CursorConnectErrorSource {
@@ -228,11 +238,11 @@ export type CursorConnectErrorClassification =
 
 /**
  * Classifies a ConnectError, or an error whose `cause` chain holds one (see `CAUSE_CHAIN_MAX_LINKS`), such as the
- * NetworkError @cursor/sdk wraps around an Unavailable ConnectError (1.0.34 and 1.0.40 checked). Code and details come
+ * NetworkError @cursor/sdk wraps around an Unavailable ConnectError (1.0.34, 1.0.40 and 1.4.2 checked). Code and details come
  * from the ConnectError, and SDK provenance (an `@cursor/sdk` stack frame or `aiserver.*` details) from any error in
  * the chain. A ConnectError wrapped in another error is never an abort. Only the SDK transport's own error shapes are:
  * its canceled ConnectError, and the Unknown ConnectError that @cursor/sdk puts around it (the bundled builds of 1.0.34,
- * 1.0.37 and 1.0.40 all do; no earlier build was available to check). That transport turns an abort reason into a
+ * 1.0.37, 1.0.40 and 1.4.2 all do; no earlier build was available to check). That transport turns an abort reason into a
  * Canceled ConnectError of the `@connectrpc/connect` copy it resolves, keeping the AbortError as that error's `cause`;
  * the SDK's own ConnectError class does not recognize that instance, so its `ConnectError.from` wraps it as Unknown.
  * Only that whole chain (Unknown -> canceled ConnectError -> AbortError) counts, not any Unknown ConnectError that
@@ -255,8 +265,8 @@ export function classifyCursorConnectError(error: unknown): CursorConnectErrorCl
 	const source = getCursorConnectSource(chain, stackEvidence);
 
 	// The stall detector cancels a request the same way, so its wrapper has the wrapped abort's shape and is told apart
-	// by the detector's frames: a retryable network failure, not a cancellation. It has to be decided first.
-	if (isCursorSdkStallAbortNetworkError(code, evidence, stackEvidence)) {
+	// by the detector's frames or its marked reason: a retryable network failure, not a cancellation. It has to be decided first.
+	if (isCursorSdkStallAbortNetworkError(code, evidence, stackEvidence, chain)) {
 		return { kind: "network", source };
 	}
 
@@ -330,7 +340,7 @@ function withRunErrorCode(message: string, code: string | undefined): string {
 
 // Cursor's catalog lists some larger context variants that its backend refuses unless
 // RequestedModel.maxMode is set (observed: grok-4.7 context=500k on @cursor/sdk 1.0.32).
-// @cursor/sdk 1.0.40 sets it itself on local turns when every catalog variant matching the params is
+// @cursor/sdk 1.0.40 and later (1.4.2 checked) set it themselves on local turns when every catalog variant matching the params is
 // a Max Mode variant, and on the local runtime the Max Mode toggle sends ModelSelection.maxMode for
 // the rest. Cloud turns never carry maxMode (the Cloud Agents API rejects the key). A refusal that
 // still reaches this hint is a variant nothing flagged as Max Mode.

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isUtf8 } from "node:buffer";
 
-// Evidence (installed @cursor/sdk 1.0.40 esm, cjs and bun-bundled builds, locked by
+// Evidence (installed @cursor/sdk 1.4.2 esm, cjs and bun-bundled builds, locked by
 // test/cursor-sdk-output-filter-contract.test.ts):
 // - Every SDK log line is one `console.log` (INFO/DEBUG) or `console.warn` (WARN) call with ONE
 //   complete string argument. The logger prints `HH:MM:SS.mmm INFO  <message>[ ctx=<path>][ meta={...}]`,
@@ -83,6 +83,8 @@ const HOOK_WARNINGS = [
 	/^\[hooks\] Refusing to load [^\r\n]+ config via symlink path: [^\r\n]+$/,
 	/^\[hooks\] All tools in matcher "[^\r\n]+" are unsupported, skipping hooks$/,
 	/^\[hooks\] Claude Code event "[^\r\n]+" has invalid value \(expected array\), skipping$/,
+	/^\[hooks\] Hook "[^\r\n]+" has invalid "args" \(expected an array of strings\), skipping$/,
+	/^\[hooks\] Hook "[^\r\n]+" sets shell "[^\r\n]+", which Cursor does not support; the platform default shell will be used$/,
 ];
 
 // `console.error(`Error initializing ignore mapping for ${file}:`, error)` where the ripgrep path was

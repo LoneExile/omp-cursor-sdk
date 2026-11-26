@@ -277,7 +277,22 @@ describe("installed @cursor/sdk stall detector (contract for the stall/abort cla
 		const detector = locateStallDetector(text, build);
 
 		// `reportStall` is a method name and `onStall` a property name, so the minifier keeps both: they are the frame names.
-		expect(detector.reportStall, stallPin(build, "reportStall no longer calls this.onStall?.()")).toContain("this.onStall?.()");
+		// Since 1.4 it hands `onStall` a reason: an AbortError DOMException built while reportStall runs (by a named helper
+		// in the Bun bundle, inline in the webpack builds) and marked `cursorStallCut: true`. A DOMException has no stack
+		// under Bun, so that marker is what the classifier reads there.
+		expect(detector.reportStall, stallPin(build, "reportStall no longer calls this.onStall?.(reason)")).toMatch(/this\.onStall\?\.\(/);
+		const stallReason =
+			/new DOMException\(`the stall detector cut the stream: \$\{[\w$]+\}`,"AbortError"\);return Object\.defineProperty\([\w$]+,("cursorStallCut"|[\w$]+),\{value:!0\}\)/;
+		// The marker key is a literal in the webpack builds and a module constant in the Bun bundle.
+		const marksStallCut = (source: string): boolean => {
+			const key = stallReason.exec(source)?.[1];
+			return key !== undefined && (key === '"cursorStallCut"' || new RegExp(`(?<![\\w$.])${escapeRegExp(key)}="cursorStallCut"`).test(text));
+		};
+		const reasonBuilder = new RegExp(`this\\.onStall\\?\\.\\((${IDENT})\\(`).exec(detector.reportStall)?.[1];
+		const builtInReportStall = marksStallCut(detector.reportStall);
+		const builtByHelper =
+			reasonBuilder !== undefined && reasonBuilder !== "function" && marksStallCut(balancedDeclaration(text, onlyMatch(text, `function ${escapeRegExp(reasonBuilder)}\\(${IDENT}\\)\\{`, stallPin(build, "the stall reason builder is declared once")).index!));
+		expect(builtInReportStall || builtByHelper, stallPin(build, "reportStall no longer passes onStall an AbortError DOMException it builds and marks cursorStallCut")).toBe(true);
 
 		const detected = onlyMatch(text, `(?<![.\\w$])onStallDetected\\(${IDENT}\\)\\{`, stallPin(build, "the build declares exactly one onStallDetected method"));
 		const detectedBody = balancedDeclaration(text, detected.index!);
@@ -294,12 +309,12 @@ describe("installed @cursor/sdk stall detector (contract for the stall/abort cla
 		const text = readCursorSdkBuildSource(build);
 		const detector = locateStallDetector(text, build);
 
-		// The property key names the arrow function `onStall`, the frame name the classifier reads, and the callback calls
-		// the cancel function that `withCancel()` returned beside the context the detector watches.
+		// The property key names the arrow function `onStall`, the frame name the classifier reads, and the callback hands
+		// its reason to the cancel function that `withCancel()` returned beside the context the detector watches.
 		const wiring = onlyMatch(
 			text,
-			`new ${escapeRegExp(detector.name)}\\((${IDENT}),\\{[^{}]*onStall:\\(\\)=>\\{${IDENT}\\("stall_detector",\\{[^{}]*\\}\\),(${IDENT})\\(\\)\\}`,
-			stallPin(build, "the SDK builds its stall detector with an `onStall:()=>{...,cancel()}` callback"),
+			`new ${escapeRegExp(detector.name)}\\((${IDENT}),\\{[^{}]*onStall:\\(?(${IDENT})\\)?=>\\{${IDENT}\\("stall_detector",\\{[^{}]*\\}\\),(${IDENT})\\(\\2\\)\\}`,
+			stallPin(build, "the SDK builds its stall detector with an `onStall:(reason)=>{...,cancel(reason)}` callback"),
 		);
 		const bindings = [
 			...text
@@ -310,7 +325,7 @@ describe("installed @cursor/sdk stall detector (contract for the stall/abort cla
 		expect(
 			[binding?.[1], binding?.[2]],
 			stallPin(build, "the detector's context and its onStall cancel function are no longer the two results of one withCancel()"),
-		).toEqual([wiring[1], wiring[2]]);
+		).toEqual([wiring[1], wiring[3]]);
 
 		// `withCancel()` hands out `(reason) => linked.abort(reason)`, and that handle aborts its AbortController in the
 		// same call, so the abort's stack still holds `onStall` and `reportStall`.
@@ -358,7 +373,7 @@ function bundledInternalsSource(): string {
 /** The stall detector class. It reaches the SDK's logger and metrics through `ctx.get(...)`. */
 type StallDetectorClass = new (
 	ctx: { signal: AbortSignal; get(key: unknown): unknown },
-	options: { thresholdMs: number; onStall: () => void },
+	options: { thresholdMs: number; onStall: (reason?: unknown) => void },
 ) => { [Symbol.dispose](): void };
 
 interface BundledInternals {
@@ -385,8 +400,9 @@ describe("the SDK's wrapped abort and stall abort, built by the bundled build's 
 
 	/**
 	 * The reason of the AbortController that the bundled build's own stall detector aborts once its request goes quiet,
-	 * the way the SDK's `onStall` callback does through `withCancel()`. The real `reportStall` runs, over a context whose
-	 * `get` returns an inert stand-in for the logger and metrics the SDK would look up.
+	 * the way the SDK's `onStall` callback does through `withCancel()`: the detector's reason becomes the abort reason. The
+	 * real `reportStall` runs, over a context whose `get` returns an inert stand-in for the logger and metrics the SDK
+	 * would look up.
 	 */
 	async function stallAbortReason(): Promise<Error> {
 		if (!sdk) throw new Error("bundled SDK internals not loaded");
@@ -397,7 +413,7 @@ describe("the SDK's wrapped abort and stall abort, built by the bundled build's 
 			request.signal.addEventListener("abort", () => resolve(request.signal.reason as Error), { once: true });
 		});
 		// The detector's own timer fires after `thresholdMs` of real time; the test awaits the abort it causes.
-		const detector = new Detector({ signal: new AbortController().signal, get: () => inert }, { thresholdMs: 20, onStall: () => request.abort() });
+		const detector = new Detector({ signal: new AbortController().signal, get: () => inert }, { thresholdMs: 20, onStall: (reason) => request.abort(reason) });
 		try {
 			return await promise;
 		} finally {
@@ -453,10 +469,11 @@ describe("the SDK's wrapped abort and stall abort, built by the bundled build's 
 	it("is a retryable network failure, not an abort, when the bundled build's own stall detector aborts the request", async () => {
 		const stall = await stallAbortReason();
 
-		// What the classifier reads: the detector's own frame, inside the SDK, on the stack the AbortController recorded.
-		expect(stall.stack, "the stall detector's reportStall frame is missing from the abort's stack").toMatch(
-			/\breportStall\b[^\n]*node_modules\/@cursor\/sdk\/dist\/bundled\/index\.js/,
-		);
+		// What the classifier reads: the reason the detector builds in reportStall, an AbortError the SDK marks as its stall
+		// cut. Under Bun a DOMException has no stack, so the marker carries the stall's identity.
+		expect(stall.name).toBe("AbortError");
+		expect(stall.message).toMatch(/^the stall detector cut the stream: no activity for \d+ ms$/);
+		expect((stall as Error & { cursorStallCut?: unknown }).cursorStallCut, "the SDK no longer marks its stall reason").toBe(true);
 		const { wrapped } = wrappedAbort(stall);
 
 		expect(classifyCursorConnectError(wrapped)).toEqual({ kind: "network", source: "cursor-sdk-stack" });

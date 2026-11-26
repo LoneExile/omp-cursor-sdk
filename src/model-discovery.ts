@@ -363,7 +363,7 @@ function areAllMatchingVariantsMaxMode(variants: readonly ModelVariant[], params
 
 /**
  * Whether the catalog lists every variant matching `selection` as Max Mode only (`ModelVariant.isMaxMode`).
- * This is the rule @cursor/sdk 1.0.40 applies in its local catalog resolver, which then sends `maxMode`
+ * This is the rule @cursor/sdk (1.0.40 and later, 1.4.2 checked) applies in its local catalog resolver, which then sends `maxMode`
  * whatever the caller asked for. False when the catalog has no variant information for the model, so
  * a model discovered without variants is never reported as Max Mode only.
  */

@@ -54,6 +54,8 @@ const HOOK_TEMPLATES: ReadonlyArray<{ template: string; args: readonly string[];
 	{ template: 'Claude Code event "${}" has invalid value (expected array), skipping', args: ["SessionStart"], kind: "hookWarning" },
 	{ template: "Refusing to load ${} config via symlink path: ${}", args: ["user", "/home/u/.cursor/hooks.json"], kind: "hookWarning" },
 	{ template: "[hooks] Hook timeout of ${}s is very long (>1 hour)", args: ["7200"], kind: "hookWarning" },
+	{ template: 'Hook "${}" has invalid "args" (expected an array of strings), skipping', args: ["./lint.sh"], kind: "hookWarning" },
+	{ template: 'Hook "${}" sets shell "${}", which Cursor does not support; the platform default shell will be used', args: ["./lint.sh", "fish"], kind: "hookWarning" },
 	{ template: "[hooks] ${}", args: ["<message>"], kind: "wrapper" },
 ];
 const HOOK_DEPRECATION =
@@ -71,7 +73,7 @@ const SDK_LOGGER_LOAD_TIMEOUT_MS = 30_000;
 
 describe("installed Cursor SDK output contract: package", () => {
 	it("is the SDK version these templates were verified against", () => {
-		expect(readInstalledPackageVersion("@cursor/sdk")).toBe("1.0.40");
+		expect(readInstalledPackageVersion("@cursor/sdk")).toBe("1.4.2");
 	});
 
 	it("loads the bundled build under Bun, which is the runtime omp uses", () => {

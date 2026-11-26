@@ -12,7 +12,7 @@ export function formatBundledContextWindowsHeader(date) {
 		"// collapse to one key; stale and ambiguous aliases are omitted. Values are observed",
 		"// or conservative default limits and may override a catalog context label when the",
 		"// completed SDK checkpoint reports a different effective limit.",
-		"// @cursor/sdk 1.0.40 runs every variant the catalog lists as Max Mode only (ModelVariant.isMaxMode,",
+		"// @cursor/sdk (1.0.40 and later, 1.4.2 checked) runs every variant the catalog lists as Max Mode only (ModelVariant.isMaxMode,",
 		"// for example every `@1m` variant the catalog lists) in Max Mode on its own, so those windows do not",
 		"// depend on the Max Mode toggle. A variant the catalog does not list is not forced to Max Mode, so it",
 		"// runs at the non-Max window and keeps an explicit conservative row (the `@1m@fast` lanes of gpt-5.4,",

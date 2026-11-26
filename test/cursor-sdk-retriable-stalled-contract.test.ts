@@ -41,7 +41,7 @@ interface RetriableStalledContractFixture {
 }
 
 const fixture = JSON.parse(
-	readFileSync(new URL("./fixtures/cursor-sdk-retriable-stalled-1.0.40.json", import.meta.url), "utf8"),
+	readFileSync(new URL("./fixtures/cursor-sdk-retriable-stalled-1.4.2.json", import.meta.url), "utf8"),
 ) as RetriableStalledContractFixture;
 const { single, repeated } = fixture.errorShape;
 
@@ -135,8 +135,9 @@ describe("installed Cursor SDK RetriableError connection-stalled contract", () =
 
 		const source = locateStalledErrorSource(text, build);
 
-		// The retry policy raises them for an abort the stall detector caused, once retries are used up or capped. Its
-		// stall flag is a `stall_detector` abort of an error that is, or became, a RetriableError.
+		// The retry policy raises them for an abort the stall detector caused, once retries are used up or capped (1.4 adds
+		// an elapsed-time cap to the first branch and an `immediateFirstRetry` option to the retry helper). Its stall flag
+		// is a `stall_detector` abort of an error that is, or became, a RetriableError.
 		const stallFlag = onlyMatch(
 			text,
 			`(${IDENT})=(?:${IDENT}\\.abortOrigin==="stall_detector"|"stall_detector"===${IDENT}\\.abortOrigin)&&!${IDENT}&&\\(${IDENT} instanceof ${IDENT}\\|\\|${IDENT} instanceof ${escapeRegExp(source.retriable.name)}\\)`,
@@ -145,7 +146,7 @@ describe("installed Cursor SDK RetriableError connection-stalled contract", () =
 		const factory = escapeRegExp(source.factory);
 		const stallBranch = new RegExp(
 			`if\\(${escapeRegExp(stallFlag[1]!)}\\)\\{if\\([^{}]*\\)return ${IDENT}\\(${factory}\\(${IDENT}\\(\\)\\),\\{countAsTransportError:!0\\}\\);` +
-				`(?:let|const) ${IDENT}=${IDENT}\\(\\(?\\(\\)=>${factory}\\(${IDENT}\\(\\)\\)\\)?,\\(?\\(\\)=>${factory}\\(\\{\\.\\.\\.${IDENT}\\(\\),transportErrorRetries:void 0\\}\\)\\)?\\)`,
+				`(?:let|const) ${IDENT}=${IDENT}\\(\\(?\\(\\)=>${factory}\\(${IDENT}\\(\\)\\)\\)?,\\(?\\(\\)=>${factory}\\(\\{\\.\\.\\.${IDENT}\\(\\),transportErrorRetries:void 0\\}\\)\\)?(?:,\\{immediateFirstRetry:!?[01]\\})?\\)`,
 		);
 		expect(
 			text.slice(stallFlag.index!, stallFlag.index! + 3000),

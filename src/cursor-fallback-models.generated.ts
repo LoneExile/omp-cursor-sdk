@@ -1,6 +1,6 @@
 import type { ModelListItem } from "@cursor/sdk";
 
-// Generated with @cursor/sdk@1.0.40 from 47 Cursor models.
+// Generated with @cursor/sdk@1.4.2 from 50 Cursor models.
 // Refresh with: npm run refresh:cursor-snapshots -- --write
 // Do not add secrets; this file stores public model metadata only.
 export const FALLBACK_MODEL_ITEMS = [
@@ -830,6 +830,427 @@ export const FALLBACK_MODEL_ITEMS = [
 					}
 				],
 				displayName: "Claude Fable 5.1",
+				isMaxMode: true
+			}
+		]
+	},
+	{
+		id: "claude-fable-5-2",
+		displayName: "Claude Fable 5.2",
+		aliases: [
+			"fable-5-2",
+			"fable-5.2"
+		],
+		parameters: [
+			{
+				id: "context",
+				displayName: "Context",
+				values: [
+					{
+						value: "300k",
+						displayName: "300K"
+					},
+					{
+						value: "1m",
+						displayName: "1M"
+					}
+				]
+			},
+			{
+				id: "effort",
+				displayName: "Effort",
+				values: [
+					{
+						value: "low",
+						displayName: "Low"
+					},
+					{
+						value: "medium",
+						displayName: "Medium"
+					},
+					{
+						value: "high",
+						displayName: "High"
+					},
+					{
+						value: "xhigh",
+						displayName: "Extra High"
+					},
+					{
+						value: "max",
+						displayName: "Max"
+					}
+				]
+			},
+			{
+				id: "fast",
+				displayName: "Fast",
+				values: [
+					{
+						value: "false"
+					},
+					{
+						value: "true",
+						displayName: "Fast"
+					}
+				]
+			}
+		],
+		variants: [
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "low"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "low"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "medium"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "medium"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "high"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "high"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "xhigh"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "xhigh"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "max"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "effort",
+						value: "max"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "low"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "low"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "medium"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "medium"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "high"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isDefault: true,
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "high"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "xhigh"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "xhigh"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "max"
+					},
+					{
+						id: "fast",
+						value: "false"
+					}
+				],
+				displayName: "Claude Fable 5.2",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "effort",
+						value: "max"
+					},
+					{
+						id: "fast",
+						value: "true"
+					}
+				],
+				displayName: "Claude Fable 5.2",
 				isMaxMode: true
 			}
 		]
@@ -4865,6 +5286,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "300k"
 					},
@@ -4881,6 +5306,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "300k"
@@ -4899,6 +5328,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "300k"
@@ -4917,6 +5350,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "300k"
 					},
@@ -4935,6 +5372,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "300k"
 					},
@@ -4951,6 +5392,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "300k"
@@ -4969,6 +5414,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "300k"
@@ -4987,6 +5436,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "300k"
 					},
@@ -5005,6 +5458,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "300k"
 					},
@@ -5021,6 +5478,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "300k"
@@ -5039,6 +5500,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "1m"
@@ -5058,6 +5523,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "1m"
 					},
@@ -5075,6 +5544,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "1m"
@@ -5095,6 +5568,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "1m"
 					},
@@ -5113,6 +5590,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "1m"
 					},
@@ -5130,6 +5611,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "1m"
@@ -5149,6 +5634,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "1m"
 					},
@@ -5167,6 +5656,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "cyber",
+						value: "false"
+					},
+					{
 						id: "context",
 						value: "1m"
 					},
@@ -5184,6 +5677,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "1m"
@@ -5202,6 +5699,10 @@ export const FALLBACK_MODEL_ITEMS = [
 			},
 			{
 				params: [
+					{
+						id: "cyber",
+						value: "false"
+					},
 					{
 						id: "context",
 						value: "1m"
@@ -6371,6 +6872,86 @@ export const FALLBACK_MODEL_ITEMS = [
 		]
 	},
 	{
+		id: "deepseek-v41-flash-1017",
+		displayName: "DeepSeek V4.1 Flash 1017",
+		parameters: [
+			{
+				id: "reasoning_effort",
+				displayName: "Reasoning",
+				values: [
+					{
+						value: "none",
+						displayName: "None"
+					},
+					{
+						value: "low",
+						displayName: "Low"
+					},
+					{
+						value: "medium",
+						displayName: "Medium"
+					},
+					{
+						value: "high",
+						displayName: "High"
+					},
+					{
+						value: "max",
+						displayName: "Max"
+					}
+				]
+			}
+		],
+		variants: [
+			{
+				params: [
+					{
+						id: "reasoning_effort",
+						value: "none"
+					}
+				],
+				displayName: "DeepSeek V4.1 Flash 1017 None"
+			},
+			{
+				params: [
+					{
+						id: "reasoning_effort",
+						value: "low"
+					}
+				],
+				displayName: "DeepSeek V4.1 Flash 1017 Low"
+			},
+			{
+				params: [
+					{
+						id: "reasoning_effort",
+						value: "medium"
+					}
+				],
+				displayName: "DeepSeek V4.1 Flash 1017 Medium"
+			},
+			{
+				params: [
+					{
+						id: "reasoning_effort",
+						value: "high"
+					}
+				],
+				displayName: "DeepSeek V4.1 Flash 1017 High"
+			},
+			{
+				params: [
+					{
+						id: "reasoning_effort",
+						value: "max"
+					}
+				],
+				displayName: "DeepSeek V4.1 Flash 1017 Max",
+				isDefault: true
+			}
+		]
+	},
+	{
 		id: "default",
 		displayName: "Auto",
 		aliases: [
@@ -6442,135 +7023,6 @@ export const FALLBACK_MODEL_ITEMS = [
 		]
 	},
 	{
-		id: "gemini-3.6-flash",
-		displayName: "Gemini 3.6 Flash",
-		aliases: [
-			"gemini-flash-latest",
-			"gemini-flash"
-		],
-		parameters: [
-			{
-				id: "effort",
-				displayName: "Effort",
-				values: [
-					{
-						value: "minimal",
-						displayName: "Minimal"
-					},
-					{
-						value: "low",
-						displayName: "Low"
-					},
-					{
-						value: "medium",
-						displayName: "Medium"
-					},
-					{
-						value: "high",
-						displayName: "High"
-					}
-				]
-			}
-		],
-		variants: [
-			{
-				params: [
-					{
-						id: "effort",
-						value: "minimal"
-					}
-				],
-				displayName: "Gemini 3.6 Flash"
-			},
-			{
-				params: [
-					{
-						id: "effort",
-						value: "low"
-					}
-				],
-				displayName: "Gemini 3.6 Flash"
-			},
-			{
-				params: [
-					{
-						id: "effort",
-						value: "medium"
-					}
-				],
-				displayName: "Gemini 3.6 Flash"
-			},
-			{
-				params: [
-					{
-						id: "effort",
-						value: "high"
-					}
-				],
-				displayName: "Gemini 3.6 Flash",
-				isDefault: true
-			}
-		]
-	},
-	{
-		id: "gemini-3.7-flash",
-		displayName: "Gemini 3.7 Flash",
-		aliases: [
-			"gemini-flash-latest",
-			"gemini-flash"
-		],
-		parameters: [
-			{
-				id: "effort",
-				displayName: "Effort",
-				values: [
-					{
-						value: "low",
-						displayName: "Low"
-					},
-					{
-						value: "medium",
-						displayName: "Medium"
-					},
-					{
-						value: "high",
-						displayName: "High"
-					}
-				]
-			}
-		],
-		variants: [
-			{
-				params: [
-					{
-						id: "effort",
-						value: "low"
-					}
-				],
-				displayName: "Gemini 3.7 Flash"
-			},
-			{
-				params: [
-					{
-						id: "effort",
-						value: "medium"
-					}
-				],
-				displayName: "Gemini 3.7 Flash"
-			},
-			{
-				params: [
-					{
-						id: "effort",
-						value: "high"
-					}
-				],
-				displayName: "Gemini 3.7 Flash",
-				isDefault: true
-			}
-		]
-	},
-	{
 		id: "gemini-3.8-flash",
 		displayName: "Gemini 3.8 Flash",
 		parameters: [
@@ -6629,6 +7081,20 @@ export const FALLBACK_MODEL_ITEMS = [
 		displayName: "Gemini 4 Argon",
 		parameters: [
 			{
+				id: "context",
+				displayName: "Context",
+				values: [
+					{
+						value: "300k",
+						displayName: "300K"
+					},
+					{
+						value: "1m",
+						displayName: "1M"
+					}
+				]
+			},
+			{
 				id: "reasoning_effort",
 				displayName: "Effort",
 				values: [
@@ -6651,30 +7117,512 @@ export const FALLBACK_MODEL_ITEMS = [
 			{
 				params: [
 					{
+						id: "context",
+						value: "300k"
+					},
+					{
 						id: "reasoning_effort",
 						value: "low"
 					}
 				],
-				displayName: "Gemini 4 Argon Low"
+				displayName: "Gemini 4 Argon  Low"
 			},
 			{
 				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
 					{
 						id: "reasoning_effort",
 						value: "medium"
 					}
 				],
-				displayName: "Gemini 4 Argon Medium",
-				isDefault: true
+				displayName: "Gemini 4 Argon  Medium"
 			},
 			{
 				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
 					{
 						id: "reasoning_effort",
 						value: "high"
 					}
 				],
-				displayName: "Gemini 4 Argon High"
+				displayName: "Gemini 4 Argon  High"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "low"
+					}
+				],
+				displayName: "Gemini 4 Argon 1M Low",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "medium"
+					}
+				],
+				displayName: "Gemini 4 Argon 1M Medium",
+				isDefault: true,
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "high"
+					}
+				],
+				displayName: "Gemini 4 Argon 1M High",
+				isMaxMode: true
+			}
+		]
+	},
+	{
+		id: "gemini-4-carbon",
+		displayName: "Gemini 4 Carbon",
+		parameters: [
+			{
+				id: "context",
+				displayName: "Context",
+				values: [
+					{
+						value: "300k",
+						displayName: "300K"
+					},
+					{
+						value: "1m",
+						displayName: "1M"
+					}
+				]
+			},
+			{
+				id: "reasoning_effort",
+				displayName: "Effort",
+				values: [
+					{
+						value: "low",
+						displayName: "Low"
+					},
+					{
+						value: "medium",
+						displayName: "Medium"
+					},
+					{
+						value: "high",
+						displayName: "High"
+					}
+				]
+			}
+		],
+		variants: [
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "low"
+					}
+				],
+				displayName: "Gemini 4 Carbon  Low"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "medium"
+					}
+				],
+				displayName: "Gemini 4 Carbon  Medium"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "high"
+					}
+				],
+				displayName: "Gemini 4 Carbon  High"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "low"
+					}
+				],
+				displayName: "Gemini 4 Carbon 1M Low",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "medium"
+					}
+				],
+				displayName: "Gemini 4 Carbon 1M Medium",
+				isDefault: true,
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "high"
+					}
+				],
+				displayName: "Gemini 4 Carbon 1M High",
+				isMaxMode: true
+			}
+		]
+	},
+	{
+		id: "gemini-4-hydrogen",
+		displayName: "Gemini 4 Hydrogen",
+		parameters: [
+			{
+				id: "context",
+				displayName: "Context",
+				values: [
+					{
+						value: "300k",
+						displayName: "300K"
+					},
+					{
+						value: "1m",
+						displayName: "1M"
+					}
+				]
+			},
+			{
+				id: "reasoning_effort",
+				displayName: "Effort",
+				values: [
+					{
+						value: "low",
+						displayName: "Low"
+					},
+					{
+						value: "medium",
+						displayName: "Medium"
+					},
+					{
+						value: "high",
+						displayName: "High"
+					},
+					{
+						value: "xhigh",
+						displayName: "Extra High"
+					}
+				]
+			}
+		],
+		variants: [
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "low"
+					}
+				],
+				displayName: "Gemini 4 Hydrogen  Low"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "medium"
+					}
+				],
+				displayName: "Gemini 4 Hydrogen  Medium"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "high"
+					}
+				],
+				displayName: "Gemini 4 Hydrogen  High"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "xhigh"
+					}
+				],
+				displayName: "Gemini 4 Hydrogen  Extra High"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "low"
+					}
+				],
+				displayName: "Gemini 4 Hydrogen 1M Low",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "medium"
+					}
+				],
+				displayName: "Gemini 4 Hydrogen 1M Medium",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "high"
+					}
+				],
+				displayName: "Gemini 4 Hydrogen 1M High",
+				isDefault: true,
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "xhigh"
+					}
+				],
+				displayName: "Gemini 4 Hydrogen 1M Extra High",
+				isMaxMode: true
+			}
+		]
+	},
+	{
+		id: "gemini-4-neon",
+		displayName: "Gemini 4 Neon",
+		parameters: [
+			{
+				id: "context",
+				displayName: "Context",
+				values: [
+					{
+						value: "300k",
+						displayName: "300K"
+					},
+					{
+						value: "1m",
+						displayName: "1M"
+					}
+				]
+			},
+			{
+				id: "reasoning_effort",
+				displayName: "Effort",
+				values: [
+					{
+						value: "low",
+						displayName: "Low"
+					},
+					{
+						value: "medium",
+						displayName: "Medium"
+					},
+					{
+						value: "high",
+						displayName: "High"
+					},
+					{
+						value: "xhigh",
+						displayName: "Extra High"
+					}
+				]
+			}
+		],
+		variants: [
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "low"
+					}
+				],
+				displayName: "Gemini 4 Neon  Low"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "medium"
+					}
+				],
+				displayName: "Gemini 4 Neon  Medium"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "high"
+					}
+				],
+				displayName: "Gemini 4 Neon  High"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "300k"
+					},
+					{
+						id: "reasoning_effort",
+						value: "xhigh"
+					}
+				],
+				displayName: "Gemini 4 Neon  Extra High"
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "low"
+					}
+				],
+				displayName: "Gemini 4 Neon 1M Low",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "medium"
+					}
+				],
+				displayName: "Gemini 4 Neon 1M Medium",
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "high"
+					}
+				],
+				displayName: "Gemini 4 Neon 1M High",
+				isDefault: true,
+				isMaxMode: true
+			},
+			{
+				params: [
+					{
+						id: "context",
+						value: "1m"
+					},
+					{
+						id: "reasoning_effort",
+						value: "xhigh"
+					}
+				],
+				displayName: "Gemini 4 Neon 1M Extra High",
+				isMaxMode: true
 			}
 		]
 	},
