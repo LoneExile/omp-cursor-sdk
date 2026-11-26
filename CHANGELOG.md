@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Tab completion for the arguments of `/cursor-http`, `/cursor-mode`, `/cursor-max-mode` (including `--save-user`), `/cursor-runtime` (including `--save-user` and `--save-project`), `/cursor-cloud` (`list`, `archive`, `delete`, and `--yes` after `delete <bc-agentId>`) and `/cursor-local-resume-cleanup`. Ported from upstream #536.
+
 ### Fixed
 
 - The plugin loads on omp 19.2. omp 19.2.0 replaced pi-tui's component classes (`Text`, `Image`, `Component`) with nodes and dropped the `keyHint` root export, so omp refused the whole extension with "Export named 'Text' not found in module 'omp-legacy-pi-bundled:@oh-my-pi/pi-tui'" and no `cursor-sdk` model was registered. Replay cards and the `cursor_ask_question` call line are now pi-tui `ansi` nodes with the same text and colors, drawn natively in the terminal and in Tern; a generated image is an `image` node, drawn through the terminal's image protocol or shown as `[Image: <file>]`.

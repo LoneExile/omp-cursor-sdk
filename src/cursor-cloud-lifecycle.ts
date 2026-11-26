@@ -19,8 +19,19 @@ import { asRecord, getString } from "./cursor-record-utils.js";
 import { scrubSensitiveText } from "./cursor-sensitive-text.js";
 import { loadCursorSdk } from "./cursor-sdk-runtime.js";
 import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
+import { completeCursorCommandArguments } from "./cursor-command-completions.js";
 
 export { CLOUD_LIFECYCLE_ENTRY_TYPE };
+
+const CURSOR_CLOUD_SUBCOMMAND_COMPLETIONS = [
+	{ value: "list", label: "list", description: "List recorded Cursor cloud agents for this session branch" },
+	{ value: "archive ", label: "archive", description: "Archive a recorded Cursor cloud agent (archive <bc-agentId>)" },
+	{ value: "delete ", label: "delete", description: "Delete a recorded Cursor cloud agent (delete <bc-agentId> --yes)" },
+];
+
+const CURSOR_CLOUD_DELETE_CONFIRM_COMPLETIONS = [
+	{ value: "--yes", label: "--yes", description: "Confirm deleting the recorded Cursor cloud agent" },
+];
 
 const MAX_LEDGER_AGENT_ID_LENGTH = 256;
 const MAX_LEDGER_RUN_ID_LENGTH = 256;
@@ -716,6 +727,15 @@ export async function runCursorCloudLifecycleCommand(pi: CloudLifecycleApi, args
 		return;
 	}
 	ctx.ui.notify(`Invalid Cursor cloud command. ${usage}`, "error");
+}
+
+export function getCursorCloudLifecycleArgumentCompletions(prefix: string) {
+	return completeCursorCommandArguments(prefix, (previous) => {
+		if (previous.length === 0) return CURSOR_CLOUD_SUBCOMMAND_COMPLETIONS;
+		return previous.length === 2 && previous[0] === "delete" && isValidExactCloudAgentId(previous[1])
+			? CURSOR_CLOUD_DELETE_CONFIRM_COMPLETIONS
+			: undefined;
+	});
 }
 
 export const __testUtils = {

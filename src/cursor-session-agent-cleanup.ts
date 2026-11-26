@@ -1,5 +1,6 @@
 import type { LocalAgentStore } from "@cursor/sdk";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@oh-my-pi/pi-coding-agent";
+import { completeCursorCommandArguments } from "./cursor-command-completions.js";
 import { asRecord, getString } from "./cursor-record-utils.js";
 import { fsyncExistingRegularFile } from "./cursor-durable-fs.js";
 import { scrubSensitiveText } from "./cursor-sensitive-text.js";
@@ -22,6 +23,15 @@ import {
 } from "./cursor-session-store.js";
 
 export const CURSOR_SESSION_AGENT_CLEANUP_ENTRY_TYPE = "cursor-sdk-agent-cleanup";
+
+const CURSOR_LOCAL_RESUME_CLEANUP_COMPLETIONS = [
+	{ value: "--dry-run", label: "--dry-run", description: "List the superseded local agents cleanup would delete" },
+	{ value: "--yes", label: "--yes", description: "Delete the recorded superseded local agents" },
+];
+
+export function getCursorSessionAgentCleanupArgumentCompletions(prefix: string) {
+	return completeCursorCommandArguments(prefix, (previous) => previous.length === 0 ? CURSOR_LOCAL_RESUME_CLEANUP_COMPLETIONS : undefined);
+}
 
 type CleanupAction = "dry-run" | "delete";
 type CleanupPhase = "intent" | "result";

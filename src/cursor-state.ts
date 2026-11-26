@@ -5,7 +5,11 @@ import {
 	CURSOR_TOOL_MANIFEST_ENV,
 	resolveCursorToolManifestEnabled,
 } from "./cursor-tool-manifest.js";
-import { runCursorSessionAgentCleanupCommand } from "./cursor-session-agent-cleanup.js";
+import { completeCursorCommandArguments } from "./cursor-command-completions.js";
+import {
+	getCursorSessionAgentCleanupArgumentCompletions,
+	runCursorSessionAgentCleanupCommand,
+} from "./cursor-session-agent-cleanup.js";
 import {
 	CURSOR_HTTP1_ENTRY_TYPE,
 	getStoredCursorHttp1Enabled,
@@ -70,6 +74,21 @@ const MODE_ENTRY_TYPE = "cursor-mode-state";
 export type CursorAgentMode = AgentModeOption;
 
 const DEFAULT_CURSOR_AGENT_MODE: AgentModeOption = "agent";
+
+const CURSOR_SWITCH_VALUES = ["on", "off", "toggle"] as const;
+
+const CURSOR_MAX_MODE_COMPLETIONS = CURSOR_SWITCH_VALUES.map((value) => ({ value, label: value, description: `Turn Cursor Max Mode ${value} for this session` }));
+
+const CURSOR_MAX_MODE_SAVE_COMPLETIONS = [
+	{ value: "--save-user", label: "--save-user", description: "Also save the choice to the user config" },
+];
+
+const CURSOR_HTTP_COMPLETIONS = CURSOR_SWITCH_VALUES.map((value) => ({ value, label: value, description: `Turn the HTTP/1.1/SSE transport ${value}` }));
+
+const CURSOR_MODE_COMPLETIONS = [
+	{ value: "agent", label: "agent", description: "Cursor SDK agent mode (default)" },
+	{ value: "plan", label: "plan", description: "Cursor SDK plan mode" },
+];
 
 interface CursorFastEntryData {
 	modelId?: string;
@@ -583,6 +602,10 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 
 	pi.registerCommand("cursor-max-mode", {
 		description: "Set Cursor Max Mode for this session: on, off, or toggle. Optional --save-user persists to user config. Bills higher. Local runtime only.",
+		getArgumentCompletions: (prefix) => completeCursorCommandArguments(prefix, (previous) => {
+			if (previous.length === 0) return CURSOR_MAX_MODE_COMPLETIONS;
+			return previous.length === 1 && CURSOR_SWITCH_VALUES.some((value) => value === previous[0]) ? CURSOR_MAX_MODE_SAVE_COMPLETIONS : undefined;
+		}),
 		handler: async (args, ctx) => {
 			const usage = "Usage: /cursor-max-mode [on|off|toggle] [--save-user]";
 			const tokens = args.trim().split(/\s+/).filter(Boolean);
@@ -666,6 +689,7 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 
 	pi.registerCommand("cursor-http", {
 		description: "Toggle Cursor SDK HTTP/1.1/SSE transport compatibility mode",
+		getArgumentCompletions: (prefix) => completeCursorCommandArguments(prefix, (previous) => previous.length === 0 ? CURSOR_HTTP_COMPLETIONS : undefined),
 		handler: async (args, ctx) => {
 			const usage = "Usage: /cursor-http [on|off|toggle]";
 			const normalized = args.trim().toLowerCase();
@@ -724,6 +748,7 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 
 	pi.registerCommand("cursor-local-resume-cleanup", {
 		description: "Dry-run or delete recorded superseded local Cursor SDK agents",
+		getArgumentCompletions: getCursorSessionAgentCleanupArgumentCompletions,
 		handler: async (args, ctx) => {
 			await runCursorSessionAgentCleanupCommand(pi, args, ctx);
 		},
@@ -753,6 +778,7 @@ export function registerCursorRuntimeControls(pi: CursorRuntimeControlsExtension
 
 	pi.registerCommand("cursor-mode", {
 		description: "Set Cursor SDK conversation mode: agent or plan",
+		getArgumentCompletions: (prefix) => completeCursorCommandArguments(prefix, (previous) => previous.length === 0 ? CURSOR_MODE_COMPLETIONS : undefined),
 		handler: async (args, ctx) => {
 			const usage = "Usage: /cursor-mode agent|plan";
 			const mode = parseCursorAgentMode(args);
