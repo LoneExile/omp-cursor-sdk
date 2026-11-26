@@ -5,20 +5,15 @@ import {
 	parseCursorReplayToolDetails,
 } from "../src/cursor-replay-tool-details.js";
 import { renderCursorReplayResult } from "../src/cursor-native-tool-display-replay.js";
-import { createRenderContext, createRenderTheme } from "./helpers/render-fixtures.js";
+import { createRenderTheme, paintRenderedNode } from "./helpers/render-fixtures.js";
 
 const theme = createRenderTheme();
 
 function renderReplayResult(details: unknown, text = "ok", isError = false): string {
-	return renderCursorReplayResult(
-		{ content: [{ type: "text", text }], details },
-		{ expanded: false, isPartial: false },
-		theme,
-		createRenderContext({ isError, showImages: false }),
-		isError,
-	)
-		.render(120)
-		.join("\n");
+	return paintRenderedNode(
+		renderCursorReplayResult({ content: [{ type: "text", text }], details }, { expanded: false, isPartial: false }, theme, undefined, isError),
+		120,
+	);
 }
 
 describe("cursor replay tool details contract", () => {
@@ -254,18 +249,19 @@ describe("cursor replay tool details contract", () => {
 			result: { status: "error", value: undefined, error: "image generation failed" },
 			options: { cwd: "/tmp", maxChars: 4000 },
 		});
-		const rendered = renderCursorReplayResult(
-			{
-				content: display.result.content,
-				details: display.result.details,
-			},
-			{ expanded: false, isPartial: false },
-			theme,
-			createRenderContext({ isError: true, showImages: false }),
-			true,
-		)
-			.render(120)
-			.join("\n");
+		const rendered = paintRenderedNode(
+			renderCursorReplayResult(
+				{
+					content: display.result.content,
+					details: display.result.details,
+				},
+				{ expanded: false, isPartial: false },
+				theme,
+				undefined,
+				true,
+			),
+			120,
+		);
 		expect(rendered).toContain(CURSOR_REPLAY_GENERATE_IMAGE_RESULT_TITLE);
 		expect(rendered).not.toContain("Cursor generateImage");
 		expect(rendered).not.toMatch(/^image generation failed$/m);

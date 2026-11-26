@@ -83,7 +83,7 @@ async function prompt(pi: Awaited<ReturnType<typeof registerClone>>, session: { 
 	const ctx = createExtensionTestContext(sessionContext(session, kind));
 	await pi.invokeEventWithContext(
 		"before_agent_start",
-		{ type: "before_agent_start", prompt: text, systemPrompt: [] },
+		{ type: "before_agent_start", reason: "prompt", prompt: text, systemPrompt: [] },
 		ctx,
 	);
 }

@@ -1,3 +1,8 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { isUiNode } from "@oh-my-pi/pi-tui";
+import { getBlob } from "@oh-my-pi/pi-tui/native/blobs";
 import { describe, expect, it } from "vitest";
 import { CURSOR_REPLAY_ACTIVITY_TOOL_NAME } from "../src/cursor-tool-presentation-registry.js";
 import {
@@ -7,11 +12,8 @@ import {
 	formatCursorReplayFilePreview,
 	renderCursorReplayCall,
 	renderCursorReplayResult,
-	renderNativeLookingCursorReadReplayResult,
 } from "../src/cursor-native-tool-display-replay.js";
-import { LOCAL_READ_PREVIEW_NOTICE } from "../src/cursor-transcript-utils.js";
-import { Text } from "@oh-my-pi/pi-tui";
-import { createRenderContext, createRenderTheme } from "./helpers/render-fixtures.js";
+import { createRenderTheme, paintRenderedNode } from "./helpers/render-fixtures.js";
 
 const theme = createRenderTheme();
 
@@ -20,15 +22,16 @@ const taggedTheme = createRenderTheme({
 });
 
 function renderReplayResultWithDetails(details: unknown): string {
-	return renderCursorReplayResult(
-		{ content: [{ type: "text", text: "ok" }], details },
-		{ expanded: false, isPartial: false },
-		taggedTheme,
-		createRenderContext({ isError: false, showImages: false }),
-		false,
-	)
-		.render(240)
-		.join("\n");
+	return paintRenderedNode(
+		renderCursorReplayResult(
+			{ content: [{ type: "text", text: "ok" }], details },
+			{ expanded: false, isPartial: false },
+			taggedTheme,
+			undefined,
+			false,
+		),
+		240,
+	);
 }
 
 describe("cursor native replay rendering", () => {
@@ -169,23 +172,32 @@ describe("cursor native replay rendering", () => {
 		expect(rendered).not.toContain("<muted>hello world</muted>");
 	});
 
-	it("shows local read preview disclaimer in collapsed native read replay results", () => {
-		const result = {
-			content: [{ type: "text" as const, text: `${LOCAL_READ_PREVIEW_NOTICE}\n# Local preview\n` }],
-			details: { localReadPreview: true },
-		};
-		const rendered = renderNativeLookingCursorReadReplayResult(
-			result,
-			{ expanded: false, isPartial: false },
-			theme,
-			createRenderContext({ isError: false, args: { path: "README.md", localReadPreview: true } }),
-			() => new Text("", 0, 0),
-		)
-			.render(120)
-			.join("\n");
+	it("draws a generated image as an image node carrying its registered bytes and pixel size", () => {
+		const dir = mkdtempSync(join(tmpdir(), "omp-cursor-replay-image-"));
+		try {
+			const imagePath = join(dir, "badge.png");
+			const onePixelPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+			writeFileSync(imagePath, Buffer.from(onePixelPng, "base64"));
+			const node = renderCursorReplayResult(
+				{ content: [{ type: "text", text: `generateImage Small badge\n\nSaved image: ${imagePath}` }], details: { variant: "generateImage", summary: "saved badge.png", imagePath, imageMimeType: "image/png" } },
+				{ expanded: false, isPartial: false },
+				theme,
+				undefined,
+				false,
+			);
 
-		expect(rendered).toContain(LOCAL_READ_PREVIEW_NOTICE);
-		expect(rendered).not.toContain("# Local preview");
+			if (!isUiNode(node)) throw new Error("expected a pi-tui node");
+			const image = node.children().find((child) => child.kind === "image");
+			const props = image?.props() as { blob?: string; w?: number; h?: number; alt?: string } | undefined;
+			expect(props).toMatchObject({ w: 1, h: 1, alt: "[Image: badge.png]" });
+			expect(getBlob(props?.blob ?? "")?.mime).toBe("image/png");
+			// Without a terminal image protocol the host draws the alt text under the card's title.
+			const rendered = paintRenderedNode(node, 120);
+			expect(rendered).toContain("saved badge.png");
+			expect(rendered).toContain("[Image: badge.png]");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	it("renders collapsed activity summaries from metadata for neutral cursor cards", () => {
@@ -209,7 +221,7 @@ describe("cursor native replay rendering", () => {
 				true,
 			),
 		]
-			.map((component) => component.render(120).join("\n"))
+			.map((node) => paintRenderedNode(node, 120))
 			.join("\n");
 
 		expect(rendered).toContain("Cursor diagnostics 0 diagnostics in src/index.ts");
@@ -238,7 +250,7 @@ describe("cursor native replay rendering", () => {
 				true,
 			),
 		]
-			.map((component) => component.render(120).join("\n"))
+			.map((node) => paintRenderedNode(node, 120))
 			.join("\n");
 
 		expect(rendered).toContain("Cursor semantic search main entrypoint (1 dir)");

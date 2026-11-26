@@ -41,10 +41,6 @@ export const DEFAULT_NATIVE_READ_DISPLAY_LINES = 20;
 export const LOCAL_READ_PREVIEW_NOTICE =
 	"[local file preview at transcript time; Cursor read result content was unavailable]";
 
-export function isLocalReadPreviewContent(text: string): boolean {
-	return text.startsWith(LOCAL_READ_PREVIEW_NOTICE);
-}
-
 export function getToolName(toolCall: unknown): string {
 	const record = asRecord(toolCall);
 	return getString(record, "name") ?? getString(record, "type") ?? getString(record, "toolName") ?? "unknown";

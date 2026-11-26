@@ -75,10 +75,10 @@ describe("package metadata cutover baselines", () => {
 	});
 
 	it("ships an exact MCP/Hono bundledDependencies closure for published installs", () => {
-		expect(packageJson.dependencies["@modelcontextprotocol/sdk"]).toBe("1.30.0");
-		expect(lockPackageVersion("@modelcontextprotocol/sdk")).toBe("1.30.0");
-		expect(packageJson.dependencies["@hono/node-server"]).toBe("2.0.12");
-		expect(lockPackageVersion("@hono/node-server")).toBe("2.0.12");
+		expect(packageJson.dependencies["@modelcontextprotocol/sdk"]).toBe("1.32.2");
+		expect(lockPackageVersion("@modelcontextprotocol/sdk")).toBe("1.32.2");
+		expect(packageJson.dependencies["@hono/node-server"]).toBe("2.1.11");
+		expect(lockPackageVersion("@hono/node-server")).toBe("2.1.11");
 		expect(packageJson.bundledDependencies).toEqual([...BUNDLED_MCP_HONO_CLOSURE]);
 	});
 
@@ -150,8 +150,8 @@ describe("package metadata cutover baselines", () => {
 				dependencies?: Record<string, string>;
 			};
 			expect(packedPackageJson.bundledDependencies).toEqual([...BUNDLED_MCP_HONO_CLOSURE]);
-			expect(packedPackageJson.dependencies?.["@modelcontextprotocol/sdk"]).toBe("1.30.0");
-			expect(packedPackageJson.dependencies?.["@hono/node-server"]).toBe("2.0.12");
+			expect(packedPackageJson.dependencies?.["@modelcontextprotocol/sdk"]).toBe("1.32.2");
+			expect(packedPackageJson.dependencies?.["@hono/node-server"]).toBe("2.1.11");
 
 			const hostRoot = join(tempRoot, "host");
 			const hostNodeModules = join(hostRoot, "node_modules");
@@ -169,7 +169,7 @@ describe("package metadata cutover baselines", () => {
 
 			const mcpPackageJsonPath = join(packageDir, "node_modules", "@modelcontextprotocol", "sdk", "package.json");
 			const bundledMcpPackageJson = JSON.parse(readFileSync(mcpPackageJsonPath, "utf8")) as { version: string };
-			expect(bundledMcpPackageJson.version).toBe("1.30.0");
+			expect(bundledMcpPackageJson.version).toBe("1.32.2");
 			const mcpRequire = createRequire(mcpPackageJsonPath);
 			const resolvedHonoEntry = realpathSync(mcpRequire.resolve("@hono/node-server"));
 			const bundledHonoRoot = realpathSync(join(packageDir, "node_modules", "@hono", "node-server"));
@@ -179,7 +179,7 @@ describe("package metadata cutover baselines", () => {
 			const resolvedVersion = (
 				JSON.parse(readFileSync(join(bundledHonoRoot, "package.json"), "utf8")) as { version: string }
 			).version;
-			expect(resolvedVersion).toBe("2.0.12");
+			expect(resolvedVersion).toBe("2.1.11");
 		} finally {
 			rmSync(tempRoot, { recursive: true, force: true });
 		}

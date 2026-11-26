@@ -5,6 +5,7 @@ import {
 	recordCursorCloudLifecycleSafely,
 } from "./cursor-cloud-lifecycle.js";
 import { CursorLiveRunAbortError } from "./cursor-live-run-coordinator.js";
+import { watchCursorLocalRunTerminalError } from "./cursor-local-run-terminal-error.js";
 import { cursorLiveRuns } from "./cursor-provider-live-run-drain.js";
 import { consumeCursorLocalForceOverride } from "./cursor-runtime-state.js";
 import { recordCursorSessionAgentLineage } from "./cursor-session-agent-lineage.js";
@@ -122,6 +123,7 @@ export async function sendCursorProviderTurn(sendParams: SendCursorProviderTurnP
 			recordCursorSessionAgentLineage(agent.agentId);
 		}
 		const run = await runPromise;
+		if (prepared.runtimeTarget === "local") watchCursorLocalRunTerminalError(prepared.sessionAgentLease.store, run);
 		sdkRun = run;
 		if (prepared.runtimeTarget === "cloud" && !recordCursorCloudLifecycleSafely({ agentId: run.agentId, runId: run.id }, resolvedApiKey)) {
 			const cancellationConfirmed = await requestBoundedCloudRunCancellation(run);

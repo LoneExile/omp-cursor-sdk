@@ -594,9 +594,12 @@ describe("legacy root admission rules", () => {
 				getDefaultStateRoot: () => roots.defaultRoot,
 				openSqliteStore: async (options) => {
 					record.opened.push(options);
-					const store = { dispose: async () => { record.disposed.push(options.stateRoot); } } as unknown as LocalAgentStore & {
-						dispose(): Promise<void>;
-					};
+					// Opened stores reach agents wrapped by the terminal-error observer, which shares `agents` by reference.
+					const store = {
+						agents: {},
+						runs: {},
+						dispose: async () => { record.disposed.push(options.stateRoot); },
+					} as unknown as LocalAgentStore & { dispose(): Promise<void> };
 					record.stores.push(store);
 					return store;
 				},
@@ -740,7 +743,7 @@ describe("legacy root admission rules", () => {
 				// The mapped session store is this session's store, so the fresh agent is created in the store the resume used.
 				expect(lease.storeIdentity).toEqual(identity(roots.currentSessionRoot));
 				expect(record.opened).toEqual([{ workspaceRef: cwd, stateRoot: toNamespacedPath(roots.currentSessionRoot) }]);
-				expect(createAgent.mock.calls[0]![0].local?.store).toBe(record.stores[0]);
+				expect(createAgent.mock.calls[0]![0].local?.store?.agents).toBe(record.stores[0]!.agents);
 				expect(record.disposed).toEqual([]);
 			});
 
@@ -750,7 +753,7 @@ describe("legacy root admission rules", () => {
 
 				const lease = await acquire();
 
-				expect(resumeAgent.mock.calls[0]![1]?.local?.store).toBe(record.stores[0]);
+				expect(resumeAgent.mock.calls[0]![1]?.local?.store?.agents).toBe(record.stores[0]!.agents);
 				expect(lease.resumed).toBe(false);
 				expect(lease.resumeNotice).toContain("Could not resume prior Cursor agent");
 				expect(lease.storeIdentity).toEqual(identity(roots.currentSessionRoot));
@@ -759,7 +762,7 @@ describe("legacy root admission rules", () => {
 					toNamespacedPath(roots.currentSessionRoot),
 				]);
 				expect(record.disposed).toEqual([toNamespacedPath(roots.defaultRoot)]);
-				expect(createAgent.mock.calls[0]![0].local?.store).toBe(record.stores[1]);
+				expect(createAgent.mock.calls[0]![0].local?.store?.agents).toBe(record.stores[1]!.agents);
 			});
 		});
 	});

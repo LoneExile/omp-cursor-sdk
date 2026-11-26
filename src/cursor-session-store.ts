@@ -3,6 +3,7 @@ import { access, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, toNamespacedPath } from "node:path";
 import type { LocalAgentStore } from "@cursor/sdk";
+import { observeCursorLocalRunTerminalErrors } from "./cursor-local-run-terminal-error.js";
 import { loadCursorSdk } from "./cursor-sdk-runtime.js";
 
 export interface CursorSessionStoreIdentity {
@@ -13,6 +14,7 @@ export interface CursorSessionStoreIdentity {
 export interface OpenCursorSessionStore {
 	identity: CursorSessionStoreIdentity;
 	store: LocalAgentStore;
+	/** Closes once; concurrent and later callers share that outcome. */
 	dispose(): Promise<void>;
 }
 
@@ -180,16 +182,19 @@ async function openOwnedCursorSessionStore(
 		if (removalRoot) await rm(removalRoot, { recursive: true, force: true }).catch(() => undefined);
 		throw error;
 	}
+	let disposal: Promise<void> | undefined;
 	return {
 		identity: openedIdentity,
-		store,
-		dispose: async () => {
+		store: observeCursorLocalRunTerminalErrors(store),
+		// Overlapping SDK disposals close SQLite twice (ERR_INVALID_STATE), and a repeat
+		// would report an earlier failed close as success or rerun temporary removal.
+		dispose: () => disposal ??= (async () => {
 			try {
 				await store.dispose();
 			} finally {
 				if (removalRoot) await rm(removalRoot, { recursive: true, force: true });
 			}
-		},
+		})(),
 	};
 }
 

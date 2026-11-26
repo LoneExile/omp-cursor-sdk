@@ -1,8 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendOptions } from "@cursor/sdk";
-import { AssistantMessageComponent, initTheme } from "@oh-my-pi/pi-coding-agent";
-import { visibleWidth } from "@oh-my-pi/pi-tui";
 import { CLOUD_AGENT_ID_PATTERN } from "../shared/cursor-cloud-lifecycle-constants.mjs";
 import { streamCursor } from "../src/cursor-provider.js";
 import {
@@ -25,7 +23,6 @@ import { readInstalledPackageVersion } from "./helpers/installed-package.js";
 
 const installedSdkVersion = readInstalledPackageVersion("@cursor/sdk");
 const CLOUD_RUN_ID_PATTERN = /^run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const RENDER_WIDTH = 80;
 
 interface CapturedCallbackFixture {
 	fixtureKind: string;
@@ -145,22 +142,5 @@ describe("cloud provider captured activity callbacks", () => {
 		expect(done.reason).toBe("stop");
 		expect(done.message.content.some(isToolCallBlock)).toBe(false);
 		expect(done.message.content.map((block) => block.type)).not.toContain("toolCall");
-
-		initTheme("dark", false);
-		const renderedLines = new AssistantMessageComponent(done.message).render(RENDER_WIDTH);
-		expect(renderedLines.length).toBeGreaterThan(0);
-		expect(renderedLines.length).toBeLessThan(40);
-		for (const line of renderedLines) {
-			expect(visibleWidth(line)).toBeLessThanOrEqual(RENDER_WIDTH);
-		}
-		const renderedText = renderedLines.join("\n");
-		expect(renderedText).toContain("read README.md");
-		expect(renderedText).toMatch(/normalized cloud fixture/);
-		expect(renderedText).toContain("$ printf cloud-shell-ok");
-		expect(renderedText).toContain("cloud-shell-ok");
-		expect(renderedText).toContain("Inspect normalized cloud activity");
-		expect(renderedText).toContain("CLOUD_ACTIVITY_FIXTURE_OK");
-		expect(renderedText).not.toContain("pi__");
-		expect(renderedText).not.toMatch(/native.?replay|toolCall|toolUse/i);
 	});
 });

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Tab completion for the arguments of `/cursor-http`, `/cursor-mode`, `/cursor-max-mode` (including `--save-user`), `/cursor-runtime` (including `--save-user` and `--save-project`), `/cursor-cloud` (`list`, `archive`, `delete`, and `--yes` after `delete <bc-agentId>`) and `/cursor-local-resume-cleanup`. Ported from upstream #536.
+
+### Fixed
+
+- The plugin loads on omp 19.2. omp 19.2.0 replaced pi-tui's component classes (`Text`, `Image`, `Component`) with nodes and dropped the `keyHint` root export, so omp refused the whole extension with "Export named 'Text' not found in module 'omp-legacy-pi-bundled:@oh-my-pi/pi-tui'" and no `cursor-sdk` model was registered. Replay cards and the `cursor_ask_question` call line are now pi-tui `ansi` nodes with the same text and colors, drawn natively in the terminal and in Tern; a generated image is an `image` node, drawn through the terminal's image protocol or shown as `[Image: <file>]`.
+- A failed LOCAL Cursor run no longer leaves its shell commands and other native tool processes running. `@cursor/sdk` 1.0.40 leaves them running after a run fails (for example when it gives up resuming a reset connection), and `Run.cancel()` stops them only while the run is still running. The plugin now cancels the run when the SDK records the failure, which the SDK does before it marks the run failed, and still reports the SDK's failure message. Explicit aborts and Cloud runs are unchanged. Ported from upstream #384.
+- Aborting a turn closes an open `cursor_ask_question` dialog. Every select and text-input dialog gets the tool's abort signal, so an abort, a bridge call deadline, Cursor-side cancellation or session shutdown records the open question as cancelled, asks no later question and clears `pi-cursor-sdk:ask-question:blocked`; before, the abort waited until someone answered. A listed option named exactly `Type a custom answer` now selects that option, and the custom-answer entry is shown as `Type a custom answer (2)`. Ported from upstream #414.
+- A finished `/cursor-cloud archive` or `/cursor-cloud delete` stays final when the system clock moves backward during the request. The agent used to stay listed as "archive pending" or "delete pending", which blocked further cleanup. Status now follows each operation's recorded intent and result, not timestamps; an archived agent with an unresolved delete is listed as `archived, delete pending`. Ported from upstream #476.
+- Overlapping disposal of the omp tool bridge (a run release and session shutdown at once) now waits for the loopback endpoint and listener to close for every caller, and a session store closes its SQLite database once however many callers dispose it. Ported from upstream #415 and #413.
+
+### Changed
+
+- The host baseline is omp 19.2.1 (`@oh-my-pi/*` 19.2.1). This version does not load on omp 18.x; use 0.5.0 there.
+- The bundled omp tool bridge dependencies move to `@modelcontextprotocol/sdk` 1.32.2 and `@hono/node-server` 2.1.11, and their locked transitive versions to `hono` 4.13.22, `body-parser` 2.4.0, `proxy-addr` 2.0.8, `qs` 6.17.1, `fast-uri` 3.1.9 and `ip-address` 10.7.6, which carry fixes for published advisories (among them unbounded request bodies in the MCP server transport). These packages ship inside the plugin tarball.
+
 ## 0.5.0 - 2026-10-22
 
 ### Added

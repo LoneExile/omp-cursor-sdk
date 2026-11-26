@@ -1,3 +1,6 @@
+import { isUiNode, type JSXNode } from "@oh-my-pi/pi-tui";
+import { renderBlock } from "@oh-my-pi/pi-tui/term/render";
+import { PLAIN_THEME } from "@oh-my-pi/pi-tui/theme/plain";
 import type { RegisteredTool } from "./pi-harness-types.js";
 
 type ToolRenderCall = NonNullable<RegisteredTool["renderCall"]>;
@@ -40,4 +43,11 @@ export function createRenderContext(overrides: Partial<HarnessRenderContext> & {
 		isError: false,
 		...overrides,
 	};
+}
+
+/** Paints a renderer's node at `width` with omp's terminal painters; an empty render is "". */
+export function paintRenderedNode(node: JSXNode, width: number): string {
+	if (node === undefined) return "";
+	if (!isUiNode(node)) throw new Error(`expected a pi-tui node, got ${typeof node}`);
+	return renderBlock(node, width, { theme: PLAIN_THEME }).rows.join("\n");
 }

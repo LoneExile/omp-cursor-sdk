@@ -10,6 +10,7 @@ import { getCheckpointContextWindow, saveCachedContextWindow } from "./context-w
 import { scrubSensitiveText } from "./cursor-sensitive-text.js";
 import type { CursorSdkEventDebugSink } from "./cursor-sdk-event-debug.js";
 import type { CursorSdkTurnCoordinator } from "./cursor-provider-turn-coordinator.js";
+import { resolveCursorLocalRunTerminalError } from "./cursor-local-run-terminal-error.js";
 import {
 	isCursorRunFinishedSuccessfully,
 	resolveCursorRunOutcome,
@@ -140,7 +141,11 @@ export interface FinalizedCursorRunOutcome {
 /** Single wait/finalize path for SDK runs: wait, debug capture, transcript replay, incomplete tools, artifacts, context cache. */
 export async function awaitFinalizeCursorRunOutcome(params: AwaitFinalizeCursorRunOutcomeParams): Promise<FinalizedCursorRunOutcome> {
 	const apiKey = params.resolvedApiKey ?? params.optionsApiKey;
-	const waitResult = params.waitResult ?? (await params.run.wait());
+	const waitResult = resolveCursorLocalRunTerminalError(
+		params.run,
+		params.waitResult ?? (await params.run.wait()),
+		params.signal?.aborted === true,
+	);
 	const outcome = buildCursorRunOutcomeFromWait({
 		waitResult,
 		prepared: params.prepared,

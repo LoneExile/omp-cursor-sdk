@@ -1,8 +1,10 @@
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@oh-my-pi/pi-coding-agent";
 import {
+	getCursorCloudLifecycleArgumentCompletions,
 	registerCursorCloudLifecycleLedger,
 	runCursorCloudLifecycleCommand,
 } from "./cursor-cloud-lifecycle.js";
+import { completeCursorCommandArguments } from "./cursor-command-completions.js";
 import {
 	CURSOR_AUTO_REVIEW_ENV,
 	CURSOR_CLOUD_ACK_ENV,
@@ -40,6 +42,16 @@ import { getCursorSessionCwd, getCursorSessionProjectTrusted } from "./cursor-se
 import { cursorSessionSlot, cursorSessionSlotView } from "./cursor-session-binding.js";
 
 export const CURSOR_RUNTIME_ENTRY_TYPE = "cursor-runtime-state";
+
+const CURSOR_RUNTIME_COMPLETIONS = [
+	{ value: "local", label: "local", description: "Run Cursor SDK agents on this machine" },
+	{ value: "cloud", label: "cloud", description: "Run Cursor SDK agents in Cursor Cloud" },
+];
+
+const CURSOR_RUNTIME_SAVE_COMPLETIONS = [
+	{ value: "--save-user", label: "--save-user", description: "Also save the runtime as the user config default" },
+	{ value: "--save-project", label: "--save-project", description: "Also save the runtime as this project's config default" },
+];
 
 export const CURSOR_CLOUD_ACK_DISCLOSURE = [
 	"Cursor Cloud executes this work remotely.",
@@ -383,6 +395,10 @@ function registerCursorRuntimeCommand(
 ): void {
 	pi.registerCommand("cursor-runtime", {
 		description: "Set Cursor runtime for this session: local or cloud",
+		getArgumentCompletions: (prefix) => completeCursorCommandArguments(prefix, (previous) => {
+			if (previous.length === 0) return CURSOR_RUNTIME_COMPLETIONS;
+			return previous.length === 1 && (previous[0] === "local" || previous[0] === "cloud") ? CURSOR_RUNTIME_SAVE_COMPLETIONS : undefined;
+		}),
 		handler: async (args, ctx) => {
 			const usage = "Usage: /cursor-runtime local|cloud [--save-user|--save-project]";
 			const tokens = args.trim().split(/\s+/).filter(Boolean);
@@ -498,6 +514,7 @@ export function registerCursorCloudRuntimeControls(
 	registerCursorRuntimeCommand(pi, options.refreshStatus);
 	pi.registerCommand("cursor-cloud", {
 		description: "List, archive, or delete recorded Cursor cloud agents for this session branch",
+		getArgumentCompletions: getCursorCloudLifecycleArgumentCompletions,
 		handler: async (args, ctx) => {
 			await runCursorCloudLifecycleCommand(pi, args, ctx);
 		},
