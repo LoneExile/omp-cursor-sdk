@@ -229,9 +229,10 @@ type OmpHostAction =
 	| "spawn-failure-shell";
 
 /**
- * Runs `action` in a Bun process that imports omp's real postmortem handlers (pi-utils) and the
- * guard module, beside the fixture module. `guardSetup` runs before the action; a host handler
- * registered ahead of it sees every rejection first and never claims one.
+ * Runs `action` in a Bun process that installs omp's real postmortem handlers (pi-utils) the way
+ * omp's CLI entry does, and imports the guard module beside the fixture module. `guardSetup` runs
+ * before the action; a host handler registered ahead of it sees every rejection first and never
+ * claims one.
  */
 function runInOmpHost(options: { guardSetup: string; action: OmpHostAction; fixtureDir?: string }): ChildRun {
 	const { root, fixturePath } = writeSdkFixture(options.fixtureDir ?? SDK_FIXTURE_DIR);
@@ -250,6 +251,8 @@ function runInOmpHost(options: { guardSetup: string; action: OmpHostAction; fixt
 			`import { postmortem } from "@oh-my-pi/pi-utils";
 import { installCursorSdkProcessErrorGuard, installCursorSdkSessionProcessErrorGuard } from ${JSON.stringify(GUARD_URL)};
 import { readMissingFile, rejectWithAbort, rejectWithConnectUnavailable, rejectWithSpawnFailure, writeAfterClose } from ${JSON.stringify(pathToFileURL(fixturePath).href)};
+// omp's CLI entry installs these before it loads extensions; from omp 19 pi-utils no longer installs them on import.
+postmortem.installProcessHandlers();
 // Referenced so Bun's import elision keeps the guard module loaded when the setup does not use it.
 void installCursorSdkProcessErrorGuard;
 void installCursorSdkSessionProcessErrorGuard;
@@ -272,7 +275,7 @@ console.log("host handler saw: " + (typeof reason.code === "string" ? reason.cod
 }
 
 /**
- * Drives the installed SDK's own startup walk in a Bun process that imports omp's real postmortem
+ * Drives the installed SDK's own startup walk in a Bun process that installs omp's real postmortem
  * handlers: a local agent in a git workspace whose CURSOR_RIPGREP_PATH names a binary that does not
  * exist. No Cursor guard is installed, so a rejection the SDK leaves unhandled reaches omp's handler and
  * exits the process. The child runs with no API key (the script deletes it after Bun has loaded any
@@ -308,6 +311,8 @@ function runRipgrepStartupWalk(): ChildRun & { missingRipgrep: string } {
 			"--eval",
 			`import { postmortem } from "@oh-my-pi/pi-utils";
 import { Agent } from "@cursor/sdk";
+// omp's CLI entry installs these before it loads extensions; from omp 19 pi-utils no longer installs them on import.
+postmortem.installProcessHandlers();
 // Registered with no Cursor guard, so omp's own handler decides: it exits the process on a rejection nobody claims.
 const rejections = [];
 postmortem.interceptUnhandledRejections((reason) => {

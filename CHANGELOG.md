@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The plugin loads on omp 19.2. omp 19.2.0 replaced pi-tui's component classes (`Text`, `Image`, `Component`) with nodes and dropped the `keyHint` root export, so omp refused the whole extension with "Export named 'Text' not found in module 'omp-legacy-pi-bundled:@oh-my-pi/pi-tui'" and no `cursor-sdk` model was registered. Replay cards and the `cursor_ask_question` call line are now pi-tui `ansi` nodes with the same text and colors, drawn natively in the terminal and in Tern; a generated image is an `image` node, drawn through the terminal's image protocol or shown as `[Image: <file>]`.
+
+### Changed
+
+- The host baseline is omp 19.2.1 (`@oh-my-pi/*` 19.2.1). This version does not load on omp 18.x; use 0.5.0 there.
+
 ## 0.5.0 - 2026-10-22
 
 ### Added

@@ -14,7 +14,7 @@ omp also ships a built-in `cursor` provider. The two do not share models, keys, 
 
 ## Install
 
-You need omp 18.3 or newer (tested with 18.3.4). Create a key under Cursor Dashboard → API Keys.
+You need omp 19.2 or newer (tested with 19.2.1). On omp 18.x, install `omp-cursor-sdk@0.5.0`: omp 19.2 changed the extension rendering API, and later versions do not load on 18.x. Create a key under Cursor Dashboard → API Keys.
 
 1. Install the plugin from npm.
 
@@ -74,7 +74,7 @@ Copy the id from `omp models cursor-sdk`. The shape is `cursor-sdk/<model>[@<con
 
 - **Context.** A model with context choices exists only as `<model>@<context>`. Use `grok-4.7@256k` or `grok-4.7@500k`. There is no bare `grok-4.7`.
 - **Thinking.** Pass the level with `--thinking`. The `thinking` column of `omp models` lists the levels that model accepts. `off` works only when Cursor has an off value.
-- **Do not put the level in `--model`.** omp 18.3.4 reads `--model` before plugins load, so `cursor-sdk/grok-4.7@256k:xhigh` is "Model not found". In `modelRoles` the suffix is valid: `default: cursor-sdk/grok-4.7@256k:xhigh`.
+- **Do not put the level in `--model`.** omp 19.2.1 reads `--model` before plugins load, so `cursor-sdk/grok-4.7@256k:xhigh` is "Model not found". In `modelRoles` the suffix is valid: `default: cursor-sdk/grok-4.7@256k:xhigh`.
 - **Fast.** `@fast` and `@slow` pick Cursor's fast lane. Otherwise the model default applies. `/cursor-fast` saves a choice for that model. `--cursor-fast` and `--cursor-no-fast` force it for one run.
 - **Window size.** Measured sizes start from a bundled table and update in `~/.omp/agent/cursor-sdk-context-windows.json`. With [Max Mode](#max-mode) on, `@1m` rows measure 1M (`gpt-5.4@1m`: 922k). The `@1m@fast` ids of `gpt-5.4`, `gpt-5.5` and `gpt-5-5` are listed at 272k, a safe floor: Cursor's catalog has no such variant, so they run at 272k with Max Mode off and larger with it on. A completed turn corrects a row.
 

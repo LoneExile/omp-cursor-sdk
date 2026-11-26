@@ -549,8 +549,8 @@ function isolatedOmpEnv(root: string): Record<string, string | undefined> {
 }
 
 /**
- * Rejects with a real SDK NetworkError wrapper in a Bun process that imports omp's real postmortem handlers
- * (pi-utils) and the guard module, with a provider-turn guard installed. A host handler registered ahead of the
+ * Rejects with a real SDK NetworkError wrapper in a Bun process that installs omp's real postmortem handlers
+ * (pi-utils), imports the guard module and installs a provider-turn guard. A host handler registered ahead of the
  * guard sees every rejection first and never claims one, so the run records what reached the host either way.
  * `provenance` is the script that leaves `wrapper` and `raw` with the chosen provenance.
  */
@@ -565,6 +565,8 @@ function rejectWrapperInOmpHost(provenance: string): { status: number | null; ou
 import { Code, ConnectError } from "@connectrpc/connect";
 import { convertConnectError } from "@cursor/sdk";
 import { installCursorSdkProcessErrorGuard } from ${JSON.stringify(GUARD_URL)};
+// omp's CLI entry installs these before it loads extensions; from omp 19 pi-utils no longer installs them on import.
+postmortem.installProcessHandlers();
 const foreignFrame = ${JSON.stringify(FOREIGN_FRAME)};
 const rejectionReachedHost = new Promise((resolve) => {
 	postmortem.interceptUnhandledRejections((reason) => {
@@ -633,6 +635,8 @@ function rejectWrappedAbortInOmpHost(options: { suppressAbortErrors: boolean; sd
 			`import { postmortem } from "@oh-my-pi/pi-utils";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { installCursorSdkProcessErrorGuard } from ${JSON.stringify(GUARD_URL)};
+// omp's CLI entry installs these before it loads extensions; from omp 19 pi-utils no longer installs them on import.
+postmortem.installProcessHandlers();
 const rejectionReachedHost = new Promise((resolve) => {
 	postmortem.interceptUnhandledRejections((reason) => {
 		resolve(reason);

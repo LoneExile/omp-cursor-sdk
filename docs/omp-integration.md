@@ -1,11 +1,12 @@
 # OMP × omp-cursor-sdk: Integration Architecture
 
 This document explains, in full detail, how the `omp-cursor-sdk` plugin works
-inside OMP (Oh My Pi, `@oh-my-pi` 18.x). It covers the loading lifecycle,
+inside OMP (Oh My Pi, `@oh-my-pi` 19.x). It covers the loading lifecycle,
 provider registration, model discovery, authentication, the turn path, the
 OMP API surfaces the port had to adapt, and the known OMP-side behaviors and
 limitations. The facts were first verified live against OMP 17.3.0
-(2026-08-13..16) and re-checked against OMP 18.3.4 (2026-09-27).
+(2026-08-13..16), re-checked against OMP 18.3.4 (2026-09-27), and the
+rendering and postmortem rows re-checked against OMP 19.2.1 (2026-11-26).
 
 ---
 
@@ -445,7 +446,7 @@ The extension wires into OMP's session events:
 
 ## 7. OMP API surfaces the port adapted
 
-Verified drift table (OMP 17.3.0, re-checked on 18.3.4, vs Pi 0.84):
+Verified drift table (OMP 17.3.0, re-checked on 18.3.4 and, for the 19.2 rows, 19.2.1, vs Pi 0.84):
 
 | Surface | Pi 0.84 | OMP 17.3.0 / 18.3.4 | Port action |
 |---|---|---|---|
@@ -462,6 +463,9 @@ Verified drift table (OMP 17.3.0, re-checked on 18.3.4, vs Pi 0.84):
 | `message_end` result rewrite | supported | not supported | moved into provider error path |
 | `ToolDefinition` fields | `promptSnippet`, `promptGuidelines`, `executionMode` | not present | removed |
 | `renderCall` / `renderResult` | `(args, theme, context)` | `(args, options, theme)` / `(result, options, theme, args?)` | signature swap; `fg`/`bold` via Theme |
+| renderer return value | pi-tui `Text`/`Image`/`Component` | OMP 19.2: pi-tui nodes or a `{ render(width) }` rows object; the component classes are gone, so importing one fails the extension load | `ansi` nodes (`src/cursor-render-node.ts`), an `image` node over a `registerBlob` blob |
+| `keyHint`, `highlightCode`, `getLanguageFromPath` | root exports | OMP 19.2: `formatKeyHint` + `getKeybindings` at the root; `highlightCode`/`supportsLanguage` (`pi-tui/text/highlight`) and `languageFromPath` (`pi-tui/text/lang`) | imports moved |
+| `postmortem` process handlers | n/a | 18.3.4: installed when pi-utils loads; OMP 19: installed by the CLI entry (`installProcessHandlers()`) | containment tests install them like the CLI |
 | `Skill.disableModelInvocation` | present | absent | filter on `Skill.hide` |
 | thinking levels | `ModelThinkingLevel`/`ThinkingLevelMap` on the model | `ProviderModelConfig.thinking` (`{ mode, efforts, requiresEffort? }`); `thinkingLevelMap` ignored | internal level map kept for selection; each model advertises `thinking: { mode: "effort", efforts, requiresEffort }` derived from it |
 | provider id `cursor` | free | built-in OAuth provider (18.x) | plugin registers `cursor-sdk` |
@@ -576,7 +580,7 @@ entries and `~/.omp/agent/cursor-sdk.json` defaults.
 
 ### Verification
 
-- `npm run typecheck:src` — typecheck against OMP 18.3.4 types.
+- `npm run typecheck:src` — typecheck against OMP 19.2.1 types.
 - `bun test` — the port-relevant unit suite, run in the **Bun runtime** (the
   runtime OMP loads the plugin in). The upstream 126-file suite was written
   for Pi and is partially OMP-incompatible (imports of Pi-only exports such
