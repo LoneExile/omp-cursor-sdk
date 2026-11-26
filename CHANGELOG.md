@@ -13,6 +13,7 @@
 ### Changed
 
 - The host baseline is omp 19.2.1 (`@oh-my-pi/*` 19.2.1). This version does not load on omp 18.x; use 0.5.0 there.
+- The bundled omp tool bridge dependencies move to `@modelcontextprotocol/sdk` 1.32.2 and `@hono/node-server` 2.1.11, and their locked transitive versions to `hono` 4.13.22, `body-parser` 2.4.0, `proxy-addr` 2.0.8, `qs` 6.17.1, `fast-uri` 3.1.9 and `ip-address` 10.7.6, which carry fixes for published advisories (among them unbounded request bodies in the MCP server transport). These packages ship inside the plugin tarball.
 
 ## 0.5.0 - 2026-10-22
 
