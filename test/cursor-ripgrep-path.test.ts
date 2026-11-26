@@ -97,7 +97,7 @@ describe("Cursor ripgrep path", () => {
 	});
 
 	it("locks the installed @cursor/sdk ripgrep resolver that ensureCursorRipgrepPath feeds", () => {
-		expect(readInstalledPackageVersion("@cursor/sdk")).toBe("1.0.40");
+		expect(readInstalledPackageVersion("@cursor/sdk")).toBe("1.4.2");
 		// The build Bun, and so omp, imports.
 		const bundle = readCursorSdkEntrySource("bundled");
 

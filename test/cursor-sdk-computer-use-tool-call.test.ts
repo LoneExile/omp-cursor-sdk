@@ -60,20 +60,31 @@ describe("installed @cursor/sdk computerUse tool call (contract)", () => {
 	const source = readFileSync(TOOL_CALL_TYPES, "utf8");
 
 	it("is a `computerUse` tool call with a list of actions and an optional success or error result", () => {
+		// Since 1.4 the declarations name their parts (`typeof ComputerUseArgsSchema`, `ResultSchema<...>`) instead of inlining them.
 		const actions = declarationsBetween(source, "ComputerUseActionSchema", "export declare const ComputerUseArgsSchema");
-		const actionTypes = [...actions.matchAll(/^ {4}type: z\.ZodLiteral<"(\w+)">;$/gm)].map((match) => match[1]);
+		const actionTypes = [...actions.matchAll(/^ +type: z\.ZodLiteral<"(\w+)">;$/gm)].map((match) => match[1]);
 		expect(actionTypes.sort()).toEqual(
 			["click", "cursorPosition", "drag", "key", "mouseDown", "mouseMove", "mouseUp", "screenshot", "scroll", "type", "wait"].sort(),
 		);
+		const args = declarationsBetween(source, "ComputerUseArgsSchema", "export declare const ComputerUseSuccessSchema");
+		expect(args).toMatch(/^ {4}actions: z\.ZodArray<typeof ComputerUseActionSchema>;$/m);
+		expect(args).toMatch(/^ {4}description: z\.ZodOptional<z\.ZodString>;$/m);
 
 		const success = declarationsBetween(source, "ComputerUseSuccessSchema", "export declare const ComputerUseErrorSchema");
 		const successFields = [...success.matchAll(/^ {4}(\w+): z\.Zod/gm)].map((match) => match[1]);
 		expect(successFields).toEqual(["actionCount", "durationMs", "settleMs", "screenshotPath", "cursorPosition", "log"]);
 
-		const toolCall = declarationsBetween(source, "ComputerUseToolCallSchema", "export type ComputerUseCoordinate ");
+		const toolCall = declarationsBetween(source, "ComputerUseResultSchema", "export type ComputerUseCoordinate ");
+		expect(toolCall).toContain("ComputerUseResultSchema: ResultSchema<typeof ComputerUseSuccessSchema>;");
 		expect(toolCall).toContain('type: z.ZodLiteral<"computerUse">;');
-		expect(toolCall).toMatch(/^ {4}args: z\.ZodObject<\{$/m);
-		expect(toolCall).toMatch(/^ {4}result: z\.ZodOptional<z\.ZodDiscriminatedUnion<"status", /m);
+		expect(toolCall).toMatch(/^ {4}args: typeof ComputerUseArgsSchema;$/m);
+		expect(toolCall).toMatch(/^ {4}result: z\.ZodOptional<typeof ComputerUseResultSchema>;$/m);
+		// `ResultSchema` is the union on `status` of a success value and an error.
+		const resultStart = source.indexOf("export type ResultSchema<TSuccess extends z.ZodType> = z.ZodDiscriminatedUnion<\"status\", [");
+		expect(resultStart, "ResultSchema is a union on status").toBeGreaterThanOrEqual(0);
+		const resultSchema = source.slice(resultStart, source.indexOf("export declare function createResultSchema", resultStart));
+		expect(resultSchema).toContain('status: z.ZodLiteral<"success">;');
+		expect(resultSchema).toContain('status: z.ZodLiteral<"error">;');
 	});
 });
 

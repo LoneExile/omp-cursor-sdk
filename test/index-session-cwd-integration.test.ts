@@ -34,6 +34,7 @@ function createMockAgent(): SDKAgent {
 		listArtifacts: vi.fn().mockResolvedValue([]),
 		downloadArtifact: vi.fn().mockResolvedValue(Buffer.from("")),
 		getUsage: vi.fn(),
+		summarize: vi.fn(),
 		[Symbol.asyncDispose]: vi.fn().mockResolvedValue(undefined),
 	};
 }

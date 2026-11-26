@@ -33,15 +33,23 @@ export function installedCursorSdkEsmEntry(fromModuleUrl: string): string {
  * `process`, so what it reports is what the SDK would find for the current env, `argv[1]` and
  * `execPath`. It is not a reimplementation of the SDK's lookup. Returns the `tree-sitter` and
  * `tree-sitter-bash` load results, in that order.
+ *
+ * Since 1.4 the locator also searches from the SDK's own module directory, the dirname of `sdkModuleFile`
+ * (the ESM chunk's `fileURLToPath(import.meta.url)`, named `r` in its scope). The bundled build omp loads
+ * takes that directory from `__filename`, which Bun leaves undefined in an ES module, so there the step
+ * finds nothing; a caller modelling omp passes a file the search cannot reach from.
  */
-export function loadInstalledCursorParsers(sdkEsmEntry: string): InstalledCursorParserLoad[] {
+export function loadInstalledCursorParsers(sdkEsmEntry: string, sdkModuleFile: string): InstalledCursorParserLoad[] {
 	const require = createRequire(sdkEsmEntry);
 	const source = readFileSync(sdkEsmEntry, "utf8");
 	const names = ["./src/agent/native/vendored-tree-sitter.ts", "./src/agent/platform-package-locator.ts"];
 	const end = source.indexOf(',"./src/agent/run-interaction-accumulator.ts"(');
 	const start = source.indexOf(`"${names[0]}"(`);
 	if (start < 0 || end <= start) throw new Error("Installed SDK vendor loader contract changed");
-	const factories: Record<string, WebpackFactory> = runInNewContext(`({${source.slice(start, end)}})`, { process });
+	if (!source.startsWith('import{fileURLToPath as t}from"node:url";var r=t(import.meta.url);')) {
+		throw new Error("Installed SDK ESM entry no longer names its own file r");
+	}
+	const factories: Record<string, WebpackFactory> = runInNewContext(`({${source.slice(start, end)}})`, { process, r: sdkModuleFile });
 	const cache: Record<string, object> = {};
 	const webpackRequire: WebpackRequire = Object.assign(
 		(name: string): unknown => {

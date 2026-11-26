@@ -6,14 +6,15 @@ import { fileURLToPath } from "node:url";
 
 const COMMIT_ATTRIBUTION_MARKER = "/* omp-cursor-sdk:commit-attribution-patch */";
 // @cursor/sdk's local executor never sets attributionConfigProvider (no public option reaches it
-// through 1.0.40). The request context then uses `attributeCommitsToAgent ?? true`, so every
+// through 1.4.2; 1.4's team-admin attribution switch is a Cursor dashboard setting, not an SDK option).
+// The request context then uses `attributeCommitsToAgent ?? true`, so every
 // local commit gets `Co-authored-by: Cursor <cursoragent@cursor.com>`.
 // `??!1` is the false default. An explicit provider value still wins.
 const COMMIT_ATTRIBUTION_FROM = "attributeCommitsToAgent??!0";
 const COMMIT_ATTRIBUTION_TO = `attributeCommitsToAgent??!1${COMMIT_ATTRIBUTION_MARKER}`;
 
 // The anchor lives in one chunk of every build, and the chunk name changes between SDK releases
-// (esm/cjs `479.js` in 1.0.34, `331.js` in 1.0.40; the Bun build is the single `dist/bundled/index.js`).
+// (esm/cjs `479.js` in 1.0.34, `331.js` in 1.0.40, `977.js` in 1.4.2; the Bun build is the single `dist/bundled/index.js`).
 // Each build is searched by content instead of by file name.
 export const TARGETS = ["dist/esm", "dist/cjs", "dist/bundled"].map((build) => ({
 	build,

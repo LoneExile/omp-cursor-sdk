@@ -148,7 +148,7 @@ Project config is never read.
 
 The optional patch `scripts/patch-cursor-sdk.mjs` turns off the local agent's
 default commit trailer `Co-authored-by: Cursor <cursoragent@cursor.com>`.
-`@cursor/sdk` 1.0.40's local executor never sets an attribution provider, so
+`@cursor/sdk` 1.4.2's local executor never sets an attribution provider, so
 `attributeCommitsToAgent` defaults on and `~/.cursor/cli-config.json` has no
 effect. The patch changes that default to off in the one file of each of
 `dist/esm`, `dist/cjs` and `dist/bundled` that holds it, found by content because
@@ -208,7 +208,7 @@ open from the plugin.
 
 `@cursor/sdk`'s local shell spawns through `node:child_process` with
 `stdio: [stdin, "pipe", "pipe", "pipe", "pipe"]` (1.0.34). Its three shell spawns
-in 1.0.40's `dist/bundled/index.js` pass those slots plus a sixth that is `"pipe"`
+in 1.0.40's and 1.4.2's `dist/bundled/index.js` pass those slots plus a sixth that is `"pipe"`
 or `"ignore"`. On 1.0.34 the last two pipes carry shell state on fds 3 and 4; the
 sixth slot was not measured. Bun implements that spawn as `Bun.spawn` and stores
 the extra pipes as owned descriptors. On Bun 1.3.14, `Subprocess` finalization

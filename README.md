@@ -95,7 +95,7 @@ The agent stays on your machine and calls Cursor for the model. Cursor uses its 
 
 ## Max Mode
 
-Max Mode is on unless you turn it off, and it applies to the local runtime only. It bills at Cursor's higher long-context rates. `@cursor/sdk` 1.0.40 sends it natively as `ModelSelection.maxMode`, so it needs no patch. Turn it off with `--cursor-no-max-mode`, `PI_CURSOR_MAX_MODE=0`, or `/cursor-max-mode off`.
+Max Mode is on unless you turn it off, and it applies to the local runtime only. It bills at Cursor's higher long-context rates. `@cursor/sdk` 1.4.2 sends it natively as `ModelSelection.maxMode`, so it needs no patch. Turn it off with `--cursor-no-max-mode`, `PI_CURSOR_MAX_MODE=0`, or `/cursor-max-mode off`.
 
 Cursor Cloud ignores Max Mode. The Cloud Agents API accepts no Max Mode field, so a cloud turn never sends one, and the status line shows no `max:on` there.
 
@@ -116,7 +116,7 @@ The status line shows `max:on` while Max Mode is on for the local runtime. `--sa
 
 ## Commit trailer
 
-`@cursor/sdk` 1.0.40 does not read `~/.cursor/cli-config.json` for the commit trailer, and its local executor sets no attribution provider, so local agents add `Co-authored-by: Cursor <cursoragent@cursor.com>` to commits. The optional patch changes that default to off. An explicit attribution value from Cursor still wins. Cloud agents still add the trailer. Restart omp after you patch.
+`@cursor/sdk` 1.4.2 does not read `~/.cursor/cli-config.json` for the commit trailer, and its local executor sets no attribution provider, so local agents add `Co-authored-by: Cursor <cursoragent@cursor.com>` to commits. The optional patch changes that default to off. An explicit attribution value from Cursor still wins. Cloud agents still add the trailer. Restart omp after you patch.
 
 Check the patch without writing files:
 

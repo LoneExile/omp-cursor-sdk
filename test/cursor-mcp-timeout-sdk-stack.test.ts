@@ -194,20 +194,40 @@ function readSdkMcpLayout(build: CursorSdkBuild): SdkMcpLayout {
 	expectWindow(source, listPrompts.index, 200, 'this.request({method:"prompts/list"', `${build}: client listPrompts`);
 
 	// The agent-side McpSdkClient wrapper reaches those protocol methods; "McpSdkClient"
-	// itself only appears as a tracing span name, never as a class. Since 1.0.37 its callTool
-	// hands the request to a plain (non-async) sendToolCall(), which calls the protocol client's
-	// callTool, so the protocol frame that issues `tools/call` is still callTool.
-	const wrapperChunk = readSdkChunk(build, [
-		'withName("McpSdkClient.getTools")',
-		"this.client.listTools({cursor:",
-		"this.sendToolCall({name:",
-	]);
+	// itself only appears as a tracing span name, never as a class. Since 1.4 its getTools pages
+	// through a list helper (named in the Bun bundle, an inline async function in the webpack
+	// chunks) that calls the protocol client's listTools first, so the frame that issues `tools/list`
+	// is still listTools. Only the helper's lenient retry, after a tools/list result fails schema
+	// validation, calls `request` itself; it passes a result schema and no request options, so it
+	// keeps the SDK's 60000 default (the matcher sees the helper's frame, not listTools). Since
+	// 1.0.37 the wrapper's callTool hands the request to a plain (non-async) sendToolCall(), which
+	// calls the protocol client's callTool, so the protocol frame that issues `tools/call` is still callTool.
+	const wrapperChunk = readSdkChunk(build, ['withName("McpSdkClient.getTools")', "this.sendToolCall({name:"]);
 	const wrapperSource = wrapperChunk.source;
 	if (/class McpSdkClient\b/.test(wrapperSource)) layoutError(`${build}: McpSdkClient is a class name now`);
 	const spanIndex = wrapperSource.indexOf('withName("McpSdkClient.getTools")');
 	const wrapperHeader = classHeaderBefore(wrapperSource, spanIndex);
 	const getTools = onlyMethodIn(wrapperSource, wrapperHeader, METHOD.getTools, true);
-	expectWindow(wrapperSource, getTools.index, 1500, /this\.client\.listTools\(\{cursor:[\w$]+\}\)/, `${build}: wrapper getTools`);
+	const getToolsWindow = expectWindow(wrapperSource, getTools.index, 1500, /fetchPage:/, `${build}: wrapper getTools`);
+	const listHelpers = [
+		...wrapperSource.matchAll(
+			/async function(?: ([\w$]+))?\(([\w$]+),([\w$]+),[\w$]+\)\{try\{(?:let|const) [\w$]+=await \2\.listTools\(\{cursor:\3\}\)/g,
+		),
+	];
+	if (listHelpers.length !== 1) layoutError(`${build}: expected exactly one tools/list helper, found ${listHelpers.length}`);
+	const listHelper = listHelpers[0]!;
+	const listHelperName = listHelper[1];
+	const reachesHelper = listHelperName
+		? getToolsWindow.includes(`await ${listHelperName}(this.client,`)
+		: listHelper.index! > getTools.index && listHelper.index! < getTools.index + 1500;
+	if (!reachesHelper) layoutError(`${build}: wrapper getTools does not reach the tools/list helper`);
+	expectWindow(
+		wrapperSource,
+		listHelper.index!,
+		600,
+		new RegExp(String.raw`${escapeRegExp(listHelper[2]!)}\.request\(\{method:"tools/list",params:\{cursor:${escapeRegExp(listHelper[3]!)}\}\},[\w$]+\)`),
+		`${build}: tools/list helper lenient retry without request options`,
+	);
 	const wrapperCallTool = onlyMethodIn(wrapperSource, wrapperHeader, METHOD.callTool, true);
 	expectWindow(
 		wrapperSource,
@@ -292,12 +312,16 @@ export { ${client} as Client };
 
 // `Ancestor` puts an SDK-path frame named like a protocol method above whatever `fn` calls,
 // as an agent-side wrapper that connects or lists tools while serving a tool call would.
+// `toolsPage` stands in for the SDK's tools/list helper: the protocol client's listTools, or with
+// `lenient` the retry that calls request directly after a schema rejection.
 function wrapperModuleSource(layout: SdkMcpLayout): string {
 	return `
 async function paginate({fetchPage:e}){return await e(void 0)}
+async function toolsPage(e,t,r){if(!r)return await e.${METHOD.listTools}({cursor:t});const n=await e.${METHOD.request}({method:"tools/list",params:{cursor:t}},1);return n}
 class ${layout.wrapperClass}{
 	constructor(e){this.client=e}
-	async ${METHOD.getTools}(){return await paginate({fetchPage:e=>this.client.${METHOD.listTools}({cursor:e})})}
+	async ${METHOD.getTools}(){return await paginate({fetchPage:e=>toolsPage(this.client,e)})}
+	async lenientTools(){return await paginate({fetchPage:e=>toolsPage(this.client,e,!0)})}
 	async ${METHOD.callTool}(e,t){return await this.${METHOD.sendToolCall}({name:e,arguments:t},void 0)}
 	${METHOD.sendToolCall}(e,t){return this.client.${METHOD.callTool}(e,void 0,t)}
 }
@@ -327,6 +351,7 @@ interface SyntheticClient {
 
 interface SyntheticWrapper {
 	getTools(): Promise<unknown>;
+	lenientTools(): Promise<unknown>;
 	callTool(name: string, args: object): Promise<unknown>;
 }
 
@@ -467,6 +492,12 @@ const SCENARIOS: Scenario[] = [
 		kind: "sdk",
 		purpose: "connect",
 		call: ({ wrapper }) => wrapper.getTools(),
+	},
+	{
+		name: "tools/list: the list helper's lenient retry after a schema rejection keeps the SDK default",
+		kind: "sdk",
+		purpose: "neither",
+		call: ({ wrapper }) => wrapper.lenientTools(),
 	},
 	{ name: "tools/call: callTool()", kind: "sdk", purpose: "tool", call: ({ client }) => client.callTool({}) },
 	{

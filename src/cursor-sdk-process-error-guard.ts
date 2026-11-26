@@ -94,10 +94,10 @@ function isObservedLocalTransportClosedPipeWriteError(error: unknown): boolean {
 	return frames.length === 1 && OBSERVED_CLOSED_PIPE_STACK_FRAME.test(frames[0] ?? "");
 }
 
-// Spawn failures are not contained here. On the Cursor SDK 1.0.40 the spawn sites that were measured
+// Spawn failures are not contained here. On the Cursor SDK 1.4.2 the spawn sites that were measured
 // observe their spawn errors: the local shell forwards the error to the model through its exec
-// replay cache, and each ripgrep spawn (the ripwalk behind the workspace walk and `ls`, Grep, the
-// content search) handles the child's 'error' event. The ripwalk's `processExit` promise was
+// replay cache, and each ripgrep spawn (the ripwalk behind the workspace walk and `ls`, and Grep;
+// 1.4 removed the third, the content search) handles the child's 'error' event. The ripwalk's `processExit` promise was
 // unobserved in 1.0.34 and is caught where it is created in 1.0.37 and later. Other spawn sites were
 // not measured. `test/cursor-sdk-host-rejection-containment.test.ts` pins the shell and ripwalk
 // facts against the installed SDK, so a regression fails there instead of killing omp.

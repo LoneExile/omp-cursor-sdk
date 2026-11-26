@@ -73,19 +73,22 @@ async function observeProcessAtSdkEvaluation(): Promise<{
 }
 
 /**
- * Load the real SDK, launched from a directory that neither the SDK's `process.argv[1]` search nor its
- * executable search can reach (the compiled `omp` binary and a plugin installed beside it), and ask the
- * SDK's own vendored loader, then a real parse, whether the native Bash parser is usable.
+ * Load the real SDK, launched from a directory that none of the SDK's searches can reach under omp (the
+ * compiled `omp` binary and a plugin installed beside it), and ask the SDK's own vendored loader, then a
+ * real parse, whether the native Bash parser is usable. The SDK's own module directory is placed in the
+ * launcher directory too: the bundled build omp loads takes it from `__filename`, which Bun leaves
+ * undefined in an ES module, so under omp that search step finds nothing.
  */
 async function nativeBashParsingAfterLoad() {
 	const launcherDir = mkdtempSync(join(tmpdir(), "omp-launcher-"));
 	try {
 		process.argv[1] = join(launcherDir, "cli.js");
 		const sdkEsmEntry = installedCursorSdkEsmEntry(import.meta.url);
-		const before = loadInstalledCursorParsers(sdkEsmEntry).map((load) => load.available);
+		const sdkModuleFile = join(launcherDir, "sdk", "index.js");
+		const before = loadInstalledCursorParsers(sdkEsmEntry, sdkModuleFile).map((load) => load.available);
 		const { loadCursorSdk } = await importRuntime();
 		await loadCursorSdk();
-		const [parserLoad, bashLoad] = loadInstalledCursorParsers(sdkEsmEntry);
+		const [parserLoad, bashLoad] = loadInstalledCursorParsers(sdkEsmEntry, sdkModuleFile);
 		const after = [parserLoad!.available, bashLoad!.available];
 		if (!parserLoad!.available || !bashLoad!.available) return { before, after };
 

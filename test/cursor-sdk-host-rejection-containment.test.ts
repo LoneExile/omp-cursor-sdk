@@ -46,8 +46,9 @@ function sdkExecShape(): SdkExecShape {
 	const closedErrorClass = closed[1]!;
 	const closedDeclaration = declarationAt(closed.index!);
 
-	// The writable iterable factory is the zero-argument function that raises the closed-writable error.
-	const factories = [...SDK_BUNDLE.matchAll(new RegExp(`function (${IDENT})\\(\\)\\{let ${IDENT}=\\[\\],${IDENT}=\\[\\],`, "g"))]
+	// The writable iterable factory is the zero-argument function that raises the closed-writable error. 1.4 rewrote its
+	// body (a linked queue in place of two arrays), so only its arity and that error identify it.
+	const factories = [...SDK_BUNDLE.matchAll(new RegExp(`function (${IDENT})\\(\\)\\{let `, "g"))]
 		.map((match) => ({ name: match[1]!, declaration: declarationAt(match.index!) }))
 		.filter(({ declaration }) => declaration.includes(`new ${closedErrorClass}("WritableIterable is closed")`));
 	expect(factories.map(({ name }) => name), "exactly one writable iterable factory raises WriteIterableClosedError").toHaveLength(1);
@@ -353,18 +354,30 @@ describe("Cursor SDK shell spawn failures", () => {
 		const { closedErrorClass, writableFactory, replayCacheClass, replayCacheDeclaration } = sdkExecShape();
 
 		// The shell stream executor is registered through the streaming replay cache, which wraps the
-		// executor's stream in the replay cache class and hands every reader a fork of it.
+		// executor's stream in the replay cache class and hands every reader a fork of it. Since 1.4 the cache map is a
+		// default parameter that a helper builds.
 		const cache = onlyMatch(
 			SDK_BUNDLE,
-			`function (${IDENT})\\((${IDENT}),(${IDENT})\\)\\{let (${IDENT})=new ${IDENT}\\(\\{max:\\3\\?\\.max\\?\\?10,ttl:\\3\\?\\.ttl\\}\\);return\\{async\\*execute\\((${IDENT}),(${IDENT}),(${IDENT})\\)\\{` +
-				`if\\(!\\7\\?\\.execId\\)\\{yield\\*\\2\\.execute\\(\\5,\\6,\\7\\);return\\}[^]{0,200}?` +
-				`let (${IDENT})=\\2\\.execute\\(\\5,\\6,\\7\\),(${IDENT})=new ${escapeRegExp(replayCacheClass)}\\(\\8\\);\\4\\.set\\(${IDENT},\\9\\),yield\\*\\9\\.fork\\(\\)\\}\\}\\}`,
+			`function (${IDENT})\\((${IDENT}),(${IDENT}),(${IDENT})=(${IDENT})\\(\\3\\)\\)\\{return\\{async\\*execute\\((${IDENT}),(${IDENT}),(${IDENT})\\)\\{` +
+				`if\\(!\\8\\?\\.execId\\)\\{yield\\*\\2\\.execute\\(\\6,\\7,\\8\\);return\\}[^]{0,200}?` +
+				`let (${IDENT})=\\2\\.execute\\(\\6,\\7,\\8\\),(${IDENT})=new ${escapeRegExp(replayCacheClass)}\\(\\9\\);\\4\\.set\\(${IDENT},\\10\\),yield\\*\\10\\.fork\\(\\)\\}\\}\\}`,
 			"the streaming exec cache wraps the executor's stream in the replay cache class",
 		);
 		onlyMatch(
 			SDK_BUNDLE,
-			`let (${IDENT})=new ${IDENT}\\(this\\.permissionsService,${IDENT},this\\.ignoreService,this\\.backgroundShellExecutor\\.getManager\\(\\)\\);if\\(this\\.register\\(${IDENT},${escapeRegExp(cache[1]!)}\\(\\1\\)\\)`,
+			`function ${escapeRegExp(cache[5]!)}\\((${IDENT})\\)\\{return new ${IDENT}\\(\\{max:\\1\\?\\.max\\?\\?10,ttl:\\1\\?\\.ttl\\}\\)\\}`,
+			"the streaming exec cache's default map is a bounded cache",
+		);
+		// Since 1.4 the executor is kept on the instance and shares its redelivery map with the instance's other shell caches.
+		onlyMatch(
+			SDK_BUNDLE,
+			`this\\.shellStreamExecutor=new ${IDENT}\\(this\\.permissionsService,${IDENT},this\\.ignoreService,this\\.backgroundShellExecutor\\.getManager\\(\\)\\),this\\.register\\(${IDENT},${escapeRegExp(cache[1]!)}\\(this\\.shellStreamExecutor,void 0,this\\.shellRedeliveryCaches\\.shellStream\\)\\)`,
 			"the shell stream executor is registered through the streaming exec cache",
+		);
+		onlyMatch(
+			SDK_BUNDLE,
+			`this\\.shellRedeliveryCaches=${IDENT}\\.shellRedeliveryCaches\\?\\?\\{backgroundShell:(${IDENT})\\(\\),shellStream:\\1\\(\\),writeStdin:\\1\\(\\)\\}`,
+			"the shell redelivery caches default to the streaming exec cache's bounded map",
 		);
 
 		// The replay cache keeps a failed source's error and throws it into every current and later reader.
@@ -417,8 +430,9 @@ describe("Cursor SDK ripgrep spawn failures", () => {
 			"the resolved ripgrep path accessor",
 		);
 		const spawns = [...SDK_BUNDLE.matchAll(new RegExp(`(${IDENT})=${IDENT}\\((?:${IDENT},)?${escapeRegExp(accessor[1]!)}\\(\\),`, "g"))];
-		// The workspace walk and `ls` (the ripwalk), Grep, and the content search. A new spawn site is one to measure.
-		expect(spawns, "ripgrep is spawned from exactly three places").toHaveLength(3);
+		// The workspace walk and `ls` (the ripwalk), and Grep. 1.4 removed the third, the content search
+		// (`LocalPiGrepExecutor`). A new spawn site is one to measure.
+		expect(spawns, "ripgrep is spawned from exactly two places").toHaveLength(2);
 		for (const spawn of spawns) {
 			// Minified names are reused from function to function, so the listener has to be in the function that spawned.
 			const executor = enclosingFunctionText(spawn.index!);
@@ -464,38 +478,51 @@ describe("Cursor SDK ripgrep spawn failures", () => {
 // `isObservedLocalTransportClosedPipeWriteError`) rests on the premise below: the SDK writes children's stdin from a
 // few places and, in the shell executor's case, without a stream 'error' listener, so a child that exits mid-write
 // surfaces as an uncaught EPIPE. The MCP stdio transport, by contrast, attaches its own stdin error listener and needs
-// no containment; the hook payload path treats EPIPE as a normal outcome. Every `.stdin.write(` of the SDK is
-// classified, so a new one is a site to measure, not one to wave through. The `WriteIterableClosedError` rests on the
-// controlled-exec stream: it swallows that error itself and sends every other one to the model.
+// no containment; since 1.4 every other stdin the SDK ends (git check-attr's input among them) first gets a no-op error
+// listener, and the hook payload path treats EPIPE as a normal outcome. Every `.stdin.write(` and every `.stdin.end(`
+// with data is classified, so a new one is a site to measure, not one to wave through. The `WriteIterableClosedError`
+// rests on the controlled-exec stream: it swallows that error itself and sends every other one to the model.
 describe("Cursor SDK local-executor stdio errors (the closed-pipe and closed-writable premises)", () => {
 	/** The shell executor's `child.stdin.write(data, (error) => error ? reject(error) : resolve())`, as each build minifies it. */
 	const SHELL_STDIN_WRITE = new RegExp(
 		`(${IDENT})\\.stdin\\.write\\(${IDENT},\\(?\\(?(${IDENT})\\)?=>\\{(?:\\2\\?${IDENT}\\(\\2\\):${IDENT}\\(void 0\\)|if\\(\\2\\)${IDENT}\\(\\2\\);else ${IDENT}\\(void 0\\))\\}\\)?\\)`,
 		"g",
 	);
-	/** `git check-attr --stdin`: the path list is written and the stream ended in one statement, with no listener. */
-	const GIT_STDIN_WRITE = new RegExp(`(${IDENT})\\.stdin\\.write\\(\`\\$\\{${IDENT}\\.join\\([^)]*\\)\\}[^\`]*\`\\),\\1\\.stdin\\.end\\(\\)`, "g");
 	/** The MCP stdio transport's request write. */
 	const MCP_STDIN_WRITE = /this\._process\.stdin\.write\(/g;
 	const STDIN_ERROR_LISTENER = /stdin\??\.(?:on|once|addListener|prependListener)\(["']error["']/g;
 	const MCP_STDIN_ERROR_LISTENER = /this\._process\.stdin\?\.on\("error",\(?\(?[\w$]+\)?(?:=>\{this\.onerror\?\.\([\w$]+\)\}|=>\{this\.onerror\?\.\([\w$]+\)\})\)?\)/g;
+	/** A no-op stdin 'error' listener and that same stdin's `end(...)`, in one statement. */
+	const GUARDED_STDIN_END = new RegExp(`(${IDENT})\\.stdin\\??\\.on\\("error",\\(?\\(\\)=>\\{(?:return)?\\}\\)?\\),(?:void )?\\1\\.stdin\\??\\.end\\(`, "g");
+	/** A stdin `end(...)` that writes data, the way `write()` does. */
+	const STDIN_END_WITH_DATA = /\.stdin\??\.end\([^)]/g;
+	/** A spare child the bundled build's process pool discards: a no-op stdin listener, both outputs drained, stdin ended with no data. */
+	const DISCARDED_SPARE_STDIN = new RegExp(`(${IDENT})\\.stdin\\?\\.on\\("error",\\(?\\(\\)=>\\{\\}\\)?\\),\\1\\.stdout\\?\\.resume\\(\\),\\1\\.stderr\\?\\.resume\\(\\),\\1\\.stdin\\?\\.end\\(\\)`, "g");
 
-	it.each(CURSOR_SDK_BUILDS)("%s build: the only spawned-child stdin writes are the shell executor's two, git's one and the MCP transport's one", (build) => {
+	it.each(CURSOR_SDK_BUILDS)("%s build: the only spawned-child stdin writes are the shell executor's two and the MCP transport's one", (build) => {
 		const source = readCursorSdkBuildSource(build);
 		const writes = source.match(/\.stdin\.write\(/g) ?? [];
 
 		expect([...source.matchAll(SHELL_STDIN_WRITE)], `${build}: the shell executor writes the stdin of the shell it spawned, with a result callback`).toHaveLength(2);
 		expect(source.split('"Shell stdin not available"').length - 1, `${build}: that writer is the shell executor's stdin writer`).toBe(1);
-		expect([...source.matchAll(GIT_STDIN_WRITE)], `${build}: git check-attr's stdin`).toHaveLength(1);
 		expect([...source.matchAll(MCP_STDIN_WRITE)], `${build}: the MCP stdio transport's request write`).toHaveLength(1);
-		expect(writes, `${build}: every .stdin.write( of the SDK is classified above; a new one can surface a raw EPIPE and needs measuring`).toHaveLength(4);
+		expect(writes, `${build}: every .stdin.write( of the SDK is classified above; a new one can surface a raw EPIPE and needs measuring`).toHaveLength(3);
+		// git check-attr hands its path list to the exec helper as input, which ends a guarded stdin (below).
+		expect(source.split('["check-attr","linguist-generated","--stdin"],{input:').length - 1, `${build}: git check-attr's stdin is exec input`).toBe(1);
 	});
 
-	it.each(CURSOR_SDK_BUILDS)("%s build: no spawned child's stdin gets an 'error' listener except the MCP stdio transport's", (build) => {
+	it.each(CURSOR_SDK_BUILDS)("%s build: every other stdin the SDK writes or ends gets a no-op 'error' listener first, and only the MCP transport's listens for real", (build) => {
 		const source = readCursorSdkBuildSource(build);
+		const guarded = [...source.matchAll(GUARDED_STDIN_END)];
+		const guardedWithData = guarded.filter((match) => source[match.index! + match[0].length] !== ")");
+		const discardedSpares = [...source.matchAll(DISCARDED_SPARE_STDIN)];
 
-		expect(source.match(STDIN_ERROR_LISTENER) ?? [], `${build}: stdin error listeners`).toHaveLength(1);
-		expect([...source.matchAll(MCP_STDIN_ERROR_LISTENER)], `${build}: that listener is the MCP stdio transport's`).toHaveLength(1);
+		expect(source.match(STDIN_END_WITH_DATA) ?? [], `${build}: stdin ends that write data`).toHaveLength(3);
+		expect(guardedWithData, `${build}: each stdin end that writes data has a no-op error listener in the same statement`).toHaveLength(3);
+		expect([...source.matchAll(MCP_STDIN_ERROR_LISTENER)], `${build}: the MCP stdio transport's listener`).toHaveLength(1);
+		expect(source.match(STDIN_ERROR_LISTENER) ?? [], `${build}: every stdin error listener is the MCP transport's, a guard before an end(), or a discarded spare's`).toHaveLength(
+			1 + guarded.length + discardedSpares.length,
+		);
 	});
 
 	it.each(CURSOR_SDK_BUILDS)("%s build: the hook payload path ends stdin once and treats a closed pipe as a normal outcome", (build) => {

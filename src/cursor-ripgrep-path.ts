@@ -92,11 +92,13 @@ const treeSitterVendorMisses = new Set<string>();
 /**
  * Point the SDK's native shell parser at the installed platform package before the SDK first loads.
  *
- * The SDK (1.0.40) takes `CURSOR_TREE_SITTER_VENDOR_DIR` as the directory holding `tree-sitter/` and
- * `tree-sitter-bash/` only when it is an absolute path, and otherwise searches just the ancestors of
- * the entry script and of the executable for `node_modules/@cursor/sdk-<platform>-<arch>`. A plugin
- * installed beside a compiled `omp` binary is in neither chain, so the lookup misses and the SDK
- * disables shell command analysis.
+ * The SDK (1.4.2) takes `CURSOR_TREE_SITTER_VENDOR_DIR` as the directory holding `tree-sitter/` and
+ * `tree-sitter-bash/` only when it is an absolute path, and otherwise searches the ancestors of the
+ * entry script, of its own module directory and of the executable for
+ * `node_modules/@cursor/sdk-<platform>-<arch>`. Under omp the module-directory step has nothing to start
+ * from (the bundled build takes it from `__filename`, which Bun leaves undefined in that pre-bundled
+ * module), and a plugin installed beside a compiled `omp` binary is in neither other chain, so the
+ * lookup misses and the SDK disables shell command analysis.
  *
  * An absolute value is the user's and is never changed. An empty or relative value is one the SDK
  * ignores, so, as for `CURSOR_RIPGREP_PATH`, it counts as unset. The variable is set only when the

@@ -381,11 +381,36 @@ describe.skipIf(installedPlatformPackageDir === undefined)("first SDK load in a 
 	it("enables the SDK's real native Bash parser when launched from where its own lookup cannot reach", () => {
 		const result = runFirstLoadChild<NativeBashParsing>("native-bash-parsing", undefined);
 
-		// Without the variable the SDK's search of argv[1] and execPath ancestors finds nothing: the
-		// compiled omp binary and a plugin installed beside it are in neither chain.
+		// Without the variable the SDK's search of argv[1], its own module directory and execPath ancestors finds
+		// nothing: the compiled omp binary and a plugin installed beside it are in neither chain, and under omp the
+		// module directory is unknown (see the next test).
 		expect(result.before).toEqual([false, false]);
 		expect(result.after).toEqual([true, true]);
 		expect(result.root).toMatchObject({ type: "program", hasError: false });
 		expect(result.root?.tree).toContain("pipeline");
 	}, 60_000);
+
+	it("under Bun, the bundled build's own-module-directory search step has no directory to start from", () => {
+		// 1.4 searches for the platform package from the SDK's own module directory too. The bundled build, which
+		// omp loads, takes that directory from `__filename` and skips the step when it is not a string.
+		const bundle = readCursorSdkBuildSource("bundled");
+		const moduleDir = onlyMatch(bundle, `let ${IDENT}=\\$\\.sdkModuleDir\\?\\?(${IDENT});if\\(${IDENT}!==void 0\\)`, "the search's own-module-directory step");
+		onlyMatch(
+			bundle,
+			`${escapeRegExp(moduleDir[1]!)}=typeof __filename==="string"\\?${IDENT}\\(__filename\\):void 0`,
+			"that directory comes from __filename",
+		);
+		// The bundled build starts with Bun's `// @bun` pragma, so Bun runs it untranspiled, and an untranspiled ES
+		// module has no `__filename` (Bun rewrites it only in modules it transpiles).
+		expect(bundle.startsWith("// @bun\n"), "the bundled build is a pre-bundled Bun module").toBe(true);
+		const probeDir = mkdtempSync(join(tmpdir(), "omp-cursor-sdk-filename-"));
+		try {
+			writeFileSync(join(probeDir, "probe.mjs"), "// @bun\nprocess.stdout.write(typeof __filename);\n");
+			const probe = spawnSync(process.execPath, [join(probeDir, "probe.mjs")], { encoding: "utf8", timeout: 30_000 });
+			expect(probe.status, probe.stderr).toBe(0);
+			expect(probe.stdout).toBe("undefined");
+		} finally {
+			rmSync(probeDir, { recursive: true, force: true });
+		}
+	});
 });
